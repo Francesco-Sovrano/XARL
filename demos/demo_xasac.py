@@ -22,7 +22,7 @@ CONFIG.update({
 	# },
 	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts.
 	"replay_sequence_length": 1, # The number of contiguous environment steps to replay at once. This may be set to greater than 1 to support recurrent models.
-	"train_batch_size": 2**8, # Number of transitions per train-batch
+	"train_batch_size": 2**12, # Number of transitions per train-batch
 	# "batch_mode": "truncate_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	###########################
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
@@ -62,4 +62,4 @@ CONFIG.update({
 ray.shutdown()
 ray.init(ignore_reinit_error=True)
 
-train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=1e7, stop_training_after_n_step=2e7)
+train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=5e5, stop_training_after_n_step=8e7)

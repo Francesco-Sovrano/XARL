@@ -41,9 +41,9 @@ class GraphDriveEasy(gym.Env):
 	max_speed_noise = 0 # m/s
 	max_steering_noise_degree = 0
 	# multi-road related stuff
-	max_dimension = 16
+	max_dimension = 25
 	map_size = (max_dimension, max_dimension)
-	junction_number = 16
+	junction_number = 40
 	max_roads_per_junction = 4
 	junction_radius = 1
 	min_junction_distance = 2*junction_radius+2*mean_seconds_per_step*max_speed
@@ -102,16 +102,18 @@ class GraphDriveEasy(gym.Env):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
 			return (1 if is_positive else -1, is_terminal, label)
+		def numerical_reward(value, is_terminal, label):
+			return (value, is_terminal, label)
 		def step_reward(is_positive, is_terminal, label):
 			# reward = np.mean(self.current_road_speed_list)
 			reward = (self.speed - self.min_speed*0.9)/(self.max_speed-self.min_speed*0.9) # in (0,1]
-			return (reward if is_positive else -reward, is_terminal, label)
+			return (reward * len(self.visited_junctions) if is_positive else -reward, is_terminal, label)
 
 		is_in_junction = self.is_in_junction(self.car_point)
 		# #######################################
 		# # "Reach goal junction" rule
 		# if is_in_junction and self.closest_junction == old_goal_junction: # a goal has been reached
-		# 	return non_terminal_reward(is_positive=True, label='reaching_goal_junction')
+		# 	return numerical_reward(len(self.visited_junctions), is_terminal=False, label='reaching_goal_junction')
 		#######################################
 		# "Is in junction" rule
 		if is_in_junction:
@@ -126,18 +128,18 @@ class GraphDriveEasy(gym.Env):
 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.road_network.agent, explanation_type="compact")
 		explanation_list_with_label = lambda l: list(map(lambda x:(l,x), explanation_list)) if explanation_list else l
 		if not following_regulation:
-			return step_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation'))
+			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation'))
 		#######################################
 		# "Visit new roads" rule
 		if self.closest_road.is_visited: # visiting a previously seen reward gives no bonus
 			return null_reward(is_terminal=False, label=explanation_list_with_label('not_visiting_new_roads'))
 		#######################################
 		# "Explore new roads" rule
-		if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
-			return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
+		# if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
+		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
 		#######################################
 		# "Move forward" rule
-		return null_reward(is_terminal=False, label=explanation_list_with_label('moving_forward'))
+		return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('moving_forward'))
 
 	def seed(self, seed=None):
 		logger.warning(f"Setting random seed to: {seed}")
@@ -238,6 +240,7 @@ class GraphDriveEasy(gym.Env):
 		self.car_orientation = (2*self.np_random.random()-1)*np.pi # in [-pi,pi]
 		self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point)
 		self.closest_junction = self.get_closest_junction(self.closest_junction_list, self.car_point)
+		self.visited_junctions = []
 
 		self.last_closest_road = None
 		self.goal_junction = None
@@ -325,6 +328,8 @@ class GraphDriveEasy(gym.Env):
 		self.closest_junction = self.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
 		if self.is_in_junction(self.car_point):
+			if self.closest_junction not in self.visited_junctions:
+				self.visited_junctions.append(self.closest_junction)
 			self.goal_junction = None
 		elif self.last_closest_road != self.closest_road: # not in junction and visiting a new road
 			visiting_new_road = True
