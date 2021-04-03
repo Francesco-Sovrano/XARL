@@ -107,7 +107,7 @@ class GraphDriveEasy(gym.Env):
 		def step_reward(is_positive, is_terminal, label):
 			# reward = np.mean(self.current_road_speed_list)
 			reward = (self.speed - self.min_speed*0.9)/(self.max_speed-self.min_speed*0.9) # in (0,1]
-			return (reward * len(self.visited_junctions) if is_positive else -reward, is_terminal, label)
+			return (reward if is_positive else -reward, is_terminal, label)
 
 		is_in_junction = self.is_in_junction(self.car_point)
 		# #######################################
@@ -117,7 +117,10 @@ class GraphDriveEasy(gym.Env):
 		#######################################
 		# "Is in junction" rule
 		if is_in_junction:
-			return null_reward(is_terminal=False, label='is_in_junction')
+			if self.acquired_junction:  # If agent acquired a brand new junction.
+				return unitary_reward(is_positive=True, is_terminal=False, label='new_junction')
+			else:
+				return null_reward(is_terminal=False, label='is_in_junction')
 		#######################################
 		# "Stay on the road" rule
 		if self.distance_to_closest_road >= self.max_distance_to_path:
@@ -131,15 +134,15 @@ class GraphDriveEasy(gym.Env):
 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation'))
 		#######################################
 		# "Visit new roads" rule
-		if self.closest_road.is_visited: # visiting a previously seen reward gives no bonus
-			return null_reward(is_terminal=False, label=explanation_list_with_label('not_visiting_new_roads'))
+		# if self.closest_road.is_visited: # visiting a previously seen reward gives no bonus
+		# 	return null_reward(is_terminal=False, label=explanation_list_with_label('not_visiting_new_roads'))
 		#######################################
 		# "Explore new roads" rule
 		# if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
 		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
 		#######################################
 		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('moving_forward'))
+		return null_reward(is_terminal=False, label=explanation_list_with_label('moving_forward'))
 
 	def seed(self, seed=None):
 		logger.warning(f"Setting random seed to: {seed}")
@@ -327,9 +330,11 @@ class GraphDriveEasy(gym.Env):
 		self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point, self.closest_junction_list)
 		self.closest_junction = self.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
+		self.acquired_junction = False
 		if self.is_in_junction(self.car_point):
 			if self.closest_junction not in self.visited_junctions:
 				self.visited_junctions.append(self.closest_junction)
+				self.acquired_junction = True
 			self.goal_junction = None
 		elif self.last_closest_road != self.closest_road: # not in junction and visiting a new road
 			visiting_new_road = True
