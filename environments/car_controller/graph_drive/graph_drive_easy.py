@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class GraphDriveEasy(gym.Env):
 	random_seconds_per_step = False # whether to sample seconds_per_step from an exponential distribution
-	mean_seconds_per_step = 0.5 # in average, a step every n seconds
+	mean_seconds_per_step = 0.25 # in average, a step every n seconds
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
 	wheelbase = 0.35 # meters # https://en.wikipedia.org/wiki/Wheelbase
 	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
@@ -33,8 +33,8 @@ class GraphDriveEasy(gym.Env):
 	# a normal car has max_deceleration 7.1 m/s^2 (http://www.batesville.k12.in.us/Physics/PhyNet/Mechanics/Kinematics/BrakingDistData.html)
 	max_deceleration = 7 # m/s^2
 	max_steering_degree = 45
-	max_step = 2**7
-	max_distance_to_path = 1 # meters
+	max_step = 500
+	max_distance_to_path = 0.5 # meters
 	# min_speed_lower_limit = 0.7 # m/s # used together with max_speed to get the random speed upper limit
 	# max_speed_noise = 0.25 # m/s
 	# max_steering_noise_degree = 2
@@ -46,12 +46,11 @@ class GraphDriveEasy(gym.Env):
 	junction_number = 16
 	max_roads_per_junction = 4
 	junction_radius = 1
-	min_junction_distance = 2.5*junction_radius
+	min_junction_distance = 2*junction_radius+2*mean_seconds_per_step*max_speed
 	CULTURE = EasyRoadCulture
 	MAX_NORMALISED_SPEED = 120
 
 	assert min_junction_distance > 2*junction_radius, f"min_junction_distance has to be greater than {2*junction_radius} but it is {min_junction_distance}"
-	assert max_speed*mean_seconds_per_step < min_junction_distance, f"max_speed*mean_seconds_per_step has to be lower than {min_junction_distance} but it is {max_speed*mean_seconds_per_step}"
 
 	def get_state_shape(self):
 		return [
@@ -98,39 +97,40 @@ class GraphDriveEasy(gym.Env):
 			self.is_in_junction(self.car_point),
 		), dtype=np.float32)
 
-	def get_reward(self, visiting_new_road, old_goal_junction, old_car_point): # to finish
+	def get_reward(self, visiting_new_road, old_goal_junction, old_car_point, space_traveled_towards_goal): # to finish
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
 			return (1 if is_positive else -1, is_terminal, label)
 		def step_reward(is_positive, is_terminal, label):
 			# reward = np.mean(self.current_road_speed_list)
-			# reward = self.speed
-			reward = self.speed/self.max_speed # in (0,1]
-			# reward *= len(self.visited_junctions)
+			reward = (self.speed - self.min_speed*0.9)/(self.max_speed-self.min_speed*0.9) # in (0,1]
 			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
 		is_in_junction = self.is_in_junction(self.car_point)
+		# #######################################
+		# # "Reach goal junction" rule
+		# if is_in_junction and self.closest_junction == old_goal_junction: # a goal has been reached
+		# 	return non_terminal_reward(is_positive=True, label='reaching_goal_junction')
 		#######################################
 		# "Is in junction" rule
 		if is_in_junction:
 			return null_reward(is_terminal=False, label='is_in_junction')
 		#######################################
+		# "No U-Turning" rule
+		if space_traveled_towards_goal <= 0:
+			return step_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+		#######################################
 		# "Stay on the road" rule
 		if self.distance_to_closest_road >= self.max_distance_to_path:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+			return step_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
 		#######################################
 		# "Follow regulation" rule. # Run dialogue against culture.
 		# Assign normalised speed to agent properties before running dialogues.
 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.road_network.agent, explanation_type="compact")
+		explanation_list_with_label = lambda l: list(map(lambda x:(l,x), explanation_list)) if explanation_list else l
 		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+			return step_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation'))
 		#######################################
 		# "Visit new roads" rule
 		if self.closest_road.is_visited: # visiting a previously seen reward gives no bonus
@@ -141,17 +141,18 @@ class GraphDriveEasy(gym.Env):
 		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
 		#######################################
 		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('moving_forward', explanation_list))
+		return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('moving_forward'))
+		# return null_reward(is_terminal=False, label=explanation_list_with_label('moving_forward'))
 
 	def seed(self, seed=None):
 		logger.warning(f"Setting random seed to: {seed}")
 		self.np_random, _ = seeding.np_random(seed)
 		return [seed]
 
-	def __init__(self, config=None):
+	def __init__(self, config):
 		self.viewer = None
-		self.max_steering_angle = np.deg2rad(self.max_steering_degree)
-		self.max_steering_noise_angle = np.deg2rad(self.max_steering_noise_degree)
+		self.max_steering_angle = convert_degree_to_radiant(self.max_steering_degree)
+		self.max_steering_noise_angle = convert_degree_to_radiant(self.max_steering_noise_degree)
 
 		self.culture = self.CULTURE(road_options={
 			'motorway': 1/2,
@@ -242,16 +243,14 @@ class GraphDriveEasy(gym.Env):
 		self.car_orientation = (2*self.np_random.random()-1)*np.pi # in [-pi,pi]
 		self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point)
 		self.closest_junction = self.get_closest_junction(self.closest_junction_list, self.car_point)
-		self.visited_junctions = [self.closest_junction]
 
 		self.last_closest_road = None
 		self.goal_junction = None
 		self.current_road_speed_list = []
 		# steering angle & speed
-		self.steering_angle = 0
-		self.speed = self.min_speed #+ (self.max_speed-self.min_speed)*self.np_random.random() # in [min_speed,max_speed]
+		self.speed = self.min_speed # self.min_speed + (self.max_speed-self.min_speed)*self.np_random.random() # in [min_speed,max_speed]
 		# self.speed = self.min_speed+(self.max_speed-self.min_speed)*(70/120) # for testing
-		self.road_network.agent.assign_property_value("Speed", self.road_network.normalise_speed(self.min_speed, self.max_speed, self.speed))
+		self.steering_angle = 0
 		# init concat variables
 		self.last_reward = 0
 		self.last_reward_type = 'move_forward'
@@ -277,11 +276,9 @@ class GraphDriveEasy(gym.Env):
 			steering_angle += (2*self.np_random.random()-1)*self.max_steering_noise_angle
 			steering_angle = np.clip(steering_angle, -self.max_steering_angle, self.max_steering_angle) # |steering_angle| <= max_steering_angle, ALWAYS
 			speed += (2*self.np_random.random()-1)*self.max_speed_noise
-		#### Ackerman Steering: Forward Kinematic for Car-Like vehicles #### https://www.xarg.org/book/kinematics/ackerman-steering/
-		turning_radius = self.wheelbase/np.tan(steering_angle)
-		# Max taylor approximation error of the tangent simplification is about 3° at 30° steering lock
-		# turning_radius = self.wheelbase/steering_angle
-		angular_velocity = speed/turning_radius
+		# Get new angle
+		# https://www.me.utexas.edu/~longoria/CyVS/notes/07_turning_steering/07_Turning_Kinematically.pdf
+		angular_velocity = speed*np.tan(steering_angle)/self.wheelbase
 		# get normalized new orientation
 		new_orientation = np.mod(orientation + angular_velocity*self.seconds_per_step, 2*np.pi) # in [0,2*pi)
 		# Move point
@@ -329,17 +326,10 @@ class GraphDriveEasy(gym.Env):
 			speed=self.speed, 
 			add_noise=True
 		)
-		if self.goal_junction is None:
-			self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point, self.closest_junction_list)
-		else:
-			self.distance_to_closest_road = point_to_line_dist(self.car_point, self.closest_road.edge)
+		self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point, self.closest_junction_list)
 		self.closest_junction = self.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
-		self.acquired_junction = False
 		if self.is_in_junction(self.car_point):
-			if self.closest_junction not in self.visited_junctions:
-				self.visited_junctions.append(self.closest_junction)
-				self.acquired_junction = True
 			self.goal_junction = None
 			if self.last_closest_road is not None: # if closest_road is not the first visited road
 				self.last_closest_road.is_visited = True # set the old road as visited
@@ -348,9 +338,13 @@ class GraphDriveEasy(gym.Env):
 			self.last_closest_road = self.closest_road # keep track of the current road
 			self.goal_junction = self.get_furthest_junction(self.closest_junction_list, self.car_point)
 			self.current_road_speed_list = []
+		if self.goal_junction is not None:
+			space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point)
+		else:
+			space_traveled_towards_goal = 0
 		self.current_road_speed_list.append(self.speed)
 		# compute perceived reward
-		reward, dead, reward_type = self.get_reward(visiting_new_road, old_goal_junction, old_car_point)
+		reward, dead, reward_type = self.get_reward(visiting_new_road, old_goal_junction, old_car_point, space_traveled_towards_goal)
 		# compute new state (after updating progress)
 		state = self.get_state(
 			car_point=self.car_point, 
@@ -438,8 +432,8 @@ class GraphDriveEasy(gym.Env):
 		ax.legend(handles=handles)
 		# Draw plot
 		figure.suptitle(' '.join([
-			f'[Angle]{np.rad2deg(self.steering_angle):.2f}°', 
-			f'[Orient.]{np.rad2deg(self.car_orientation):.2f}°', 
+			f'[Angle]{convert_radiant_to_degree(self.steering_angle):.2f}°', 
+			f'[Orient.]{convert_radiant_to_degree(self.car_orientation):.2f}°', 
 			f'[Speed]{self.speed:.2f} m/s', 
 			'\n',
 			f'[Step]{self._step}', 
