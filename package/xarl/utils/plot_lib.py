@@ -22,10 +22,10 @@ import numbers
 font_dict = {'size':22}
 # matplotlib_rc('font', **font_dict)
 
-flags = SimpleNamespace(**{
-	"gif_speed": 1, # "GIF frame speed in seconds."
-	"max_plot_size": 10, # "Maximum number of points in the plot. The smaller it is, the less RAM is required. If the log file has more than max_plot_size points, then max_plot_size means of slices are used instead."
-})
+# flags = SimpleNamespace(**{
+# 	"gif_speed": 0.25, # "GIF frame speed in seconds."
+# 	"max_plot_size": 20, # "Maximum number of points in the plot. The smaller it is, the less RAM is required. If the log file has more than max_plot_size points, then max_plot_size means of slices are used instead."
+# })
 linestyle_set = ['-', '--', '-.', ':', '']
 color_set = list(mcolors.TABLEAU_COLORS)
 
@@ -35,7 +35,8 @@ def wrap_string(s, max_len=10):
 		for i in range(int(np.ceil(len(s)/max_len)))
 	]).strip()
 
-def plot(logs, figure_file):
+def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_list=None, base_shared_name='baseline', average_non_baselines=None, buckets_average='median'):
+	assert not base_list or len(base_list)==len(logs), f"base_list (len {len(base_list)}) and logs (len {len(logs)}) must have same lenght or base_list should be empty"
 	log_count = len(logs)
 	# Get plot types
 	stats = [None]*log_count
@@ -45,7 +46,7 @@ def plot(logs, figure_file):
 		# Get statistics keys
 		if log["length"] < 2:
 			continue
-		(step, obj) = parse_line(log["line_example"])
+		(step, obj) = log["line_example"]
 		log_keys = list(obj.keys()) # statistics keys sorted by name
 		for key in log_keys:
 			if key not in key_ids:
@@ -65,107 +66,219 @@ def plot(logs, figure_file):
 	grid = GridSpec(ncols=ncols, nrows=nrows)
 	axes = [figure.add_subplot(grid[id//ncols, id%ncols]) for id in range(max_stats_count)]
 	# Populate axes
+	lines_dict = {}
 	for log_id in range(log_count):
 		log = logs[log_id]
-		name = log["name"]#[:10]
-		data = log["data"]
+		name = log["name"]
+		data_iter = log["data_iter"]
 		length = log["length"]
 		if length < 2:
 			print(name, " has not enough data for a reasonable plot")
 			continue
-		if length > flags.max_plot_size:
-			plot_size = flags.max_plot_size
+		print('Extracting data from:',name)
+		if length > max_plot_size:
+			plot_size = max_plot_size
 			data_per_plotpoint = length//plot_size
 		else:
 			plot_size = length
 			data_per_plotpoint = 1
 		# Build x, y
-		x = {}
-		y = {}
 		stat = stats[log_id]
-		for key in stat: # foreach statistic
-			y[key] = {"min":float("+inf"), "max":float("-inf"), "data":[], "std":[]}
-			x[key] = []
+		x = {
+			key:[]
+			for key in stat
+		}
+		y = {
+			key:{
+				"min":float("+inf"), 
+				"max":float("-inf"), 
+				"quantiles":[]
+			}
+			for key in stat
+		}
 		last_step = 0
 		for _ in range(plot_size):
-			values = {}
 			# initialize
-			for key in stat: # foreach statistic
-				values[key] = []
+			values = {
+				key: []
+				for key in stat
+			}
 			# compute values foreach key
 			plotpoint_i = 0
-			for (step, obj) in data:
-				plotpoint_i += 1
+			for (step, obj) in data_iter:
 				if step <= last_step:
 					continue
+				plotpoint_i += 1
 				last_step = step
 				for key in stat: # foreach statistic
-					if key not in obj:
-						continue
-					v = obj[key]
-					values[key].append(v)
-					if v > y[key]["max"]:
-						y[key]["max"] = v
-					if v < y[key]["min"]:
-						y[key]["min"] = v
+					v = obj.get(key,None)
+					if v is not None:
+						values[key].append(v)
 				if plotpoint_i > data_per_plotpoint: # save plotpoint
 					break
 			# add average to data for plotting
 			for key in stat: # foreach statistic
-				if len(values[key]) > 0:
-					y[key]["data"].append(np.mean(values[key]))
-					y[key]["std"].append(np.std(values[key]))
-					x[key].append(last_step)
+				value_list = values[key]
+				if len(value_list) <= 0:
+					continue
+				stats_dict = y[key]
+				if buckets_average == 'median':
+					stats_dict["quantiles"].append([
+						np.quantile(value_list,0.25) if show_deviation else 0, # lower quartile
+						np.quantile(value_list,0.5), # median
+						np.quantile(value_list,0.75) if show_deviation else 0, # upper quartile
+					])
+				else:
+					v_mean = np.mean(value_list)
+					v_std = np.std(value_list)
+					stats_dict["quantiles"].append([
+						v_mean-v_std if show_deviation else 0,
+						v_mean,
+						v_mean+v_std if show_deviation else 0,
+					])
+				stats_dict["min"] = min(stats_dict["min"], min(value_list))
+				stats_dict["max"] = max(stats_dict["max"], max(value_list))
+				x[key].append(last_step)
+		lines_dict[name] = {
+			'x': x,
+			'y': y,
+			'log_id': log_id
+		}
+	plotted_baseline = False
+	plot_dict = {}
+	for name, line in lines_dict.items():
+		is_baseline = base_list and name in base_list
+		if plotted_baseline and is_baseline:
+			continue # already plotted
+		if is_baseline:
+			name = base_shared_name
 		# Populate axes
+		print('#'*20)
 		print(name)
+		x = line['x']
+		y = line['y']
+		log_id = line['log_id']
+		stat = stats[log_id]
+		plot_list = []
 		for j in range(ncols):
 			for i in range(nrows):
 				idx = j if nrows == 1 else i*ncols+j
 				if idx >= len(stat):
 					continue
 				key = stat[idx]
-				ax_id = key_ids[key]
-				ax = axes[ax_id]
 				y_key = y[key]
 				x_key = x[key]
+				y_key_lower_quartile, y_key_median, y_key_upper_quartile = map(np.array, zip(*y_key["quantiles"]))
+				if base_list:
+					base_line = base_list[log_id]
+					base_y_key = lines_dict[base_line]['y'][key]
+					base_y_key_lower_quartile, base_y_key_median, base_y_key_upper_quartile = map(np.array, zip(*base_y_key["quantiles"]))
+					normalise = lambda x,y: 100*(x-y)/(y-base_y_key['min']+1)
+					y_key_median = normalise(y_key_median, base_y_key_median)
+					y_key_lower_quartile = normalise(y_key_lower_quartile, base_y_key_lower_quartile)
+					y_key_upper_quartile = normalise(y_key_upper_quartile, base_y_key_upper_quartile)
 				# print stats
-				print("    ", y_key["min"], " < ", key, " < ", y_key["max"])
-				# ax
-				ax.set_ylabel(wrap_string(key, 20), fontdict=font_dict)
-				ax.set_xlabel('step', fontdict=font_dict)
-				# ax.plot(x, y, linewidth=linewidth, markersize=markersize)
-				y_key_mean = np.array(y_key["data"])
-				y_key_std = np.array(y_key["std"])
-				#===============================================================
-				# # build interpolators
-				# mean_interpolator = interp1d(x_key, y_key_mean, kind='linear')
-				# min_interpolator = interp1d(x_key, y_key_mean-y_key_std, kind='linear')
-				# max_interpolator = interp1d(x_key, y_key_mean+y_key_std, kind='linear')
-				# xnew = np.linspace(x_key[0], x_key[-1], num=plot_size, endpoint=True)
-				# # plot mean line
-				# ax.plot(xnew, mean_interpolator(xnew), label=name)
-				#===============================================================
-				# plot mean line
-				ax.plot(x_key, y_key_mean, label=name, linestyle=linestyle_set[log_id//len(color_set)], color=color_set[log_id%len(color_set)])
-				# plot std range
-				ax.fill_between(x_key, y_key_mean-y_key_std, y_key_mean+y_key_std, alpha=0.25, color=color_set[log_id%len(color_set)])
-				# show legend
-				ax.legend()
-				# display grid
-				ax.grid(True)
+				print(f"    {key} is in [{y_key['min']},{y_key['max']}] with medians: {y_key_median}")				
+				if is_baseline:
+					plotted_baseline = True
+				plot_list.append({
+					'coord': (i,j), 
+					'key': key,
+					'x': x_key,
+					'y_q1': y_key_lower_quartile,
+					'y_q2': y_key_median, 
+					'y_q3': y_key_upper_quartile
+				})
+		plot_dict[name] = plot_list
+
+	##############################
+	##### Merge non-baselines ####
+	if average_non_baselines:
+		avg_fn = np.mean if average_non_baselines=='mean' else np.median
+		new_plot_dict = {}
+		merged_plots = {
+			'coord': [],
+			'key': [],
+			'x': [],
+			'y_q1': [],
+			'y_q2': [], 
+			'y_q3': []
+		}
+		for name, plot_list in plot_dict.items():
+			is_baseline = base_list and name == base_shared_name
+			if is_baseline:
+				new_plot_dict[name] = plot_list
+				continue
+			merged_plots['coord'].append([plot['coord'] for plot in plot_list])
+			merged_plots['key'].append([plot['key'] for plot in plot_list])
+			merged_plots['x'].append([plot['x'] for plot in plot_list])
+			merged_plots['y_q1'].append([plot['y_q1'] for plot in plot_list])
+			merged_plots['y_q2'].append([plot['y_q2'] for plot in plot_list])
+			merged_plots['y_q3'].append([plot['y_q3'] for plot in plot_list])
+		new_plot_dict['XARL'] = [
+			{
+				'coord': coord,
+				'key': key,
+				'x': x,
+				'y_q1': y_q1,
+				'y_q2': y_q2,
+				'y_q3': y_q3
+			}
+			for coord, key, x, y_q1, y_q2, y_q3 in zip(
+				merged_plots['coord'][0],
+				merged_plots['key'][0],
+				merged_plots['x'][0],
+				avg_fn(merged_plots['y_q1'], axis=0),
+				avg_fn(merged_plots['y_q2'], axis=0),
+				avg_fn(merged_plots['y_q3'], axis=0),
+			)
+		]
+		plot_dict = new_plot_dict
+	###############################	
+
+	for log_id, (name, plot_list) in enumerate(plot_dict.items()):
+		for plot in plot_list:
+			i,j = plot['coord']
+			x_key = plot['x']
+			key = plot['key']
+			y_key_lower_quartile = plot['y_q1']
+			y_key_median = plot['y_q2']
+			y_key_upper_quartile = plot['y_q3']
+			# ax
+			ax_id = key_ids[key]
+			ax = axes[ax_id]
+			format_label = lambda x: x.replace('_',' ')
+			ax.set_ylabel(wrap_string(format_label(key) if not base_list else f'{format_label(key)} - % of gain over baseline', 25), fontdict=font_dict)
+			ax.set_xlabel('step', fontdict=font_dict)
+			# plot mean line
+			ax.plot(x_key, y_key_median, label=format_label(name), linestyle=linestyle_set[log_id//len(color_set)], color=color_set[log_id%len(color_set)])
+			# plot std range
+			if show_deviation:
+				ax.fill_between(x_key, y_key_lower_quartile, y_key_upper_quartile, alpha=0.25, color=color_set[log_id%len(color_set)])
+			# show legend
+			ax.legend()
+			# display grid
+			ax.grid(True)
+
 	figure.savefig(figure_file,bbox_inches='tight')
 	print("Plot figure saved in ", figure_file)
 	figure = None
 
-def plot_files(url_list, name_list, figure_file, max_length=None):
+def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_size=20, show_deviation=False, base_list=None, base_shared_name='baseline', average_non_baselines=None, statistics_list=None, buckets_average='median'):
+	assert len(url_list)==len(name_list), f"url_list (len {len(url_list)}) and name_list (len {len(name_list)}) must have same lenght"
 	logs = []
 	for url,name in zip(url_list,name_list):
 		length, line_example = get_length_and_line_example(url)
 		if max_length:
 			length = max_length
-		print(f"{name} has lenght {length}")
-		logs.append({'name': name, 'data': parse(url, length), 'length':length, 'line_example':line_example})
-	plot(logs, figure_file)
+		print(f"{name} has length {length}")
+		logs.append({
+			'name': name, 
+			'data_iter': parse(url, max_i=length, statistics_list=statistics_list), 
+			'length':length, 
+			'line_example': parse_line(line_example, statistics_list=statistics_list)
+		})
+	line_plot(logs, figure_file, max_plot_size, show_deviation, base_list, base_shared_name, average_non_baselines, buckets_average)
 		
 def get_length_and_line_example(file):
 	try:
@@ -180,13 +293,18 @@ def get_length_and_line_example(file):
 	except:
 		return 0, None
 
-def parse_line(line,i=0):
+def parse_line(line, i=0, statistics_list=None):
 	val_dict = json.loads(line)
 	step = val_dict["info"]["num_steps_sampled"] # "num_steps_sampled", "num_steps_trained"
+	# obj = {
+	# 	"median cum. reward": np.median(val_dict["hist_stats"]["episode_reward"]),
+	# 	"mean visited roads": val_dict['custom_metrics'].get('visited_junctions_mean',val_dict['custom_metrics'].get('visited_cells_mean',0))
+	# }
 	obj = {
-		k:val_dict[k] 
-		for k in ["episode_reward_mean","episode_reward_max","episode_reward_min","episode_len_mean"]
+		"episode_reward_median": np.median(val_dict["hist_stats"]["episode_reward"]),
 	}
+	for k in ["episode_reward_mean","episode_reward_max","episode_reward_min","episode_len_mean"]:
+		obj[k] = val_dict[k] 
 	default_learner = val_dict["info"]["learner"]["default_policy"]
 	obj.update({
 		k:v 
@@ -207,15 +325,24 @@ def parse_line(line,i=0):
 				for k,v in default_buffer['cluster_priority'].items()
 				if isinstance(v, numbers.Number)
 			})
+	if "custom_metrics" in val_dict:
+		obj.update({
+			f'env_{k}':v 
+			for k,v in val_dict['custom_metrics'].items()
+			if isinstance(v, numbers.Number)
+		})
+	if statistics_list:
+		statistics_list = set(statistics_list)
+		obj = dict(filter(lambda x: x[0] in statistics_list, obj.items()))
 	return (step, obj)
 	
-def parse(log_fname, max_i=None):
+def parse(log_fname, max_i=None, statistics_list=None):
 	with open(log_fname, 'r') as logfile:
 		for i, line in enumerate(logfile):
 			if max_i and i > max_i:
 				return
 			try:
-				yield parse_line(line,i)
+				yield parse_line(line, i=i, statistics_list=statistics_list)
 			except Exception as e:
 				print("exc %s on line %s" % (repr(e), i+1))
 				print("skipping line")
@@ -259,8 +386,8 @@ def rgb_array_image(array, file_name):
 	img = Image.fromarray(array, 'RGB')
 	img.save(file_name)
 	
-def make_gif(gif_path, file_list):
-	with imageio_get_writer(gif_path, mode='I', duration=flags.gif_speed) as writer:
+def make_gif(gif_path, file_list, gif_speed=0.25):
+	with imageio_get_writer(gif_path, mode='I', duration=gif_speed) as writer:
 		for filename in file_list:
 			image = imageio_imread(filename)
 			writer.append_data(image)

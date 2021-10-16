@@ -49,6 +49,13 @@ def get_algorithm_by_name(alg_name):
 	if alg_name == 'xasac':
 		from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 		return XASAC_DEFAULT_CONFIG.copy(), XASACTrainer
+	# CQL
+	if alg_name == 'cql':
+		from ray.rllib.agents.cql.cql import CQLTrainer, CQL_DEFAULT_CONFIG
+		return CQL_DEFAULT_CONFIG.copy(), CQLTrainer
+	if alg_name == 'xacql':
+		from xarl.agents.xacql import XACQLTrainer, XACQL_DEFAULT_CONFIG
+		return XACQL_DEFAULT_CONFIG.copy(), XACQLTrainer
 	# PPO
 	if alg_name in ['appo','ppo']:
 		from ray.rllib.agents.ppo.appo import APPOTrainer, DEFAULT_CONFIG as APPO_DEFAULT_CONFIG
@@ -69,12 +76,13 @@ STOP_TRAINING_AFTER_N_STEP = int(float(sys.argv[4]))
 if len(sys.argv) > 5:
 	OPTIONS = json.loads(' '.join(sys.argv[5:]))
 	CONFIG.update(OPTIONS)
+CONFIG["callbacks"] = CustomEnvironmentCallbacks
 print(CONFIG)
 
 ####################################################################################
 ####################################################################################
 
 ray.shutdown()
-ray.init(ignore_reinit_error=True)
+ray.init(ignore_reinit_error=True, include_dashboard=False)
 
 train(TRAINER, CONFIG, ENVIRONMENT, test_every_n_step=TEST_EVERY_N_STEP, stop_training_after_n_step=STOP_TRAINING_AFTER_N_STEP)

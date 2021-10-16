@@ -15,13 +15,20 @@ from xarl.experience_buffers.clustering_scheme import *
 
 def get_clustered_replay_buffer(config):
 	assert config["batch_mode"] == "complete_episodes" or not config["cluster_with_episode_type"], f"This algorithm requires 'complete_episodes' as batch_mode when 'cluster_with_episode_type' is True"
+	clustering_scheme_type = config.get("clustering_scheme", None)
+	if not clustering_scheme_type:
+		clustering_scheme_type = 'none'
+	# no need for unclustered_buffer if clustering_scheme_type is none
+	ratio_of_samples_from_unclustered_buffer = config["ratio_of_samples_from_unclustered_buffer"] if clustering_scheme_type != 'none' else 0
 	local_replay_buffer = LocalReplayBuffer(
 		prioritized_replay=config["prioritized_replay"],
 		buffer_options=config["buffer_options"], 
 		learning_starts=config["learning_starts"], 
 		seed=config["seed"],
+		cluster_selection_policy=config["cluster_selection_policy"],
+		ratio_of_samples_from_unclustered_buffer=ratio_of_samples_from_unclustered_buffer,
 	)
-	clustering_scheme = eval(config["clustering_scheme"])()
+	clustering_scheme = eval(clustering_scheme_type)(**config["clustering_scheme_options"])
 	return local_replay_buffer, clustering_scheme
 
 def assign_types(batch, clustering_scheme, batch_fragment_length, with_episode_type=True):
@@ -51,8 +58,10 @@ def get_update_replayed_batch_fn(local_replay_buffer, local_worker, postprocess_
 				samples.policy_batches[pid] = postprocess_trajectory_fn(policy, batch)
 			local_replay_buffer.update_priorities(samples.policy_batches)
 		else:
-			samples = postprocess_trajectory_fn(local_worker.policy_map[DEFAULT_POLICY_ID], samples)
-			local_replay_buffer.update_priorities({DEFAULT_POLICY_ID:samples})
+			local_replay_buffer.update_priorities({
+				pid:postprocess_trajectory_fn(policy, samples)
+				for pid, policy in local_worker.policy_map.items()
+			})
 		return samples
 	return update_replayed_fn
 
@@ -107,14 +116,13 @@ class MixInReplay:
 	number of replay slots.
 	"""
 
-	def __init__(self, local_buffer, replay_proportion, cluster_overview_size=None, update_replayed_fn=None, sample_also_from_buffer_of_recent_elements=False, seed=None):
+	def __init__(self, local_buffer, replay_proportion, cluster_overview_size=None, update_replayed_fn=None, seed=None):
 		random.seed(seed)
 		np.random.seed(seed)
 		self.replay_buffer = local_buffer
 		self.replay_proportion = replay_proportion
 		self.update_replayed_fn = update_replayed_fn
 		self.cluster_overview_size = cluster_overview_size
-		self.buffer_of_recent_elements = SimpleReplayBuffer(local_buffer.buffer_size, seed=seed) if sample_also_from_buffer_of_recent_elements else None
 
 	def __call__(self, sample_batch):
 		# n = np.random.poisson(self.replay_proportion)
@@ -126,27 +134,14 @@ class MixInReplay:
 		if isinstance(sample_batch, SampleBatch):
 			sample_batch = MultiAgentBatch({DEFAULT_POLICY_ID: sample_batch}, sample_batch.count)
 		output_batches.append(sample_batch)
-		if self.buffer_of_recent_elements:
-			self.buffer_of_recent_elements.add_batch(sample_batch)
 		self.replay_buffer.add_batch(sample_batch) # Set update_prioritisation_weights=True for updating importance weights
 		# Sample n batches from the buffer
 		if self.replay_buffer.can_replay() and n > 0:
-			if self.buffer_of_recent_elements and self.buffer_of_recent_elements.can_replay():
-				n_of_old_elements = random.randint(0,n)
-				if n_of_old_elements > 0:
-					output_batches += self.replay_buffer.replay(
-						batch_count=n_of_old_elements,
-						cluster_overview_size=self.cluster_overview_size,
-						update_replayed_fn=self.update_replayed_fn,
-					)
-				if n_of_old_elements != n:
-					output_batches += self.buffer_of_recent_elements.replay(n-n_of_old_elements)
-			else:
-				output_batches += self.replay_buffer.replay(
-					batch_count=n,
-					cluster_overview_size=self.cluster_overview_size,
-					update_replayed_fn=self.update_replayed_fn,
-				)
+			output_batches += self.replay_buffer.replay(
+				batch_count=n,
+				cluster_overview_size=self.cluster_overview_size,
+				update_replayed_fn=self.update_replayed_fn,
+			)
 		return output_batches
 
 class BatchLearnerThread(LearnerThread):

@@ -6,7 +6,7 @@ Detailed documentation:
 https://docs.ray.io/en/master/rllib-algorithms.html#deep-q-networks-dqn-rainbow-parametric-dqn
 """  # noqa: E501
 from more_itertools import unique_everseen
-from ray.rllib.agents.dqn.dqn import calculate_rr_weights, DQNTrainer, TrainOneStep, UpdateTargetNetwork, Concurrently, StandardMetricsReporting, LEARNER_STATS_KEY, DEFAULT_CONFIG as DQN_DEFAULT_CONFIG
+from ray.rllib.agents.dqn.dqn import calculate_rr_weights, DQNTrainer, Concurrently, StandardMetricsReporting, LEARNER_STATS_KEY, DEFAULT_CONFIG as DQN_DEFAULT_CONFIG
 from ray.rllib.agents.dqn.dqn_torch_policy import DQNTorchPolicy, compute_q_values as torch_compute_q_values, torch, F, FLOAT_MIN
 from ray.rllib.agents.dqn.dqn_tf_policy import DQNTFPolicy, compute_q_values as tf_compute_q_values, tf, _adjust_nstep
 from ray.rllib.utils.tf_ops import explained_variance as tf_explained_variance
@@ -14,6 +14,7 @@ from ray.rllib.utils.torch_ops import explained_variance as torch_explained_vari
 from ray.rllib.execution.rollout_ops import ParallelRollouts, ConcatBatches
 from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch, DEFAULT_POLICY_ID
 from ray.rllib.policy.view_requirement import ViewRequirement
+from ray.rllib.execution.train_ops import TrainOneStep, UpdateTargetNetwork, TrainTFMultiGPU
 
 from xarl.experience_buffers.replay_ops import StoreToReplayBuffer, Replay, get_clustered_replay_buffer, assign_types, add_buffer_metrics, clean_batch
 from xarl.experience_buffers.replay_buffer import get_batch_infos, get_batch_uid
@@ -22,10 +23,10 @@ import random
 import numpy as np
 
 XADQN_EXTRA_OPTIONS = {
-	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts.
-	"replay_sequence_length": 1, # The number of contiguous environment steps to replay at once. This may be set to greater than 1 to support recurrent models.
-	"train_batch_size": 2**8, # Number of transitions per train-batch
-	"learning_starts": 1500, # How many batches to sample before learning starts. Every batch has size 'rollout_fragment_length' (default is 50).
+	# "rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts.
+	# "replay_sequence_length": 1, # The number of contiguous environment steps to replay at once. This may be set to greater than 1 to support recurrent models.
+	# "train_batch_size": 2**8, # Number of transitions per train-batch
+	"learning_starts": 2**14, # How many batches to sample before learning starts. Every batch has size 'rollout_fragment_length' (default is 50).
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
 	# "batch_mode": "complete_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	##########################################
@@ -35,21 +36,29 @@ XADQN_EXTRA_OPTIONS = {
 		'priority_aggregation_fn': 'np.mean', # A reduction that takes as input a list of numbers and returns a number representing a batch priority.
 		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
 		'global_size': 2**14, # Default 50000. Maximum number of batches stored in all clusters (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
-		'min_cluster_size_proportion': 1, # Let X be the minimum cluster's size, and q be the min_cluster_size_proportion, then the cluster's size is guaranteed to be in [X, X+qX]. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
 		'prioritization_alpha': 0.6, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'prioritization_importance_beta': 0.4, # To what degree to use importance weights (0 - no corrections, 1 - full correction).
 		'prioritization_importance_eta': 1e-2, # Used only if priority_lower_limit is None. A value > 0 that enables eta-weighting, thus allowing for importance weighting with priorities lower than 0 if beta is > 0. Eta is used to avoid importance weights equal to 0 when the sampled batch is the one with the highest priority. The closer eta is to 0, the closer to 0 would be the importance weight of the highest-priority batch.
 		'prioritization_epsilon': 1e-6, # prioritization_epsilon to add to a priority so that it is never equal to 0.
 		'prioritized_drop_probability': 0, # Probability of dropping the batch having the lowest priority in the buffer instead of the one having the lowest timestamp. In DQN default is 0.
 		'global_distribution_matching': False, # Whether to use a random number rather than the batch priority during prioritised dropping. If True then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far.
-		'cluster_prioritisation_strategy': 'highest', # Whether to select which cluster to replay in a prioritised fashion -- 4 options: None; 'highest' - clusters with the highest priority are more likely to be sampled; 'average' - prioritise the cluster with priority closest to the average cluster priority; 'above_average' - prioritise the cluster with priority closest to the cluster with the smallest priority greater than the average cluster priority.
-		'cluster_level_weighting': True, # Whether to use only cluster-level information to compute importance weights rather than the whole buffer.
+		'cluster_prioritisation_strategy': 'sum', # Whether to select which cluster to replay in a prioritised fashion -- Options: None; 'sum', 'avg', 'weighted_avg'.
+		'cluster_prioritization_alpha': 1, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
+		'cluster_level_weighting': False, # Whether to use only cluster-level information to compute importance weights rather than the whole buffer.
+		'clustering_xi': 1, # Let X be the minimum cluster's size, and C be the number of clusters, and q be clustering_xi, then the cluster's size is guaranteed to be in [X, X+(q-1)CX], with q >= 1, when all clusters have reached the minimum capacity X. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
-	"clustering_scheme": "multiple_types_with_reward_against_mean", # Which scheme to use for building clusters. One of the following: "none", "reward_against_zero", "reward_against_mean", "multiple_types_with_reward_against_mean", "multiple_types_with_reward_against_zero", "type_with_reward_against_mean", "multiple_types", "type".
-	"cluster_with_episode_type": False, # Perhaps of most use with sparse-reward environments. Whether to cluster experience using information at episode-level.
+	"clustering_scheme": "HW", # Which scheme to use for building clusters. One of the following: "none", "positive_H", "H", "HW", "long_HW", "W", "long_W".
+	"clustering_scheme_options": {
+		"episode_window_size": 2**6, 
+		"batch_window_size": 2**8, 
+		"n_clusters": 8,
+	},
+	"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
+	"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
 	"cluster_overview_size": 1, # cluster_overview_size <= train_batch_size. If None, then cluster_overview_size is automatically set to train_batch_size. -- When building a single train batch, do not sample a new cluster before x batches are sampled from it. The closer cluster_overview_size is to train_batch_size, the faster is the batch sampling procedure.
 	"collect_cluster_metrics": False, # Whether to collect metrics about the experience clusters. It consumes more resources.
+	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 }
 # The combination of update_insertion_time_when_sampling==True and prioritized_drop_probability==0 helps mantaining in the buffer only those batches with the most up-to-date priorities.
 XADQN_DEFAULT_CONFIG = DQNTrainer.merge_trainer_configs(
@@ -89,16 +98,18 @@ def xadqn_execution_plan(workers, config):
 	random.seed(config["seed"])
 	np.random.seed(config["seed"])
 	replay_batch_size = config["train_batch_size"]
-	replay_sequence_length = config["replay_sequence_length"]
+	replay_sequence_length = config.get("replay_sequence_length",1)
 	if replay_sequence_length and replay_sequence_length > 1:
 		replay_batch_size = int(max(1, replay_batch_size // replay_sequence_length))
 	local_replay_buffer, clustering_scheme = get_clustered_replay_buffer(config)
 	local_worker = workers.local_worker()
 
-	for policy in local_worker.policy_map.values():
-		policy.view_requirements[SampleBatch.INFOS] = ViewRequirement(SampleBatch.INFOS, shift=0)
-		if policy.config["buffer_options"]["priority_id"] == "td_errors":
-			policy.view_requirements["td_errors"] = ViewRequirement("td_errors", shift=0)
+	def add_view_requirements(w):
+		for policy in w.policy_map.values():
+			policy.view_requirements[SampleBatch.INFOS] = ViewRequirement(SampleBatch.INFOS, shift=0)
+			if policy.config["buffer_options"]["priority_id"] == "td_errors":
+				policy.view_requirements["td_errors"] = ViewRequirement("td_errors", shift=0)
+	workers.foreach_worker(add_view_requirements)
 
 	rollouts = ParallelRollouts(workers, mode="bulk_sync")
 
@@ -124,6 +135,7 @@ def xadqn_execution_plan(workers, config):
 		samples = clean_batch(samples, keys_to_keep=[priority_id,'infos'], keep_only_keys_to_keep=True)
 		if priority_id == "td_errors":
 			for policy_id, info in info_dict.items():
+				# samples.policy_batches[policy_id].set_get_interceptor(None)
 				samples.policy_batches[policy_id]["td_errors"] = info.get("td_error", info[LEARNER_STATS_KEY].get("td_error"))
 		# IMPORTANT: split train-batch into replay-batches, using batch_uid, before updating priorities
 		policy_batch_list = []
@@ -149,6 +161,17 @@ def xadqn_execution_plan(workers, config):
 			local_replay_buffer.update_priorities(policy_batch)
 		return info_dict
 	post_fn = config.get("before_learn_on_batch") or (lambda b, *a: b)
+	if config.get("simple_optimizer",True):
+		train_step_op = TrainOneStep(workers)
+	else:
+		train_step_op = TrainTFMultiGPU(
+			workers=workers,
+			sgd_minibatch_size=config["train_batch_size"],
+			num_sgd_iter=1,
+			num_gpus=config["num_gpus"],
+			shuffle_sequences=True,
+			_fake_gpus=config["_fake_gpus"],
+			framework=config.get("framework"))
 	replay_op = Replay(
 			local_buffer=local_replay_buffer, 
 			replay_batch_size=replay_batch_size, 
@@ -157,7 +180,7 @@ def xadqn_execution_plan(workers, config):
 		.flatten() \
 		.combine(ConcatBatches(min_batch_size=replay_batch_size)) \
 		.for_each(lambda x: post_fn(x, workers, config)) \
-		.for_each(TrainOneStep(workers)) \
+		.for_each(train_step_op) \
 		.for_each(update_priorities) \
 		.for_each(UpdateTargetNetwork(workers, config["target_network_update_freq"]))
 

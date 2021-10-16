@@ -18,6 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class CescoDriveV0(gym.Env):
+	metadata = {'render.modes': ['human', 'rgb_array']}
 	mean_seconds_per_step = 0.1 # in average, a step every n seconds
 	horizon_distance = 3 # meters
 	track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
@@ -57,13 +58,13 @@ class CescoDriveV0(gym.Env):
 		self.np_random, seed = seeding.np_random(seed)
 		return [seed]
 
-	def __init__(self, config):
+	def __init__(self, config=None):
 		self.viewer = None
 		self.max_step = self.max_step_per_spline*self.spline_number
 		self.speed_lower_limit = max(self.min_speed_lower_limit,self.min_speed)
 		self.meters_per_step = 2*self.max_speed*self.mean_seconds_per_step
-		self.max_steering_angle = convert_degree_to_radiant(self.max_steering_degree)
-		self.max_steering_noise_angle = convert_degree_to_radiant(self.max_steering_noise_degree)
+		self.max_steering_angle = np.deg2rad(self.max_steering_degree)
+		self.max_steering_noise_angle = np.deg2rad(self.max_steering_noise_degree)
 		# Spaces
 		self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32) # steering angle, continuous control without softmax
 		# There are 2 types of objects (obstacles and lines), each object has 3 numbers (x, y and size)
@@ -222,9 +223,11 @@ class CescoDriveV0(gym.Env):
 			steering_angle += (2*self.np_random.random()-1)*self.max_steering_noise_angle
 			steering_angle = np.clip(steering_angle, -self.max_steering_angle, self.max_steering_angle) # |steering_angle| <= max_steering_angle, ALWAYS
 			speed += (2*self.np_random.random()-1)*self.max_speed_noise
-		# Get new angle
-		# https://www.me.utexas.edu/~longoria/CyVS/notes/07_turning_steering/07_Turning_Kinematically.pdf
-		angular_velocity = speed*np.tan(steering_angle)/self.wheelbase
+		#### Ackerman Steering: Forward Kinematic for Car-Like vehicles #### https://www.xarg.org/book/kinematics/ackerman-steering/
+		turning_radius = self.wheelbase/np.tan(steering_angle)
+		# Max taylor approximation error of the tangent simplification is about 3° at 30° steering lock
+		# turning_radius = self.wheelbase/steering_angle
+		angular_velocity = speed/turning_radius
 		# get normalized new orientation
 		new_orientation = np.mod(orientation + angular_velocity*self.seconds_per_step, 2*np.pi) # in [0,2*pi)
 		# Move point
@@ -278,6 +281,7 @@ class CescoDriveV0(gym.Env):
 		completed_track = self.is_terminal_position(car_position)
 		out_of_time = self._step >= self.max_step
 		terminal = dead or completed_track or out_of_time
+		info_dict = {'explanation':reward_type}
 		if terminal: # populate statistics
 			self.is_over = True
 			stats = {
@@ -287,8 +291,8 @@ class CescoDriveV0(gym.Env):
 			}
 			if self.max_obstacle_count > 0:
 				stats["avoid_collision"] = 0 if dead else 1
-			self.episode_statistics = stats
-		return [state, reward, terminal, {'explanation':reward_type}]
+			info_dict["stats_dict"] = self.episode_statistics = stats
+		return [state, reward, terminal, info_dict]
 		
 	def has_collided_obstacle(self, old_car_point, car_point, obstacle):
 		return segment_collide_circle(circle=obstacle, segment=(old_car_point, car_point))
@@ -399,7 +403,7 @@ class CescoDriveV0(gym.Env):
 			handles.append(Line2D(range(1), range(1), color="white", marker='o', markerfacecolor="blue", label='Obstacle'))
 		ax.legend(handles=handles)
 		# Draw plot
-		figure.suptitle('[Angle]{1:.2f}° [Orientation]{4:.2f}° \n [Speed]{0:.2f} m/s [Limit]{3:.2f} m/s [Step]{2}'.format(self.speed, convert_radiant_to_degree(self.steering_angle), self._step, self.speed_upper_limit, convert_radiant_to_degree(self.car_orientation)))
+		figure.suptitle('[Angle]{1:.2f}° [Orientation]{4:.2f}° \n [Speed]{0:.2f} m/s [Limit]{3:.2f} m/s [Step]{2}'.format(self.speed, np.rad2deg(self.steering_angle), self._step, self.speed_upper_limit, np.rad2deg(self.car_orientation)))
 		canvas.draw()
 		# Save plot into RGB array
 		data = np.fromstring(figure.canvas.tostring_rgb(), dtype=np.uint8, sep='')

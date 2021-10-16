@@ -4,9 +4,10 @@
 # source .env/bin/activate
 # echo 'Update the virtual environment'
 # pip install -U pip setuptools wheel
-echo "Install other environments' dependencies"
+echo "Installing other environments' dependencies.."
 pip install -r environments/requirements.txt
-echo 'Install XARL'
+# echo 'Fixing environments rendering'
+# pip install pyglet==1.5.11 # fix for rendering environments
+echo 'Installing XARL..'
 pip install -e ./package # cmake is needed
-echo 'Fixing environments rendering'
-pip install pyglet==1.5.11 # fix for rendering environments
+# pip install ray[rllib]==1.2.0 aioredis==1.3.1
