@@ -18,17 +18,26 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 # SELECT_ENV = "Taxi-v3"
 # SELECT_ENV = "ToyExample-V0"
 # SELECT_ENV = "GridDrive-Hard"
-SELECT_ENV = "XABreakoutNoFrameskip-v4"
+# SELECT_ENV = "SpecialBreakoutNoFrameskip-v4"
+SELECT_ENV = "MinecraftEnv-V0"
 
 CONFIG = XADQN_DEFAULT_CONFIG.copy()
+CONFIG["horizon"] = 2**10 # # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+CONFIG["env_config"] = {
+	'num_agents': 5,
+	'observation_range': -1,
+	'observation_mode': 'default',
+	'full_help': False,
+	'map_id': 0,
+}
 CONFIG.update({
-	# "model": { # this is for GraphDrive and GridDrive
-	# 	"custom_model": "adaptive_multihead_network",
-	# },
+	"model": { # this is for GraphDrive and GridDrive
+		"custom_model": "adaptive_multihead_network",
+	},
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"seed": 42, # This makes experiments reproducible.
-	"rollout_fragment_length": 8, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
-	"train_batch_size": 32, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
+	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
+	"train_batch_size": 2**8, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
 	# "batch_mode": "truncate_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	###########################
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
@@ -38,24 +47,21 @@ CONFIG.update({
 	"prioritized_replay_beta": 0.4, # The smaller this is, the stronger is over-sampling
 	"prioritized_replay_eps": 1e-6,
 	###########################
-	'lr': .0000625,
-	'adam_epsilon': .00015,
-	'exploration_config': {
-		'epsilon_timesteps': 200000,
-		'final_epsilon': 0.01,
-	},
-	'timesteps_per_iteration': 10000,
+	# 'lr': .0000625,
+	# 'adam_epsilon': .00015,
+	# 'exploration_config': {
+	# 	'epsilon_timesteps': 200000,
+	# 	'final_epsilon': 0.01,
+	# },
+	# 'timesteps_per_iteration': 10000,
 	###########################
-	# "grad_clip": None, # no need of gradient clipping with huber loss
+	"grad_clip": None, # no need of gradient clipping with huber loss
 	"dueling": True,
 	"double_q": True,
-	"num_atoms": 51, # default is 1
+	"num_atoms": 21,
 	# "v_max": 2**5,
 	# "v_min": -1,
-	# "clip_rewards": True, # default is True
-	'n_step': 1,
-	'target_network_update_freq': 8000,
-	'hiddens': [512],
+	"clip_rewards": True,
 	##################################
 	"buffer_options": {
 		'priority_id': 'td_errors', # Which batch column to use for prioritisation. Default is inherited by DQN and it is 'td_errors'. One of the following: rewards, prev_rewards, td_errors.
@@ -63,7 +69,7 @@ CONFIG.update({
 		'priority_aggregation_fn': 'np.mean', # A reduction that takes as input a list of numbers and returns a number representing a batch priority.
 		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
 		'global_size': 2**14, # Default 50000. Maximum number of batches stored in all clusters (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
-		'clustering_xi': 2, # Let X be the minimum cluster's size, and q be the clustering_xi, then the cluster's size is guaranteed to be in [X, X+qX]. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
+		'clustering_xi': 1, # Let X be the minimum cluster's size, and q be the clustering_xi, then the cluster's size is guaranteed to be in [X, X+qX]. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
 		'prioritization_alpha': 0.6, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'prioritization_importance_beta': 0.4, # To what degree to use importance weights (0 - no corrections, 1 - full correction).
 		'prioritization_importance_eta': 1e-2, # Used only if priority_lower_limit is None. A value > 0 that enables eta-weighting, thus allowing for importance weighting with priorities lower than 0 if beta is > 0. Eta is used to avoid importance weights equal to 0 when the sampled batch is the one with the highest priority. The closer eta is to 0, the closer to 0 would be the importance weight of the highest-priority batch.
@@ -79,7 +85,7 @@ CONFIG.update({
 	"clustering_scheme_options": {
 		"episode_window_size": 2**6, 
 		"batch_window_size": 2**8, 
-		"n_clusters": 8,
+		"n_clusters": 4,
 	},
 	"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
 	"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.

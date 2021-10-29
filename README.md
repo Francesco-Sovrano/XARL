@@ -94,6 +94,14 @@ For example, as shown in the following image we have:
 *DQN - GraphDrive Medium*
 ![DQN - GraphDrive Medium](images/experiments/DQN/DQN_medium_graph_drive.png)
 
+## MARL Hotfix
+For having XARL with MARL, add the following lines to ray.rllib.env.base_env.py, line 499
+```
+                if ag in self.last_infos:
+                    infos[ag] = self.last_infos[ag]
+                    del self.last_infos[ag]
+```
+
 ## Citations
 This code is free. So, if you use this code anywhere, please cite us:
 ```

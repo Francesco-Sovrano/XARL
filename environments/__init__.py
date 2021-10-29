@@ -1,10 +1,22 @@
 from ray.tune.registry import register_env
 ######### Add new environment below #########
 
+import gym
+def build_env_with_agent_groups(env_class, config):
+	grouping = {"group_1": list(range(config.get('num_agents',1)))}
+	obs_space = gym.spaces.Tuple([env_class.observation_space]*config.get('num_agents',1))
+	act_space = gym.spaces.Tuple([env_class.action_space]*config.get('num_agents',1))
+	return env_class(config).with_agent_groups(grouping, obs_space=obs_space, act_space=act_space)
+
 from environments.custom_metrics import CustomEnvironmentCallbacks
 
 from environments.gym_env_example import Example_v0
 register_env("ToyExample-V0", lambda config: Example_v0(config))
+
+### MinecraftEnv
+from environments.distributed_construction.minecraft import MinecraftEnv
+register_env("MinecraftEnv-V0", lambda config: MinecraftEnv(config))
+register_env("MinecraftEnv-V1", lambda config: build_env_with_agent_groups(MinecraftEnv, config))
 
 ### CescoDrive
 from environments.car_controller.cesco_drive.cesco_drive_v0 import CescoDriveV0
@@ -39,7 +51,7 @@ for culture_level in culture_level_list:
 	register_env(f"GridDrive-{culture_level}-S*J", lambda config: GridDrive({"reward_fn": 'frequent_reward_step_multiplied_by_junctions', "culture_level": culture_level}))
 	register_env(f"GridDrive-{culture_level}-FullStep", lambda config: GridDrive({"reward_fn": 'frequent_reward_full_step', "culture_level": culture_level}))
 
-### Special Atari
+### XA Atari
 from environments.special_atari import SpecialAtariEnv
 for game in [
 	"adventure",
@@ -106,72 +118,80 @@ for game in [
 	"zaxxon",
 ]:
 	for obs_type in ["image", "ram"]:
-		# space_invaders should yield SpaceInvaders-v0 and SpaceInvaders-ram-v0
-		name = "".join([g.capitalize() for g in game.split("_")])
-		if obs_type == "ram":
-			name = "{}-ram".format(name)
+		for explanation_fn in ['rewards_only_explanation','rewards_n_lives_explanation']:
+			# space_invaders should yield SpaceInvaders-v0 and SpaceInvaders-ram-v0
+			name = "".join([g.capitalize() for g in game.split("_")])
+			if obs_type == "ram":
+				name = "{}-ram".format(name)
 
-		nondeterministic = False
-		if game == "elevator_action" and obs_type == "ram":
-			# ElevatorAction-ram-v0 seems to yield slightly
-			# non-deterministic observations about 10% of the time. We
-			# should track this down eventually, but for now we just
-			# mark it as nondeterministic.
-			nondeterministic = True
+			nondeterministic = False
+			if game == "elevator_action" and obs_type == "ram":
+				# ElevatorAction-ram-v0 seems to yield slightly
+				# non-deterministic observations about 10% of the time. We
+				# should track this down eventually, but for now we just
+				# mark it as nondeterministic.
+				nondeterministic = True
 
-		register_env(
-			"Special{}-v0".format(name),
-			lambda config: SpecialAtariEnv(**{
-				"game": game,
-				"obs_type": obs_type,
-				"repeat_action_probability": 0.25,
-			})
-		)
+			if explanation_fn == 'rewards_n_lives_explanation':
+				name = '2'+name
+			
+			register_env(
+				"XA{}-v0".format(name),
+				lambda config: SpecialAtariEnv(**{
+					"game": game,
+					"obs_type": obs_type,
+					"repeat_action_probability": 0.25,
+					'explanation_fn': explanation_fn,
+				})
+			)
 
-		register_env(
-			"Special{}-v4".format(name),
-			lambda config: SpecialAtariEnv(**{"game": game, "obs_type": obs_type})
-		)
+			register_env(
+				"XA{}-v4".format(name),
+				lambda config: SpecialAtariEnv(**{"game": game, "obs_type": obs_type, 'explanation_fn': explanation_fn,})
+			)
 
-		# Standard Deterministic (as in the original DeepMind paper)
-		if game == "space_invaders":
-			frameskip = 3
-		else:
-			frameskip = 4
+			# Standard Deterministic (as in the original DeepMind paper)
+			if game == "space_invaders":
+				frameskip = 3
+			else:
+				frameskip = 4
 
-		# Use a deterministic frame skip.
-		register_env(
-			"Special{}Deterministic-v0".format(name),
-			lambda config: SpecialAtariEnv(**{
-				"game": game,
-				"obs_type": obs_type,
-				"frameskip": frameskip,
-				"repeat_action_probability": 0.25,
-			})
-		)
+			# Use a deterministic frame skip.
+			register_env(
+				"XA{}Deterministic-v0".format(name),
+				lambda config: SpecialAtariEnv(**{
+					"game": game,
+					"obs_type": obs_type,
+					"frameskip": frameskip,
+					"repeat_action_probability": 0.25,
+					'explanation_fn': explanation_fn,
+				})
+			)
 
-		register_env(
-			"Special{}Deterministic-v4".format(name),
-			lambda config: SpecialAtariEnv(**{"game": game, "obs_type": obs_type, "frameskip": frameskip})
-		)
+			register_env(
+				"XA{}Deterministic-v4".format(name),
+				lambda config: SpecialAtariEnv(**{"game": game, "obs_type": obs_type, "frameskip": frameskip, 'explanation_fn': explanation_fn,})
+			)
 
-		register_env(
-			"Special{}NoFrameskip-v0".format(name),
-			lambda config: SpecialAtariEnv(**{
-				"game": game,
-				"obs_type": obs_type,
-				"frameskip": 1,
-				"repeat_action_probability": 0.25,
-			})
-		)
+			register_env(
+				"XA{}NoFrameskip-v0".format(name),
+				lambda config: SpecialAtariEnv(**{
+					"game": game,
+					"obs_type": obs_type,
+					"frameskip": 1,
+					"repeat_action_probability": 0.25,
+					'explanation_fn': explanation_fn,
+				})
+			)
 
-		# No frameskip. (Atari has no entropy source, so these are
-		# deterministic environments.)
-		register_env(
-			"Special{}NoFrameskip-v4".format(name),
-			lambda config: SpecialAtariEnv(**{
-				"game": game,
-				"obs_type": obs_type,
-				"frameskip": 1,
-			})
-		)
+			# No frameskip. (Atari has no entropy source, so these are
+			# deterministic environments.)
+			register_env(
+				"XA{}NoFrameskip-v4".format(name),
+				lambda config: SpecialAtariEnv(**{
+					"game": game,
+					"obs_type": obs_type,
+					"frameskip": 1,
+					'explanation_fn': explanation_fn,
+				})
+			)
