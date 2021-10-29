@@ -94,12 +94,21 @@ For example, as shown in the following image we have:
 *DQN - GraphDrive Medium*
 ![DQN - GraphDrive Medium](images/experiments/DQN/DQN_medium_graph_drive.png)
 
-## MARL Hotfix
-For having XARL with MARL, add the following lines to ray.rllib.env.base_env.py, line 499
+## RLlib Patches
+RLlib has some known issues with MARL and PPO.
+For having XARL with MARL, add the following lines to ray/rllib/env/base_env.py, line 499
 ```
                 if ag in self.last_infos:
                     infos[ag] = self.last_infos[ag]
                     del self.last_infos[ag]
+```
+For running any experiment on PPO with Tensorflow, to avoid raising a NaN error during training (a.k.a. run-time crash), add the following lines to ray/rllib/models/tf/tf_action_dist.py, after line 255
+```
+        log_std = tf.clip_by_value(log_std, MIN_LOG_NN_OUTPUT, MAX_LOG_NN_OUTPUT) # Clip `scale` values (coming from NN) to reasonable values.
+```
+For running any experiment on PPO with PyTorch, to avoid raising a NaN error during training (a.k.a. run-time crash), add the following lines to ray/rllib/models/torch/torch_action_dist.py, after line 185
+```
+        log_std = torch.clamp(log_std, MIN_LOG_NN_OUTPUT, MAX_LOG_NN_OUTPUT)
 ```
 
 ## Citations
