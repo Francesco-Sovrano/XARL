@@ -107,16 +107,17 @@ class PseudoPrioritizedBuffer(Buffer):
 
 	def resize_buffer(self):
 		# print(random.random())
-		new_max_cluster_size = self.get_max_cluster_size()
-		if new_max_cluster_size == self.max_cluster_size:
-			return
+		self.min_cluster_size, self.max_cluster_size = self.get_cluster_min_max_size(count_only_valid_clusters=False)
 		## no need to remove redundancies now if the overall cluster's priority is capped
+		# new_min_cluster_size, new_max_cluster_size = self.get_cluster_min_max_size(count_only_valid_clusters=False)
+		# if new_max_cluster_size == self.max_cluster_size:
+		# 	return
 		# for t in self.type_values: # remove redundancies
 		# 	elements_to_remove = max(0, self.count(t)-new_max_cluster_size)
 		# 	for _ in range(elements_to_remove):
 		# 		self.remove_batch(t, self.get_less_important_batch(t))
-		self.min_cluster_size = self.get_min_cluster_size()
-		self.max_cluster_size = new_max_cluster_size
+		# self.min_cluster_size = new_min_cluster_size
+		# self.max_cluster_size = new_max_cluster_size
 	
 	def normalize_priority(self, priority): # O(1)
 		# always add self._prioritization_epsilon so that there is no priority equal to the neutral value of a SumSegmentTree
@@ -164,25 +165,23 @@ class PseudoPrioritizedBuffer(Buffer):
 	def get_available_clusters(self):
 		return [x for x in self.type_values if not self.is_empty(x)]
 
-	def get_min_cluster_size(self):
-		C = len(self.get_available_clusters())
-		min_cluster_size = max(
-			1,
-			self.global_size/(C*self._clustering_xi)
-		)
-		return int(np.floor(min_cluster_size))
+	def get_valid_clusters(self):
+		return [x for x in self.type_values if self.has_atleast(self.min_cluster_size, x)]
 
 	def get_avg_cluster_size(self):
 		return int(np.floor(self.global_size/len(self.type_values)))
 
-	def get_max_cluster_size(self):
-		C = len(self.get_available_clusters())
-		S_min = self.get_min_cluster_size()
-		max_cluster_size = min(
+	def get_cluster_min_max_size(self, count_only_valid_clusters=False):
+		C = len(self.get_available_clusters() if not count_only_valid_clusters else self.get_valid_clusters())
+		S_min = int(np.floor(max(
+			1,
+			self.global_size/(C*self._clustering_xi)
+		)))
+		S_max = int(np.ceil(min(
 			self.cluster_size,
 			S_min + S_min*C*(self._clustering_xi-1)
-		)
-		return int(np.ceil(max_cluster_size))
+		)))
+		return S_min, S_max
 
 	def get_cluster_capacity(self, segment_tree):
 		return segment_tree.inserted_elements/self.max_cluster_size
@@ -197,8 +196,8 @@ class PseudoPrioritizedBuffer(Buffer):
 			if self._cluster_prioritisation_strategy == 'weighted_avg':
 				avg_cluster_priority = (segment_tree.sum()/segment_tree.inserted_elements) - min_priority # O(log)
 				assert avg_cluster_priority >= 0, f"avg_cluster_priority is {avg_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
-				# return min(1,self.get_cluster_capacity(segment_tree))*avg_cluster_priority
-				return self.get_cluster_capacity(segment_tree)*avg_cluster_priority
+				return min(1,self.get_cluster_capacity(segment_tree))*avg_cluster_priority
+				# return self.get_cluster_capacity(segment_tree)*avg_cluster_priority
 			elif self._cluster_prioritisation_strategy == 'avg':
 				avg_cluster_priority = (segment_tree.sum()/segment_tree.inserted_elements) - min_priority # O(log)
 				assert avg_cluster_priority >= 0, f"avg_cluster_priority is {avg_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
@@ -206,8 +205,8 @@ class PseudoPrioritizedBuffer(Buffer):
 			# elif self._cluster_prioritisation_strategy == 'sum':
 			sum_cluster_priority = segment_tree.sum() - min_priority*segment_tree.inserted_elements # O(log)
 			assert sum_cluster_priority >= 0, f"sum_cluster_priority is {sum_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
-			# if segment_tree.inserted_elements > self.max_cluster_size: # redundancies have not been removed yet, cluster's priority is to capped to avoid cluster over-estimation
-			# 	sum_cluster_priority *= self.max_cluster_size/segment_tree.inserted_elements
+			if segment_tree.inserted_elements > self.max_cluster_size: # redundancies have not been removed yet, cluster's priority is to capped to avoid cluster over-estimation
+				sum_cluster_priority *= self.max_cluster_size/segment_tree.inserted_elements
 			return sum_cluster_priority
 		return build_full_priority()**self._cluster_prioritization_alpha
 
@@ -218,7 +217,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		))
 
 	def get_cluster_priority_dict(self):
-		min_priority = min(map(lambda x: x.min_tree.min()[0], self._sample_priority_tree)) # O(log)
+		min_priority = min(map(lambda x: x.min_tree.min()[0], self._sample_priority_tree)) if self._priority_lower_limit is None else 0 # O(log)
 		return dict(map(
 			lambda x: (str(self.type_keys[x[0]]), self.get_cluster_priority(x[1], min_priority)), 
 			enumerate(self._sample_priority_tree)
@@ -272,6 +271,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		self._add_type_if_not_exist(type_id)
 		type_ = self.get_type(type_id)
 		type_batch = self.batches[type_]
+		################################
 		# idx = None
 		# if self._is_full_cluster(type_): # this cluster is full, remove one element from it
 		# 	idx = self.get_less_important_batch(type_)
@@ -282,10 +282,13 @@ class PseudoPrioritizedBuffer(Buffer):
 		# 	idx = len(type_batch)
 		# 	type_batch.append(batch)
 		# 	if self._weight_importance_by_update_time:
-		# 		self._update_times[type_].append(self.timesteps)
+		# 		self._update_times[type_].append(self._max_age_window)
 		# else:
 		# 	del get_batch_indexes(type_batch[idx])[type_id]
 		# 	type_batch[idx] = batch
+		# 	if self._weight_importance_by_update_time:
+		# 		self._update_times[type_][idx] = self._max_age_window
+		################################
 		if self.is_full_buffer(): # if full buffer, remove the less important batch in the whole buffer
 			self.remove_less_important_batches(1)
 		# Add new element to buffer
@@ -293,6 +296,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		type_batch.append(batch)
 		if self._weight_importance_by_update_time:
 			self._update_times[type_].append(self._max_age_window)
+		################################
 		# Update batch infos
 		batch_infos = get_batch_infos(batch)
 		if 'batch_index' not in batch_infos:
@@ -326,18 +330,20 @@ class PseudoPrioritizedBuffer(Buffer):
 		if self._prioritization_importance_beta or self._cluster_prioritisation_strategy is not None:
 			self.__min_priority_list = tuple(map(lambda x: x.min_tree.min()[0], self._sample_priority_tree)) # O(log)
 			self.__min_priority = min(self.__min_priority_list)
+			self.__tot_priority_list = tuple(map(lambda x: x.sum(), self._sample_priority_tree)) # O(log)
+			self.__tot_priority = sum(self.__tot_priority_list)
 		if self._prioritization_importance_beta and self._priority_lower_limit is None:
 			self.__max_priority_list = tuple(map(lambda x: x.max_tree.max()[0], self._sample_priority_tree)) # O(log)
 			self.__max_priority = max(self.__max_priority_list)
 		if self._cluster_prioritisation_strategy is not None:
-			self.__cluster_priority_list = tuple(map(lambda x: self.get_cluster_priority(x, self.__min_priority if self._priority_lower_limit is None else self._priority_lower_limit), self._sample_priority_tree)) # always > 0
+			self.__cluster_priority_list = tuple(map(lambda x: self.get_cluster_priority(x, self.__min_priority if self._priority_lower_limit is None else 0), self._sample_priority_tree)) # always > 0
+			self.__tot_cluster_priority = sum(self.__cluster_priority_list)
 			# eta_normalise = lambda x: self.eta_normalisation(x, np.min(x), np.max(x), np.abs(np.std(x)/np.mean(x))) # using the coefficient of variation as eta
 			# self.__cluster_priority_list = eta_normalise(eta_normalise(self.__cluster_priority_list)) # first eta-normalisation makes priorities in (0,1], but it inverts their magnitude # second eta-normalisation guarantees original priorities magnitude is preserved
 			self.__min_cluster_priority = min(self.__cluster_priority_list)
 
 	def sample_cluster(self):
 		if self._cluster_prioritisation_strategy is not None:
-			# assert self.__cluster_priority_list==tuple(map(lambda x: self.get_cluster_priority(x, self.__min_priority), self._sample_priority_tree)), "Wrong clusters' prioritised sampling"
 			type_cumsum = np.cumsum(self.__cluster_priority_list) # O(|self.type_keys|)
 			type_mass = random.random() * type_cumsum[-1] # O(1)
 			assert 0 <= type_mass, f'type_mass {type_mass} should be greater than 0'
@@ -378,25 +384,31 @@ class PseudoPrioritizedBuffer(Buffer):
 		if upper_max_priority == min_priority: 
 			return np.ones_like(priorities)
 		assert upper_max_priority > min_priority, f"upper_max_priority must be > min_priority, but it is {upper_max_priority} while min_priority is {min_priority}"
-		return (upper_max_priority - priorities)/(upper_max_priority - min_priority) # in (0,1]: the closer is cluster_sum_tree[idx] to max_priority, the lower is the weight
+		return upper_max_priority - priorities
+
+	def get_transition_probability(self, priority, type_=None):
+		if type_ is None:
+			return priority / self.__tot_priority
+		p_cluster = self.__cluster_priority_list[type_] / self.__tot_cluster_priority
+		p_transition_given_cluster = priority / self.__tot_priority_list[type_]
+		# print(p_cluster, p_transition_given_cluster)
+		return p_cluster*p_transition_given_cluster # joint probability of dependent events
 
 	def update_beta_weights(self, batch, idx, type_):
 		##########
 		# Get priority weight
-		batch_priority = self._sample_priority_tree[type_][idx]
-		min_priority = self.__min_priority_list[type_] if self._cluster_level_weighting else self.__min_priority
+		this_priority = self._sample_priority_tree[type_][idx]
 		# assert self.__min_priority_list == tuple(map(lambda x: x.min_tree.min()[0], self._sample_priority_tree)), "Wrong beta updates"
 		if self._priority_lower_limit is None: # We still need to prevent over-fitting on most frequent batches: https://datascience.stackexchange.com/questions/32873/prioritized-replay-what-does-importance-sampling-really-do
-			max_priority = self.__max_priority_list[type_] if self._cluster_level_weighting else self.__max_priority
-			weight = self.eta_normalisation(batch_priority, min_priority, max_priority, self._prioritization_importance_eta)
-			if self._cluster_level_weighting and self._cluster_prioritisation_strategy is not None and self.__cluster_priority_list[type_] != 0:
-				weight *= self.__min_cluster_priority / self.__cluster_priority_list[type_]
+			raise 'Not implemented yet'
 		else:
-			assert min_priority > self._priority_lower_limit, f"min_priority must be > priority_lower_limit, if beta is not None and priority_can_be_negative is False, but it is {min_priority}"
-			batch_priority = np.maximum(batch_priority, min_priority) # no need for this instruction if we are not averaging/maxing clusters' min priorities
-			weight = (min_priority - self._priority_lower_limit) / (batch_priority - self._priority_lower_limit) # default, not compatible with negative priorities # in (0,1]: the closer is cluster_sum_tree[idx] to max_priority, the lower is the weight
-			if self._cluster_level_weighting and self._cluster_prioritisation_strategy is not None and self.__cluster_priority_list[type_] != 0:
-				weight *= self.__min_cluster_priority / self.__cluster_priority_list[type_]
+			if self._cluster_level_weighting and self._cluster_prioritisation_strategy is not None:
+				this_probability = self.get_transition_probability(this_priority, type_)
+				min_probability = min((self.get_transition_probability(self.__min_priority_list[x], x) for x in self.type_values))
+			else:
+				this_probability = self.get_transition_probability(this_priority)
+				min_probability = self.get_transition_probability(self.__min_priority)
+			weight = min_probability/this_probability
 		weight = weight**self._prioritization_importance_beta
 		##########
 		# Add age weight
@@ -420,6 +432,9 @@ class PseudoPrioritizedBuffer(Buffer):
 		# 	if not np.array_equal(new_batch[k],v):
 		# 		print(k,v,new_batch[k])
 		new_priority = self.get_batch_priority(new_batch)
+		if self._priority_lower_limit is not None:
+			assert new_priority >= self._priority_lower_limit, f"new_priority must be > priority_lower_limit, but it is {min_priority}"
+			new_priority -= self._priority_lower_limit
 		normalized_priority = self.normalize_priority(new_priority)
 		# self.priority_stats.push(normalized_priority)
 		# Update priority

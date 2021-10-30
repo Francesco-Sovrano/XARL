@@ -76,15 +76,16 @@ class GridDrive(gym.Env):
 		# self.action_space	   = gym.spaces.MultiDiscrete([self.DIRECTIONS, self.MAX_GAPPED_SPEED])
 		self.action_space	   = gym.spaces.Discrete(self.DIRECTIONS*self.MAX_GAPPED_SPEED)
 		fc_dict = {
+			"grid": gym.spaces.MultiBinary([self.GRID_DIMENSION, self.GRID_DIMENSION, self.obs_road_features+2]), # Features representing the grid + visited cells + current position
 			"neighbours": gym.spaces.MultiBinary(self.obs_road_features * self.DIRECTIONS), # Neighbourhood view
 		}
 		if self.obs_car_features > 0:
 			fc_dict["agent_extra_properties"] = gym.spaces.MultiBinary(self.obs_car_features) # Car features
 		# fc_dict["agent_speed"] = gym.spaces.Box(low=0, high=1.0, shape=(1,), dtype=np.float32)
 		self.observation_space = gym.spaces.Dict({
-			"cnn": gym.spaces.Dict({
-				"grid": gym.spaces.MultiBinary([self.GRID_DIMENSION, self.GRID_DIMENSION, self.obs_road_features+2]), # Features representing the grid + visited cells + current position
-			}),
+			# "cnn": gym.spaces.Dict({
+			# 	"grid": gym.spaces.MultiBinary([self.GRID_DIMENSION, self.GRID_DIMENSION, self.obs_road_features+2]), # Features representing the grid + visited cells + current position
+			# }),
 			"fc": gym.spaces.Dict(fc_dict),
 		})
 		self.step_counter = 0
