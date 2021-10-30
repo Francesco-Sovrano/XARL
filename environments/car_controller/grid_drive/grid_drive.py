@@ -31,15 +31,16 @@ class GridDrive(gym.Env):
 
 	def get_state(self):
 		fc_dict = {
+			"grid": self.grid_view,
 			"neighbours": self.grid.neighbour_features(), 
 		}
 		if self.obs_car_features > 0:
 			fc_dict["agent_extra_properties"] = self.grid.agent.binary_features()
 		# fc_dict["agent_speed"] = np.array([self.speed/self.MAX_SPEED], dtype=np.float32)
 		return {
-			"cnn": {
-				"grid": self.grid_view,
-			},
+			# "cnn": {
+			# 	"grid": self.grid_view,
+			# },
 			"fc": fc_dict,
 		}
 
