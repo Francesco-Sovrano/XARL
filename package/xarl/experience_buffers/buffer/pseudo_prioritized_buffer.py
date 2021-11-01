@@ -393,7 +393,7 @@ class PseudoPrioritizedBuffer(Buffer):
 
 	def get_transition_probability(self, priority, type_=None, norm_fn=None):
 		if norm_fn is None:
-			norm_fn = lambda p,n: p
+			norm_fn = lambda p,n: p if self._priority_lower_limit is not None else lambda x,n: self.normalise_priority(x, self.__min_priority, eta=self._prioritization_importance_eta, n=n)
 		if type_ is None:
 			return norm_fn(priority, 1) / norm_fn(self.__tot_priority, self.__tot_elements)
 		p_cluster = self.__cluster_priority_list[type_] / self.__tot_cluster_priority # clusters priorities are already > 0
@@ -406,13 +406,12 @@ class PseudoPrioritizedBuffer(Buffer):
 		# Get priority weight
 		this_priority = self._sample_priority_tree[type_][idx]
 		# assert self.__min_priority_list == tuple(map(lambda x: x.min_tree.min()[0], self._sample_priority_tree)), "Wrong beta updates"
-		norm_fn = None if self._priority_lower_limit is not None else lambda x,n: self.normalise_priority(x, self.__min_priority, eta=self._prioritization_importance_eta, n=n)
 		if self._cluster_level_weighting and self._cluster_prioritisation_strategy is not None:
-			this_probability = self.get_transition_probability(this_priority, type_, norm_fn=norm_fn)
-			min_probability = min((self.get_transition_probability(self.__min_priority_list[x], x, norm_fn=norm_fn) for x in self.type_values))
+			this_probability = self.get_transition_probability(this_priority, type_)
+			min_probability = min((self.get_transition_probability(self.__min_priority_list[x], x) for x in self.type_values))
 		else:
-			this_probability = self.get_transition_probability(this_priority, norm_fn=norm_fn)
-			min_probability = self.get_transition_probability(self.__min_priority, norm_fn=norm_fn)
+			this_probability = self.get_transition_probability(this_priority)
+			min_probability = self.get_transition_probability(self.__min_priority)
 		weight = min_probability/this_probability
 		weight = weight**self._prioritization_importance_beta
 		##########
