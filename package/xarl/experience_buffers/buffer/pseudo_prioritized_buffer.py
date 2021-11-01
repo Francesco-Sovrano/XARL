@@ -196,8 +196,8 @@ class PseudoPrioritizedBuffer(Buffer):
 			if self._cluster_prioritisation_strategy == 'weighted_avg':
 				avg_cluster_priority = (segment_tree.sum()/segment_tree.inserted_elements) - min_priority # O(log)
 				assert avg_cluster_priority >= 0, f"avg_cluster_priority is {avg_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
-				return min(1,self.get_cluster_capacity(segment_tree))*avg_cluster_priority
-				# return self.get_cluster_capacity(segment_tree)*avg_cluster_priority
+				# return min(1,self.get_cluster_capacity(segment_tree))*avg_cluster_priority
+				return self.get_cluster_capacity(segment_tree)*avg_cluster_priority
 			elif self._cluster_prioritisation_strategy == 'avg':
 				avg_cluster_priority = (segment_tree.sum()/segment_tree.inserted_elements) - min_priority # O(log)
 				assert avg_cluster_priority >= 0, f"avg_cluster_priority is {avg_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
@@ -205,8 +205,8 @@ class PseudoPrioritizedBuffer(Buffer):
 			# elif self._cluster_prioritisation_strategy == 'sum':
 			sum_cluster_priority = segment_tree.sum() - min_priority*segment_tree.inserted_elements # O(log)
 			assert sum_cluster_priority >= 0, f"sum_cluster_priority is {sum_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
-			if segment_tree.inserted_elements > self.max_cluster_size: # redundancies have not been removed yet, cluster's priority is to capped to avoid cluster over-estimation
-				sum_cluster_priority *= self.max_cluster_size/segment_tree.inserted_elements
+			# if segment_tree.inserted_elements > self.max_cluster_size: # redundancies have not been removed yet, cluster's priority is to capped to avoid cluster over-estimation
+			# 	sum_cluster_priority *= self.max_cluster_size/segment_tree.inserted_elements
 			return sum_cluster_priority
 		return build_full_priority()**self._cluster_prioritization_alpha
 
@@ -330,11 +330,14 @@ class PseudoPrioritizedBuffer(Buffer):
 		if self._prioritization_importance_beta or self._cluster_prioritisation_strategy is not None:
 			self.__min_priority_list = tuple(map(lambda x: x.min_tree.min()[0], self._sample_priority_tree)) # O(log)
 			self.__min_priority = min(self.__min_priority_list)
+		if self._prioritization_importance_beta:
 			self.__tot_priority_list = tuple(map(lambda x: x.sum(), self._sample_priority_tree)) # O(log)
 			self.__tot_priority = sum(self.__tot_priority_list)
-		if self._prioritization_importance_beta and self._priority_lower_limit is None:
-			self.__max_priority_list = tuple(map(lambda x: x.max_tree.max()[0], self._sample_priority_tree)) # O(log)
-			self.__max_priority = max(self.__max_priority_list)
+			self.__tot_elements_list = tuple(map(lambda x: x.inserted_elements, self._sample_priority_tree)) # O(1)
+			self.__tot_elements = sum(self.__tot_elements_list)
+		# if self._prioritization_importance_beta and self._priority_lower_limit is None:
+		# 	self.__max_priority_list = tuple(map(lambda x: x.max_tree.max()[0], self._sample_priority_tree)) # O(log)
+		# 	self.__max_priority = max(self.__max_priority_list)
 		if self._cluster_prioritisation_strategy is not None:
 			self.__cluster_priority_list = tuple(map(lambda x: self.get_cluster_priority(x, self.__min_priority if self._priority_lower_limit is None else 0), self._sample_priority_tree)) # always > 0
 			self.__tot_cluster_priority = sum(self.__cluster_priority_list)
@@ -378,19 +381,23 @@ class PseudoPrioritizedBuffer(Buffer):
 		return max(1,self._update_times[type_][idx])/self._max_age_window
 
 	@staticmethod
-	def eta_normalisation(priorities, min_priority, max_priority, eta):
-		priorities = np.clip(priorities, min_priority, max_priority)
-		upper_max_priority = max_priority*((1+eta) if max_priority >= 0 else (1-eta))
-		if upper_max_priority == min_priority: 
-			return np.ones_like(priorities)
-		assert upper_max_priority > min_priority, f"upper_max_priority must be > min_priority, but it is {upper_max_priority} while min_priority is {min_priority}"
-		return upper_max_priority - priorities
+	def normalise_priority(priority, min_priority, eta=0, n=1):
+		# lower_min_priority = min_priority - eta*np.abs(min_priority)
+		# assert priority > lower_min_priority, f"priority must be > lower_min_priority, but it is {priority} while lower_min_priority is {lower_min_priority}"
+		# return priority - lower_min_priority
+		lower_min_priority = (min_priority - eta*np.abs(min_priority))*n
+		assert priority > lower_min_priority, f"priority must be > lower_min_priority, but it is {priority} while lower_min_priority is {lower_min_priority}"
+		# upper_min_priority = max_priority + eta*np.abs(max_priority)
+		# assert priority < upper_min_priority, f"priority must be > upper_min_priority, but it is {priority} while upper_min_priority is {upper_min_priority}"
+		return (priority - lower_min_priority)#/(upper_min_priority - lower_min_priority)
 
-	def get_transition_probability(self, priority, type_=None):
+	def get_transition_probability(self, priority, type_=None, norm_fn=None):
+		if norm_fn is None:
+			norm_fn = lambda p,n: p
 		if type_ is None:
-			return priority / self.__tot_priority
-		p_cluster = self.__cluster_priority_list[type_] / self.__tot_cluster_priority
-		p_transition_given_cluster = priority / self.__tot_priority_list[type_]
+			return norm_fn(priority, 1) / norm_fn(self.__tot_priority, self.__tot_elements)
+		p_cluster = self.__cluster_priority_list[type_] / self.__tot_cluster_priority # clusters priorities are already > 0
+		p_transition_given_cluster = norm_fn(priority, 1) / norm_fn(self.__tot_priority_list[type_], self.__tot_elements_list[type_])
 		# print(p_cluster, p_transition_given_cluster)
 		return p_cluster*p_transition_given_cluster # joint probability of dependent events
 
@@ -399,16 +406,14 @@ class PseudoPrioritizedBuffer(Buffer):
 		# Get priority weight
 		this_priority = self._sample_priority_tree[type_][idx]
 		# assert self.__min_priority_list == tuple(map(lambda x: x.min_tree.min()[0], self._sample_priority_tree)), "Wrong beta updates"
-		if self._priority_lower_limit is None: # We still need to prevent over-fitting on most frequent batches: https://datascience.stackexchange.com/questions/32873/prioritized-replay-what-does-importance-sampling-really-do
-			raise 'Not implemented yet'
+		norm_fn = None if self._priority_lower_limit is not None else lambda x,n: self.normalise_priority(x, self.__min_priority, eta=self._prioritization_importance_eta, n=n)
+		if self._cluster_level_weighting and self._cluster_prioritisation_strategy is not None:
+			this_probability = self.get_transition_probability(this_priority, type_, norm_fn=norm_fn)
+			min_probability = min((self.get_transition_probability(self.__min_priority_list[x], x, norm_fn=norm_fn) for x in self.type_values))
 		else:
-			if self._cluster_level_weighting and self._cluster_prioritisation_strategy is not None:
-				this_probability = self.get_transition_probability(this_priority, type_)
-				min_probability = min((self.get_transition_probability(self.__min_priority_list[x], x) for x in self.type_values))
-			else:
-				this_probability = self.get_transition_probability(this_priority)
-				min_probability = self.get_transition_probability(self.__min_priority)
-			weight = min_probability/this_probability
+			this_probability = self.get_transition_probability(this_priority, norm_fn=norm_fn)
+			min_probability = self.get_transition_probability(self.__min_priority, norm_fn=norm_fn)
+		weight = min_probability/this_probability
 		weight = weight**self._prioritization_importance_beta
 		##########
 		# Add age weight
