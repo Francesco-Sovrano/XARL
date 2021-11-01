@@ -32,6 +32,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		cluster_prioritization_alpha=1,
 		cluster_level_weighting=True,
 		clustering_xi=1, # Let X be the minimum cluster's size, and C be the number of clusters, and q be clustering_xi, then the cluster's size is guaranteed to be in [X, X+(q-1)CX], with q >= 1, when all clusters have reached the minimum capacity X. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
+		clip_cluster_priority_by_max_capacity=False,
 		priority_lower_limit=None,
 		max_age_window=None,
 		seed=None,
@@ -196,7 +197,8 @@ class PseudoPrioritizedBuffer(Buffer):
 			if self._cluster_prioritisation_strategy == 'weighted_avg':
 				avg_cluster_priority = (segment_tree.sum()/segment_tree.inserted_elements) - min_priority # O(log)
 				assert avg_cluster_priority >= 0, f"avg_cluster_priority is {avg_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
-				# return min(1,self.get_cluster_capacity(segment_tree))*avg_cluster_priority
+				if self._clip_cluster_priority_by_max_capacity:
+					return min(1,self.get_cluster_capacity(segment_tree))*avg_cluster_priority
 				return self.get_cluster_capacity(segment_tree)*avg_cluster_priority
 			elif self._cluster_prioritisation_strategy == 'avg':
 				avg_cluster_priority = (segment_tree.sum()/segment_tree.inserted_elements) - min_priority # O(log)
@@ -205,8 +207,9 @@ class PseudoPrioritizedBuffer(Buffer):
 			# elif self._cluster_prioritisation_strategy == 'sum':
 			sum_cluster_priority = segment_tree.sum() - min_priority*segment_tree.inserted_elements # O(log)
 			assert sum_cluster_priority >= 0, f"sum_cluster_priority is {sum_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
-			# if segment_tree.inserted_elements > self.max_cluster_size: # redundancies have not been removed yet, cluster's priority is to capped to avoid cluster over-estimation
-			# 	sum_cluster_priority *= self.max_cluster_size/segment_tree.inserted_elements
+			if self._clip_cluster_priority_by_max_capacity:
+				if segment_tree.inserted_elements > self.max_cluster_size: # redundancies have not been removed yet, cluster's priority is to capped to avoid cluster over-estimation
+					sum_cluster_priority *= self.max_cluster_size/segment_tree.inserted_elements
 			return sum_cluster_priority
 		return build_full_priority()**self._cluster_prioritization_alpha
 
