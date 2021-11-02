@@ -136,8 +136,9 @@ def xadqn_execution_plan(workers, config):
 		samples = clean_batch(samples, keys_to_keep=[priority_id,'infos'], keep_only_keys_to_keep=True)
 		if priority_id == "td_errors":
 			for policy_id, info in info_dict.items():
+				td_errors = info.get("td_error", info[LEARNER_STATS_KEY].get("td_error"))
 				# samples.policy_batches[policy_id].set_get_interceptor(None)
-				samples.policy_batches[policy_id]["td_errors"] = info.get("td_error", info[LEARNER_STATS_KEY].get("td_error"))
+				samples.policy_batches[policy_id]["td_errors"] = td_errors
 		# IMPORTANT: split train-batch into replay-batches, using batch_uid, before updating priorities
 		policy_batch_list = []
 		for policy_id, batch in samples.policy_batches.items():
