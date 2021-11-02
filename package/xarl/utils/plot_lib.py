@@ -264,7 +264,7 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 	print("Plot figure saved in ", figure_file)
 	figure = None
 
-def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_size=20, show_deviation=False, base_list=None, base_shared_name='baseline', average_non_baselines=None, statistics_list=None, buckets_average='median'):
+def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_size=20, show_deviation=False, base_list=None, base_shared_name='baseline', average_non_baselines=None, statistics_list=None, buckets_average='median', step_type='num_steps_sampled'):
 	assert len(url_list)==len(name_list), f"url_list (len {len(url_list)}) and name_list (len {len(name_list)}) must have same lenght"
 	logs = []
 	for url,name in zip(url_list,name_list):
@@ -276,7 +276,7 @@ def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_
 			'name': name, 
 			'data_iter': parse(url, max_i=length, statistics_list=statistics_list), 
 			'length':length, 
-			'line_example': parse_line(line_example, statistics_list=statistics_list)
+			'line_example': parse_line(line_example, statistics_list=statistics_list, step_type=step_type)
 		})
 	line_plot(logs, figure_file, max_plot_size, show_deviation, base_list, base_shared_name, average_non_baselines, buckets_average)
 		
@@ -293,9 +293,9 @@ def get_length_and_line_example(file):
 	except:
 		return 0, None
 
-def parse_line(line, i=0, statistics_list=None):
+def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 	val_dict = json.loads(line)
-	step = val_dict["info"]["num_steps_sampled"] # "num_steps_sampled", "num_steps_trained"
+	step = val_dict["info"][step_type] # "num_steps_sampled", "num_steps_trained"
 	# obj = {
 	# 	"median cum. reward": np.median(val_dict["hist_stats"]["episode_reward"]),
 	# 	"mean visited roads": val_dict['custom_metrics'].get('visited_junctions_mean',val_dict['custom_metrics'].get('visited_cells_mean',0))
