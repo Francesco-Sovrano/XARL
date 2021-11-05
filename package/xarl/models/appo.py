@@ -21,7 +21,9 @@ class TFAdaptiveMultiHeadNet(TFModelV2):
 		inputs, last_layer = get_tf_heads_model(obs_space)
 
 		activation = get_activation_fn(model_config.get("fcnet_activation"))
-		hiddens = model_config.get("fcnet_hiddens", [])
+		if not model_config.get("fcnet_hiddens", []):
+			activation = model_config.get("post_fcnet_activation")
+		hiddens = model_config.get("fcnet_hiddens", []) + model_config.get("post_fcnet_hiddens", [])
 		no_final_linear = model_config.get("no_final_linear")
 		vf_share_layers = model_config.get("vf_share_layers")
 		free_log_std = model_config.get("free_log_std")
