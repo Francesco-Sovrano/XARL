@@ -274,7 +274,7 @@ def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_
 		print(f"{name} has length {length}")
 		logs.append({
 			'name': name, 
-			'data_iter': parse(url, max_i=length, statistics_list=statistics_list), 
+			'data_iter': parse(url, max_i=length, statistics_list=statistics_list, step_type=step_type), 
 			'length':length, 
 			'line_example': parse_line(line_example, statistics_list=statistics_list, step_type=step_type)
 		})
@@ -336,13 +336,13 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 		obj = dict(filter(lambda x: x[0] in statistics_list, obj.items()))
 	return (step, obj)
 	
-def parse(log_fname, max_i=None, statistics_list=None):
+def parse(log_fname, max_i=None, statistics_list=None, step_type='num_steps_sampled'):
 	with open(log_fname, 'r') as logfile:
 		for i, line in enumerate(logfile):
 			if max_i and i > max_i:
 				return
 			try:
-				yield parse_line(line, i=i, statistics_list=statistics_list)
+				yield parse_line(line, i=i, statistics_list=statistics_list, step_type=step_type)
 			except Exception as e:
 				print("exc %s on line %s" % (repr(e), i+1))
 				print("skipping line")
