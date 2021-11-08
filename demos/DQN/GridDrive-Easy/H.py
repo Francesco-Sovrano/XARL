@@ -50,9 +50,8 @@ CONFIG.update({
 	"dueling": True,
 	"double_q": True,
 	"num_atoms": 21,
-	# "v_max": 2**5,
-	# "v_min": -1,
-	"clip_rewards": True,
+	"v_max": 2**5,
+	"v_min": -1,
 	##################################
 	"buffer_options": {
 		'priority_id': 'td_errors', # Which batch column to use for prioritisation. Default is inherited by DQN and it is 'td_errors'. One of the following: rewards, prev_rewards, td_errors.

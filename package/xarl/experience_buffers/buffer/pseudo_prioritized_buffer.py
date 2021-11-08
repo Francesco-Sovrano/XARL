@@ -32,7 +32,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		cluster_prioritization_alpha=1,
 		cluster_level_weighting=True,
 		clustering_xi=1, # Let X be the minimum cluster's size, and C be the number of clusters, and q be clustering_xi, then the cluster's size is guaranteed to be in [X, X+(q-1)CX], with q >= 1, when all clusters have reached the minimum capacity X. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
-		clip_cluster_priority_by_max_capacity=False,
+		# clip_cluster_priority_by_max_capacity=False,
 		priority_lower_limit=None,
 		max_age_window=None,
 		seed=None,
@@ -54,7 +54,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		self._cluster_prioritization_alpha = cluster_prioritization_alpha
 		self._cluster_level_weighting = cluster_level_weighting
 		self._clustering_xi = clustering_xi
-		self._clip_cluster_priority_by_max_capacity = clip_cluster_priority_by_max_capacity
+		# self._clip_cluster_priority_by_max_capacity = clip_cluster_priority_by_max_capacity
 		self._weight_importance_by_update_time = self._max_age_window = max_age_window
 		super().__init__(cluster_size=cluster_size, global_size=global_size, seed=seed)
 		self._it_capacity = 1
@@ -109,17 +109,17 @@ class PseudoPrioritizedBuffer(Buffer):
 
 	def resize_buffer(self):
 		# print(random.random())
-		self.min_cluster_size, self.max_cluster_size = self.get_cluster_min_max_size(count_only_valid_clusters=False)
+		# self.min_cluster_size, self.max_cluster_size = self.get_cluster_min_max_size(count_only_valid_clusters=False)
 		## no need to remove redundancies now if the overall cluster's priority is capped
-		# new_min_cluster_size, new_max_cluster_size = self.get_cluster_min_max_size(count_only_valid_clusters=False)
-		# if new_max_cluster_size == self.max_cluster_size:
-		# 	return
-		# for t in self.type_values: # remove redundancies
-		# 	elements_to_remove = max(0, self.count(t)-new_max_cluster_size)
-		# 	for _ in range(elements_to_remove):
-		# 		self.remove_batch(t, self.get_less_important_batch(t))
-		# self.min_cluster_size = new_min_cluster_size
-		# self.max_cluster_size = new_max_cluster_size
+		new_min_cluster_size, new_max_cluster_size = self.get_cluster_min_max_size(count_only_valid_clusters=False)
+		if new_max_cluster_size == self.max_cluster_size:
+			return
+		for t in self.type_values: # remove redundancies
+			elements_to_remove = max(0, self.count(t)-new_max_cluster_size)
+			for _ in range(elements_to_remove):
+				self.remove_batch(t, self.get_less_important_batch(t))
+		self.min_cluster_size = new_min_cluster_size
+		self.max_cluster_size = new_max_cluster_size
 	
 	def normalize_priority(self, priority): # O(1)
 		# always add self._prioritization_epsilon so that there is no priority equal to the neutral value of a SumSegmentTree
@@ -198,8 +198,8 @@ class PseudoPrioritizedBuffer(Buffer):
 			if self._cluster_prioritisation_strategy == 'weighted_avg':
 				avg_cluster_priority = (segment_tree.sum()/segment_tree.inserted_elements) - min_priority # O(log)
 				assert avg_cluster_priority >= 0, f"avg_cluster_priority is {avg_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
-				if self._clip_cluster_priority_by_max_capacity:
-					return min(1,self.get_cluster_capacity(segment_tree))*avg_cluster_priority
+				# if self._clip_cluster_priority_by_max_capacity:
+				# 	return min(1,self.get_cluster_capacity(segment_tree))*avg_cluster_priority
 				return self.get_cluster_capacity(segment_tree)*avg_cluster_priority
 			elif self._cluster_prioritisation_strategy == 'avg':
 				avg_cluster_priority = (segment_tree.sum()/segment_tree.inserted_elements) - min_priority # O(log)
@@ -208,9 +208,9 @@ class PseudoPrioritizedBuffer(Buffer):
 			# elif self._cluster_prioritisation_strategy == 'sum':
 			sum_cluster_priority = segment_tree.sum() - min_priority*segment_tree.inserted_elements # O(log)
 			assert sum_cluster_priority >= 0, f"sum_cluster_priority is {sum_cluster_priority}, it should be >= 0 otherwise the formula is wrong"
-			if self._clip_cluster_priority_by_max_capacity:
-				if segment_tree.inserted_elements > self.max_cluster_size: # redundancies have not been removed yet, cluster's priority is to capped to avoid cluster over-estimation
-					sum_cluster_priority *= self.max_cluster_size/segment_tree.inserted_elements
+			# if self._clip_cluster_priority_by_max_capacity:
+			# 	if segment_tree.inserted_elements > self.max_cluster_size: # redundancies have not been removed yet, cluster's priority is to capped to avoid cluster over-estimation
+			# 		sum_cluster_priority *= self.max_cluster_size/segment_tree.inserted_elements
 			return sum_cluster_priority
 		return build_full_priority()**self._cluster_prioritization_alpha
 
@@ -293,7 +293,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		# 	if self._weight_importance_by_update_time:
 		# 		self._update_times[type_][idx] = self._max_age_window
 		################################
-		if self.is_full_buffer(): # if full buffer, remove the less important batch in the whole buffer
+		if self._is_full_cluster(type_) or self.is_full_buffer(): # if full buffer, remove the less important batch in the whole buffer
 			self.remove_less_important_batches(1)
 		# Add new element to buffer
 		idx = len(type_batch)
