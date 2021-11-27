@@ -52,7 +52,7 @@ The new hyper-parameters are:
 	'global_distribution_matching': False, # Whether to use a random number rather than the batch priority during prioritised dropping. If True then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far.
 	'cluster_prioritisation_strategy': 'sum', # Whether to select which cluster to replay in a prioritised fashion -- Options: None; 'sum', 'avg', 'weighted_avg'.
 	'cluster_prioritization_alpha': 1, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
-	'cluster_level_weighting': False, # Whether to use only cluster-level information to compute importance weights rather than the whole buffer.
+	'cluster_level_weighting': True, # Whether to use only cluster-level information to compute importance weights rather than the whole buffer.
 	'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 },
 "clustering_scheme": "HW", # Which scheme to use for building clusters. One of the following: "none", "positive_H", "H", "HW", "long_HW", "W", "long_W".
@@ -74,22 +74,17 @@ These demos have the same configuration of hyper-parameters used in the experime
 You may find all the demo scripts inside: [demos](demos).
 
 Inside the directory [images/experiments](images/experiments) you may find some plots obtained by performing an ablation study on a few selected hyper-parameters.
-In these plots, the default configuration is always HW (usually the red solid line) with the same hyper-parameters used for the demos named HW. While all the other configurations are slight variations of HW.
+In these plots, the default configuration is always HW (usually the red solid line meaning that How-Why explanations are used) with the same hyper-parameters used for the demos named HW. While all the other configurations are slight variations of HW.
 For example, as shown in the following image we have:
 - baseline: HW with `"clustering_scheme": None`
-- H: HW with `"clustering_scheme": 'H'`
-- W: HW with `"clustering_scheme": 'W'`
-- HW_no_pcluster: HW sans simplicity (with `'cluster_prioritisation_strategy': None`)
-- H_xi_2: HW with `"clustering_xi": 2`
-- H_xi_3: HW with `"clustering_xi": 3`
-- H_xi_4: HW with `"clustering_xi": 4`
-- H_xi_5: HW with `"clustering_xi": 5`
-- H_xi_inf: HW with `"clustering_xi": float('inf')`
-- H_select_random: HW with `'cluster_selection_policy':'random_uniform'`
-- H_clustered_beta: HW with `'cluster_level_weighting':True`
+- H: only How explanations; HW with `"clustering_scheme": 'H'`
+- W: only Why explanations; HW with `"clustering_scheme": 'W'`
+- HW bias: HW with `"'cluster_level_weighting': False`
+- HW xi: HW with `"clustering_xi": 1` for SAC or `"clustering_xi": 3` for DQN/TD3
+- HW sans simplicity: HW with `'cluster_prioritisation_strategy': None`
 
 *DQN - GraphDrive Medium*
-![DQN - GraphDrive Medium](images/experiments/DQN/DQN_medium_graph_drive.png)
+![DQN - GridDrive Medium](images/experiments/DQN/DQN-GridDrive-Medium.png)
 
 ## RLlib Patches
 RLlib has some known issues with PPO.
@@ -105,7 +100,7 @@ For running any experiment on PPO with PyTorch, to avoid raising a NaN error dur
 ## Citations
 This code is free. So, if you use this code anywhere, please cite us:
 ```
-@article{sovrano_raymond2021xarl,
+@article{sovranoraymond2021xarl,
   title={Explanation-Aware Experience Replay in Rule-Dense Environments},
   author={Sovrano, Francesco and Raymond, Alex and Prorok Amanda},
   journal={arXiv preprint arXiv:2109.14711},

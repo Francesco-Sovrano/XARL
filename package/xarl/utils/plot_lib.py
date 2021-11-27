@@ -123,19 +123,19 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 					continue
 				stats_dict = y[key]
 				if buckets_average == 'median':
-					stats_dict["quantiles"].append([
-						np.quantile(value_list,0.25) if show_deviation else 0, # lower quartile
-						np.quantile(value_list,0.5), # median
-						np.quantile(value_list,0.75) if show_deviation else 0, # upper quartile
-					])
+					stats_dict["quantiles"].append({
+						'lower_quartile': np.quantile(value_list,0.25), # lower quartile
+						'median': np.quantile(value_list,0.5), # median
+						'upper_quartile': np.quantile(value_list,0.75), # upper quartile
+					})
 				else:
 					v_mean = np.mean(value_list)
 					v_std = np.std(value_list)
-					stats_dict["quantiles"].append([
-						v_mean-v_std if show_deviation else 0,
-						v_mean,
-						v_mean+v_std if show_deviation else 0,
-					])
+					stats_dict["quantiles"].append({
+						'mean-std': v_mean-v_std,
+						'mean': v_mean,
+						'mean+std': v_mean+v_std,
+					})
 				stats_dict["min"] = min(stats_dict["min"], min(value_list))
 				stats_dict["max"] = max(stats_dict["max"], max(value_list))
 				x[key].append(last_step)
@@ -144,6 +144,10 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 			'y': y,
 			'log_id': log_id
 		}
+		print('#'*10)
+		# print(name)
+		print('episode_reward_mean:', json.dumps(y["episode_reward_mean"], indent=4))
+		print('#'*10)
 	plotted_baseline = False
 	plot_dict = {}
 	for name, line in lines_dict.items():
@@ -153,8 +157,6 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 		if is_baseline:
 			name = base_shared_name
 		# Populate axes
-		print('#'*20)
-		print(name)
 		x = line['x']
 		y = line['y']
 		log_id = line['log_id']
@@ -168,17 +170,21 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 				key = stat[idx]
 				y_key = y[key]
 				x_key = x[key]
-				y_key_lower_quartile, y_key_median, y_key_upper_quartile = map(np.array, zip(*y_key["quantiles"]))
+				unpack_quantiles = lambda a: map(lambda b: b.values(), a)
+				y_key_lower_quartile, y_key_median, y_key_upper_quartile = map(np.array, zip(*unpack_quantiles(y_key["quantiles"])))
 				if base_list:
 					base_line = base_list[log_id]
 					base_y_key = lines_dict[base_line]['y'][key]
-					base_y_key_lower_quartile, base_y_key_median, base_y_key_upper_quartile = map(np.array, zip(*base_y_key["quantiles"]))
+					base_y_key_lower_quartile, base_y_key_median, base_y_key_upper_quartile = map(np.array, zip(*unpack_quantiles(base_y_key["quantiles"])))
 					normalise = lambda x,y: 100*(x-y)/(y-base_y_key['min']+1)
 					y_key_median = normalise(y_key_median, base_y_key_median)
 					y_key_lower_quartile = normalise(y_key_lower_quartile, base_y_key_lower_quartile)
 					y_key_upper_quartile = normalise(y_key_upper_quartile, base_y_key_upper_quartile)
 				# print stats
-				print(f"    {key} is in [{y_key['min']},{y_key['max']}] with medians: {y_key_median}")				
+				# print(f"    {key} is in [{y_key['min']},{y_key['max']}]")
+				# print(f"    {key} has medians: {y_key_median}")
+				# print(f"    {key} has lower quartiles: {y_key_lower_quartile}")
+				# print(f"    {key} has upper quartiles: {y_key_upper_quartile}")
 				if is_baseline:
 					plotted_baseline = True
 				plot_list.append({

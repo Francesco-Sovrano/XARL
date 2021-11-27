@@ -64,6 +64,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		self._base_time = time.time()
 		self.min_cluster_size = 1
 		self.max_cluster_size = self.cluster_size
+		self.__historical_min_priority = float('inf')
 
 	def is_weighting_expected_values(self):
 		return self._prioritization_importance_beta
@@ -334,6 +335,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		if self._prioritization_importance_beta or self._cluster_prioritisation_strategy is not None:
 			self.__min_priority_list = tuple(map(lambda x: x.min_tree.min()[0], self._sample_priority_tree)) # O(log)
 			self.__min_priority = min(self.__min_priority_list)
+			self.__historical_min_priority = min(self.__min_priority,self.__historical_min_priority)
 		if self._prioritization_importance_beta:
 			self.__tot_priority_list = tuple(map(lambda x: x.sum(), self._sample_priority_tree)) # O(log)
 			self.__tot_priority = sum(self.__tot_priority_list)
@@ -385,19 +387,14 @@ class PseudoPrioritizedBuffer(Buffer):
 		return max(1,self._update_times[type_][idx])/self._max_age_window
 
 	@staticmethod
-	def normalise_priority(priority, min_priority, eta=0, n=1):
-		# lower_min_priority = min_priority - eta*np.abs(min_priority)
-		# assert priority > lower_min_priority, f"priority must be > lower_min_priority, but it is {priority} while lower_min_priority is {lower_min_priority}"
-		# return priority - lower_min_priority
-		lower_min_priority = (min_priority - eta*np.abs(min_priority))*n
-		assert priority > lower_min_priority, f"priority must be > lower_min_priority, but it is {priority} while lower_min_priority is {lower_min_priority}"
-		# upper_min_priority = max_priority + eta*np.abs(max_priority)
-		# assert priority < upper_min_priority, f"priority must be > upper_min_priority, but it is {priority} while upper_min_priority is {upper_min_priority}"
-		return (priority - lower_min_priority)#/(upper_min_priority - lower_min_priority)
+	def normalise_priority(priority, historical_min_priority, n=1):
+		historical_min_priority *= n
+		assert priority >= historical_min_priority, f"priority must be >= historical_min_priority, but it is {priority} while historical_min_priority is {historical_min_priority}"
+		return (priority - historical_min_priority)#/(upper_min_priority - lower_min_priority)
 
 	def get_transition_probability(self, priority, type_=None, norm_fn=None):
 		if norm_fn is None:
-			norm_fn = (lambda p,n: p) if self._priority_lower_limit is not None else (lambda x,n: self.normalise_priority(x, self.__min_priority, eta=self._prioritization_importance_eta, n=n))
+			norm_fn = (lambda p,n: p) if self._priority_lower_limit is not None else (lambda x,n: self.normalise_priority(x, self.__historical_min_priority, n=n))
 		if type_ is None:
 			return norm_fn(priority, 1) / norm_fn(self.__tot_priority, self.__tot_elements)
 		p_cluster = self.__cluster_priority_list[type_] / self.__tot_cluster_priority # clusters priorities are already > 0
