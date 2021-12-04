@@ -1,8 +1,10 @@
-gym==0.18.0
+#gym==0.14.0
 scipy==1.6.0
 numpy==1.19.5
 matplotlib==3.3.2
 triangle==20200424
 atari_py==0.2.9
 ale-py==0.7.1
-gym[atari]
+flatland-rl==2.2.1
+pyhumps==3.0.2
+gym[atari]==0.14.0

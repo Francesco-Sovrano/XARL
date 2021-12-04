@@ -18,6 +18,10 @@ from environments.distributed_construction.minecraft import MinecraftEnv
 register_env("MinecraftEnv-V0", lambda config: MinecraftEnv(config))
 register_env("MinecraftEnv-V1", lambda config: build_env_with_agent_groups(MinecraftEnv, config))
 
+### Flatland
+from environments.flatland.flatland import Flatland
+register_env("Flatland", lambda config: Flatland(config))
+
 ### CescoDrive
 from environments.car_controller.cesco_drive.cesco_drive_v0 import CescoDriveV0
 register_env("CescoDrive-V0", lambda config: CescoDriveV0(config))

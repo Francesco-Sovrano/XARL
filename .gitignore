@@ -1,5 +1,7 @@
 *.zip
+*.rar
 
+Atari-ROM/
 out/
 tmp/
 results/

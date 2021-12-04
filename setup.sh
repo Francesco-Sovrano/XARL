@@ -3,7 +3,7 @@ virtualenv .env -p python3
 echo 'Activate the virtual environment'
 source .env/bin/activate
 # echo 'Update the virtual environment'
-# pip install -U pip setuptools wheel
+pip install -U pip setuptools wheel
 echo "Installing other environments' dependencies.."
 pip install -r environments/requirements.txt
 # echo 'Fixing environments rendering'
@@ -12,6 +12,7 @@ echo 'Installing XARL..'
 pip install -e ./package # cmake is needed
 
 echo 'Installing Atari ROMs..'
+pip install gym[atari]==0.14.0
 mkdir Atari-ROM
 cd Atari-ROM
 wget http://www.atarimania.com/roms/Roms.rar
