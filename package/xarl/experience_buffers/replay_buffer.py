@@ -71,8 +71,10 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		seed=None,
 		cluster_selection_policy='random_uniform',
 		ratio_of_samples_from_unclustered_buffer=0,
+		centralised_buffer=True,
 	):
 		self.prioritized_replay = prioritized_replay
+		self.centralised_buffer = centralised_buffer
 		self.buffer_options = {} if not buffer_options else buffer_options
 		dummy_buffer = PseudoPrioritizedBuffer(**self.buffer_options)
 		self.buffer_size = dummy_buffer.global_size
@@ -107,6 +109,7 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		with self.add_batch_timer:
 			self._buffer_lock.acquire_write()
 			for policy_id, sub_batch in batch.policy_batches.items():
+				buffer_id = '__all__' if self.centralised_buffer else policy_id
 				batch_type = get_batch_infos(sub_batch)["batch_type"]
 				####################################
 				if not isinstance(batch_type,(tuple,list)):
@@ -114,26 +117,26 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 				elif len(batch_type) == 1:
 					sub_type_list = (batch_type[0],)
 				elif self._cluster_selection_policy == 'random_uniform_after_filling':
-					sub_type_list = tuple(filter(lambda x: not self.replay_buffers[policy_id].is_valid_cluster(x), batch_type))
+					sub_type_list = tuple(filter(lambda x: not self.replay_buffers[buffer_id].is_valid_cluster(x), batch_type))
 					if len(sub_type_list) == 0:
 						sub_type_list = (random.choice(batch_type),)
 				elif self._cluster_selection_policy == 'random_uniform':
 					# # If has_multiple_types is True: no need for duplicating the batch across multiple clusters unless they are invalid, just insert into one of them, randomly. It is a prioritised buffer, clusters will be fairly represented, with minimum overhead.
 					sub_type_list = (random.choice(batch_type),)
 				elif self._cluster_selection_policy == 'random_max':
-					cluster_cumsum = np.cumsum(list(map(lambda x: self.replay_buffers[policy_id].get_cluster_size(x)+1, batch_type)))
+					cluster_cumsum = np.cumsum(list(map(lambda x: self.replay_buffers[buffer_id].get_cluster_size(x)+1, batch_type)))
 					cluster_mass = random.random() * cluster_cumsum[-1] # O(1)
 					batch_type_idx,_ = next(filter(lambda x: x[-1] >= cluster_mass, enumerate(cluster_cumsum))) # O(|self.type_keys|)
 					sub_type_list = (batch_type[batch_type_idx],)
 				elif self._cluster_selection_policy == 'max':
 					sub_type_list = (max(
 						batch_type, 
-						key=lambda x: (self.replay_buffers[policy_id].get_cluster_size(x),random.random())
+						key=lambda x: (self.replay_buffers[buffer_id].get_cluster_size(x),random.random())
 					),)
 				elif self._cluster_selection_policy == 'min':
 					sub_type_list = (min(
 						batch_type, 
-						key=lambda x: (self.replay_buffers[policy_id].get_cluster_size(x),random.random())
+						key=lambda x: (self.replay_buffers[buffer_id].get_cluster_size(x),random.random())
 					),)
 				else: #if self._cluster_selection_policy == 'none':
 					sub_type_list = batch_type
@@ -143,13 +146,13 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 					sub_batch = sub_batch.copy()
 					# Make a deep copy of infos so that for every sub_type the infos dictionary is different
 					sub_batch['infos'] = copy.deepcopy(sub_batch['infos'])
-					self.replay_buffers[policy_id].add(batch=sub_batch, type_id=sub_type, update_prioritisation_weights=update_prioritisation_weights)
+					self.replay_buffers[buffer_id].add(batch=sub_batch, type_id=sub_type, update_prioritisation_weights=update_prioritisation_weights)
 					if self.buffer_of_recent_elements is not None:
 						# Make a deep copy so the replay buffer doesn't pin plasma memory.
 						sub_batch = sub_batch.copy()
 						# Make a deep copy of infos so that for every sub_type the infos dictionary is different
 						sub_batch['infos'] = copy.deepcopy(sub_batch['infos'])
-						self.buffer_of_recent_elements[policy_id].add(batch=sub_batch, update_prioritisation_weights=update_prioritisation_weights)
+						self.buffer_of_recent_elements[buffer_id].add(batch=sub_batch, update_prioritisation_weights=update_prioritisation_weights)
 			self._buffer_lock.release_write()
 		return batch
 
