@@ -94,6 +94,11 @@ class HW(W):
 		explanation_iter = map(lambda x: (x[0],batch_type,x[1]), explanation_iter)
 		return tuple(explanation_iter)
 
+# Who: a clustering of sequences of actions (and observation embeddings?) taken by a single agent during an episode or part of it.
+# How Many: how many different agents are seen within an observation.
+# When: information about the performed training steps.
+# What: information about what is inside the observation (i.e. intersection of type A, B, etc.)
+
 class long_HW(HW):
 	def get_batch_type(self, batch, episode_type='none'):
 		explanation_iter = super().get_batch_type(batch, episode_type)

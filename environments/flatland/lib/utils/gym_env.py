@@ -65,7 +65,7 @@ class FlatlandGymEnv(gym.Env):
                         self._agent_steps[agent] += 1
                     d[agent] = dones[agent]
                 if agent != '__all__':
-                    self._agent_explanations[agent] = 'something_special'
+                    self._agent_explanations[agent] = 'edit_me_plese_im_your_explanatory_label'
 
             action_dict = {}  # reset action dict for cases where we do multiple env steps
             obs_or_done = len(o) > 0 or d['__all__']  # step through env as long as there are no obs/all agents done
