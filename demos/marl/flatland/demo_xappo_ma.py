@@ -15,14 +15,15 @@ from ray.rllib.models import ModelCatalog
 # Register the models to use.
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet)
 
-NUM_AGENTS = 10
-
 # SELECT_ENV = "Taxi-v3"
 # SELECT_ENV = "ToyExample-V0"
 # SELECT_ENV = "CescoDrive-V1"
 # SELECT_ENV = "GraphDrive-Hard"
 # SELECT_ENV = "GridDrive-Hard"
 SELECT_ENV = "Flatland"
+
+CENTRALISED_TRAINING = True
+NUM_AGENTS = 10
 
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
@@ -64,26 +65,8 @@ CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatl
 	'accumulate_skipped_rewards': False,
 	'available_actions_obs': False,
 }
-
-obs_space = Flatland(CONFIG["env_config"]).observation_space
-act_space = Flatland(CONFIG["env_config"]).action_space
-def gen_policy():
-    return (None, obs_space, act_space, {})
-policy_graphs = {}
-for i in range(NUM_AGENTS):
-    policy_graphs[f'agent-{i}'] = gen_policy()
-def policy_mapping_fn(agent_id):
-        return f'agent-{agent_id}'
-
 CONFIG.update({
-	"horizon": 2**10, # # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"multiagent": {
-        "policies": policy_graphs,
-        "policy_mapping_fn": policy_mapping_fn,
-    },
-    # "count_steps_by": "env_steps",
-})
-CONFIG.update({
+	"horizon": 2**10, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	"model": { # this is for GraphDrive and GridDrive
 		"custom_model": "adaptive_multihead_network"
 	},
@@ -135,13 +118,42 @@ CONFIG.update({
 	'vtrace': False,
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
-
 # framework = CONFIG.get("framework","tf")
 # if framework in ["tf2", "tf", "tfe"]:
 # 	from ray.rllib.models.tf.fcnet import FullyConnectedNetwork as FCNet, Keras_FullyConnectedNetwork as Keras_FCNet
 # elif framework == "torch":
 # 	from ray.rllib.models.torch.fcnet import (FullyConnectedNetwork as FCNet)
 # ModelCatalog.register_custom_model("fcnet", FCNet)
+
+# Setup MARL training strategy: centralised or decentralised
+obs_space = Flatland(CONFIG["env_config"]).observation_space
+act_space = Flatland(CONFIG["env_config"]).action_space
+def gen_policy():
+	return (None, obs_space, act_space, {})
+policy_graphs = {}
+if not CENTRALISED_TRAINING:
+	for i in range(NUM_AGENTS):
+		policy_graphs[f'agent-{i}'] = gen_policy()
+	def policy_mapping_fn(agent_id):
+			return f'agent-{agent_id}'
+else:
+	policy_graphs[f'centralised_agent'] = gen_policy()
+	def policy_mapping_fn(agent_id):
+			return f'centralised_agent'
+
+CONFIG.update({
+	"multiagent": {
+		"policies": policy_graphs,
+		"policy_mapping_fn": policy_mapping_fn,
+		# Which metric to use as the "batch size" when building a
+		# MultiAgentBatch. The two supported values are:
+		# env_steps: Count each time the env is "stepped" (no matter how many
+		#   multi-agent actions are passed/how many multi-agent observations
+		#   have been returned in the previous step).
+		# agent_steps: Count each individual agent step as one step.
+		"count_steps_by": "agent_steps",
+	},
+})
 
 ####################################################################################
 ####################################################################################

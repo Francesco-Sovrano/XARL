@@ -21,10 +21,10 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 # SELECT_ENV = "SpecialBreakoutNoFrameskip-v4"
 SELECT_ENV = "Flatland"
 
+CENTRALISED_TRAINING = True
 NUM_AGENTS = 10
 
 CONFIG = XADQN_DEFAULT_CONFIG.copy()
-CONFIG["horizon"] = 2**10 # # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
 	'seed': 42,
 	'number_of_agents': NUM_AGENTS,
@@ -65,6 +65,7 @@ CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatl
 	'available_actions_obs': False,
 }
 CONFIG.update({
+	"horizon": 2**10, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	"model": { # this is for GraphDrive and GridDrive
 		"custom_model": "adaptive_multihead_network",
 	},
@@ -95,7 +96,7 @@ CONFIG.update({
 	"num_atoms": 21,
 	# "v_max": 2**5,
 	# "v_min": -1,
-	"clip_rewards": True,
+	"clip_rewards": False,
 	##################################
 	"buffer_options": {
 		'priority_id': 'td_errors', # Which batch column to use for prioritisation. Default is inherited by DQN and it is 'td_errors'. One of the following: rewards, prev_rewards, td_errors.
@@ -130,6 +131,36 @@ CONFIG.update({
 	"centralised_buffer": True, # for MARL
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
+
+# Setup MARL training strategy: centralised or decentralised
+obs_space = Flatland(CONFIG["env_config"]).observation_space
+act_space = Flatland(CONFIG["env_config"]).action_space
+def gen_policy():
+	return (None, obs_space, act_space, {})
+policy_graphs = {}
+if not CENTRALISED_TRAINING:
+	for i in range(NUM_AGENTS):
+		policy_graphs[f'agent-{i}'] = gen_policy()
+	def policy_mapping_fn(agent_id):
+			return f'agent-{agent_id}'
+else:
+	policy_graphs[f'centralised_agent'] = gen_policy()
+	def policy_mapping_fn(agent_id):
+			return f'centralised_agent'
+
+CONFIG.update({
+	"multiagent": {
+		"policies": policy_graphs,
+		"policy_mapping_fn": policy_mapping_fn,
+		# Which metric to use as the "batch size" when building a
+		# MultiAgentBatch. The two supported values are:
+		# env_steps: Count each time the env is "stepped" (no matter how many
+		#   multi-agent actions are passed/how many multi-agent observations
+		#   have been returned in the previous step).
+		# agent_steps: Count each individual agent step as one step.
+		"count_steps_by": "agent_steps",
+	},
+})
 
 ####################################################################################
 ####################################################################################
