@@ -164,21 +164,21 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		if self.buffer_of_recent_elements is not None:
 			n_of_old_elements = max(1,int(np.ceil(batch_count*self.ratio_of_old_elements))) #random.randint(0,batch_count)
 			# if n_of_old_elements > 0:
-			output_batches += self.replay_buffer(
+			output_batches += self.sample_from_buffer(
 				self.replay_buffers,
 				n_of_old_elements,
 				cluster_overview_size,
 				update_replayed_fn,
 			)
 			if n_of_old_elements != batch_count:
-				output_batches += self.replay_buffer(
+				output_batches += self.sample_from_buffer(
 					self.buffer_of_recent_elements,
 					batch_count-n_of_old_elements,
 					cluster_overview_size,
 					update_replayed_fn,
 				)
 		else:
-			output_batches += self.replay_buffer(
+			output_batches += self.sample_from_buffer(
 				self.replay_buffers,
 				batch_count,
 				cluster_overview_size,
@@ -186,7 +186,7 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 			)
 		return output_batches
 
-	def replay_buffer(self, buffer_list, batch_count=1, cluster_overview_size=None, update_replayed_fn=None):
+	def sample_from_buffer(self, buffer_dict, batch_count=1, cluster_overview_size=None, update_replayed_fn=None):
 		if not self.can_replay():
 			return []
 		if not cluster_overview_size:
@@ -196,7 +196,7 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 
 		with self.replay_timer:
 			batch_list = [{} for _ in range(batch_count)]
-			for policy_id, replay_buffer in buffer_list.items():
+			for policy_id, replay_buffer in list(buffer_dict.items()):
 				if replay_buffer.is_empty():
 					continue
 				# batch_iter = replay_buffer.sample(batch_count)
