@@ -31,8 +31,8 @@ class Primal(MultiAgentEnv):
 	@property
 	def observation_space(self) -> gym.spaces.Space:
 		return gym.spaces.Dict({
-			'cnn': gym.spaces.Box(low=-1, high=1, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
-			'fc': gym.spaces.Box(low=-1, high=255, shape=(3,), dtype=np.float32),
+			'cnn': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
+			'fc': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
 		})
 
 	@property
@@ -64,6 +64,7 @@ class Primal(MultiAgentEnv):
 
 	# Executes an action by an agent
 	def step(self, action_dict):
+		# print(action_dict[1])
 		obs,rew = self._env.step_all(action_dict)
 
 		obs = self.preprocess_observation_dict(obs)

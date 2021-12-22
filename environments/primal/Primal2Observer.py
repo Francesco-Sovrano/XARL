@@ -141,32 +141,21 @@ class Primal2Observer(ObservationBuilder):
             if cell_info[1] == 1:
                 corridor_id = cell_info[0]
                 if corridor_id != current_corridor_id:
+                    l,r = position[0] - top_left[0]-1, position[1] - top_left[1]-1
                     if len(self.world.corridors[corridor_id]['EndPoints']) == 1:
                         if [position[0], position[1]] == self.world.corridors[corridor_id]['StoppingPoints'][0]:
-                            blocking_map[position[0] - top_left[0], position[1] - top_left[1]] = self.get_blocking(
-                                corridor_id,
-                                0, agent_id,
-                                1)
+                            blocking_map[l,r] = self.get_blocking(corridor_id,0, agent_id,1)
                     elif [position[0], position[1]] == self.world.corridors[corridor_id]['StoppingPoints'][0]:
                         end_point_pos = self.world.corridors[corridor_id]['EndPoints'][0]
-                        deltax_map[position[0] - top_left[0], position[1] - top_left[1]] = (self.world.corridors[
-                            corridor_id]['DeltaX'][(end_point_pos[0], end_point_pos[1])])  # / max(mag, 1)
-                        deltay_map[position[0] - top_left[0], position[1] - top_left[1]] = (self.world.corridors[
-                            corridor_id]['DeltaY'][(end_point_pos[0], end_point_pos[1])])  # / max(mag, 1)
-                        blocking_map[position[0] - top_left[0], position[1] - top_left[1]] = self.get_blocking(
-                            corridor_id,
-                            0, agent_id,
-                            2)
+                        deltax_map[l,r] = (self.world.corridors[corridor_id]['DeltaX'][(end_point_pos[0], end_point_pos[1])])  # / max(mag, 1)
+                        deltay_map[l,r] = (self.world.corridors[corridor_id]['DeltaY'][(end_point_pos[0], end_point_pos[1])])  # / max(mag, 1)
+                        blocking_map[l,r] = self.get_blocking(corridor_id,0, agent_id,2)
                     elif [position[0], position[1]] == self.world.corridors[corridor_id]['StoppingPoints'][1]:
                         end_point_pos = self.world.corridors[corridor_id]['EndPoints'][1]
-                        deltax_map[position[0] - top_left[0], position[1] - top_left[1]] = (self.world.corridors[
-                            corridor_id]['DeltaX'][(end_point_pos[0], end_point_pos[1])])  # / max(mag, 1)
-                        deltay_map[position[0] - top_left[0], position[1] - top_left[1]] = (self.world.corridors[
-                            corridor_id]['DeltaY'][(end_point_pos[0], end_point_pos[1])])  # / max(mag, 1)
-                        blocking_map[position[0] - top_left[0], position[1] - top_left[1]] = self.get_blocking(
-                            corridor_id,
-                            1, agent_id,
-                            2)
+                        # print(corridor_id, end_point_pos[0], end_point_pos[1], position[0] - top_left[0], position[1] - top_left[1], len(deltax_map))
+                        deltax_map[l,r] = (self.world.corridors[corridor_id]['DeltaX'][(end_point_pos[0], end_point_pos[1])])  # / max(mag, 1)
+                        deltay_map[l,r] = (self.world.corridors[corridor_id]['DeltaY'][(end_point_pos[0], end_point_pos[1])])  # / max(mag, 1)
+                        blocking_map[l,r] = self.get_blocking(corridor_id, 1, agent_id, 2)
                     else:
                         pass
 
