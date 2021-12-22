@@ -20,7 +20,7 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 # SELECT_ENV = "CescoDrive-V1"
 # SELECT_ENV = "GraphDrive-Hard"
 # SELECT_ENV = "GridDrive-Hard"
-SELECT_ENV = "Flatland"
+SELECT_ENV = "Primal"
 
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 5
@@ -28,42 +28,14 @@ NUM_AGENTS = 5
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
 	'seed': 42,
-	'number_of_agents': NUM_AGENTS,
-	'width': 32,
-	'height': 32,
-
-	'max_num_cities': 3,
-	'grid_mode': True,
-	'max_rails_between_cities': 2,
-	'max_rails_in_city': 3,
-	'malfunction_rate': 8000,
-	'malfunction_min_duration': 15,
-	'malfunction_max_duration': 50,
-	# speed ratio map: keys must be strings but will be converted to float later!
-	'speed_ratio_map': {
-		'1.0': 0.25,
-		'0.5': 0.25,
-		'0.3333333': 0.25,
-		'0.25': 0.25,
-	},
-	'regenerate_rail_on_reset': True,
-	'regenerate_schedule_on_reset': True,
-
-	'observation': 'global',
-	'observation_config': {
-		'max_width': 32,
-		'max_height': 32,
-	},
-	'generator': 'sparse_rail_generator',
-	'generator_config': 'small_v0',
-	'sparse_reward': False,
-	'done_reward': 1,
-	'not_finished_reward': -1,
-	'deadlock_reward': 0,
-	'resolve_deadlocks': False,
-	'skip_no_choice_cells': False,
-	'accumulate_skipped_rewards': False,
-	'available_actions_obs': False,
+	'num_agents': NUM_AGENTS,
+	'observation_size': 3,
+	'env_size': (10, 30), 
+	'wall_components': (3, 8),
+	'obstacle_density': (0.5, 0.7),
+	'IsDiagonal': False,
+	'frozen_steps': 0,
+	'isOneShot': False,
 }
 CONFIG.update({
 	"horizon": 2**10, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
@@ -126,8 +98,8 @@ CONFIG["callbacks"] = CustomEnvironmentCallbacks
 # ModelCatalog.register_custom_model("fcnet", FCNet)
 
 # Setup MARL training strategy: centralised or decentralised
-obs_space = Flatland(CONFIG["env_config"]).observation_space
-act_space = Flatland(CONFIG["env_config"]).action_space
+obs_space = eval(SELECT_ENV)(CONFIG["env_config"]).observation_space
+act_space = eval(SELECT_ENV)(CONFIG["env_config"]).action_space
 def gen_policy():
 	return (None, obs_space, act_space, {})
 policy_graphs = {}

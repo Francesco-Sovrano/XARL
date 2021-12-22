@@ -14,14 +14,18 @@ from environments.custom_metrics import CustomEnvironmentCallbacks
 from environments.gym_env_example import Example_v0
 register_env("ToyExample-V0", lambda config: Example_v0(config))
 
+### Primal
+from environments.primal.Primal2Env import Primal2Env as Primal
+register_env("Primal", lambda config: Primal(config))
+
 ### MinecraftEnv
-from environments.distributed_construction.minecraft import MinecraftEnv
-register_env("MinecraftEnv-V0", lambda config: MinecraftEnv(config))
-register_env("MinecraftEnv-V1", lambda config: build_env_with_agent_groups(MinecraftEnv, config))
+# from environments.distributed_construction.minecraft import MinecraftEnv
+# register_env("MinecraftEnv-V0", lambda config: MinecraftEnv(config))
+# register_env("MinecraftEnv-V1", lambda config: build_env_with_agent_groups(MinecraftEnv, config)) # Centralised execution
 
 ### Flatland
-from environments.flatland.flatland import Flatland
-register_env("Flatland", lambda config: Flatland(config))
+# from environments.flatland.flatland import Flatland
+# register_env("Flatland", lambda config: Flatland(config))
 
 ### CescoDrive
 from environments.car_controller.cesco_drive.cesco_drive_v0 import CescoDriveV0

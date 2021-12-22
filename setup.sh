@@ -6,6 +6,9 @@ source .env/bin/activate
 pip install -U pip setuptools wheel
 echo "Installing other environments' dependencies.."
 pip install -r environments/requirements.txt
+cd environments/primal/od_mstar3
+python3 setup.py build_ext --inplace
+cd ../../..
 # echo 'Fixing environments rendering'
 # pip install pyglet==1.5.11 # fix for rendering environments
 echo 'Installing XARL..'

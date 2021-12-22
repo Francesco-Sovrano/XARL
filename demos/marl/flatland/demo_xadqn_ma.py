@@ -22,17 +22,17 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 SELECT_ENV = "Flatland"
 
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 10
+NUM_AGENTS = 5
 
 CONFIG = XADQN_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
 	'seed': 42,
 	'number_of_agents': NUM_AGENTS,
-	'width': 42,
-	'height': 42,
+	'width': 32,
+	'height': 32,
 
 	'max_num_cities': 3,
-	'grid_mode': False,
+	'grid_mode': True,
 	'max_rails_between_cities': 2,
 	'max_rails_in_city': 3,
 	'malfunction_rate': 8000,
@@ -50,8 +50,8 @@ CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatl
 
 	'observation': 'global',
 	'observation_config': {
-		'max_width': 42,
-		'max_height': 42,
+		'max_width': 32,
+		'max_height': 32,
 	},
 	'generator': 'sparse_rail_generator',
 	'generator_config': 'small_v0',
