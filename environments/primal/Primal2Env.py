@@ -4,8 +4,6 @@ from environments.primal.od_mstar3 import od_mstar
 from environments.primal.GroupLock import Lock
 import random
 from gym import spaces
-from environments.primal.Primal2Observer import Primal2Observer
-from environments.primal.Map_Generator import *
 
 '''
     Observation: 
@@ -20,24 +18,11 @@ from environments.primal.Map_Generator import *
 class Primal2Env(MAPFEnv):
     metadata = {"render.modes": ["human", "ansi"]}
 
-    def __init__(self, config):
-        observation_size = config.get('observation_size',3)
-        observer = Primal2Observer(observation_size)
-        map_generator = maze_generator(
-            env_size = config.get('env_size',(10, 30)), 
-            wall_components = config.get('wall_components',(3, 8)),
-            obstacle_density = config.get('obstacle_density',(0.5, 0.7)),
-        )
-        num_agents = config.get('num_agents',None)
-        IsDiagonal = config.get('IsDiagonal',False)
-        frozen_steps = config.get('frozen_steps',0)
-        isOneShot = config.get('isOneShot',False)
-        # self.observation_space = gym.spaces.Dict({
-        #     "cnn": gym.spaces.Box(low=0, high=255, shape=(8, observation_size, observation_size), dtype=np.float32)
-        #     # "fc": gym.spaces.Dict(fc_dict),
-        # })
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(8, observation_size, observation_size), dtype=np.float32)
-        super(Primal2Env, self).__init__(observer=observer, map_generator=map_generator, num_agents=num_agents, IsDiagonal=IsDiagonal, frozen_steps=frozen_steps, isOneShot=isOneShot)
+    def __init__(self, observer, map_generator, num_agents=None,
+                 IsDiagonal=False, frozen_steps=0, isOneShot=False):
+        super(Primal2Env, self).__init__(observer=observer, map_generator=map_generator,
+                                          num_agents=num_agents,
+                                          IsDiagonal=IsDiagonal, frozen_steps=frozen_steps, isOneShot=isOneShot)
 
     def _reset(self, new_generator=None):
         if new_generator is None:
@@ -51,10 +36,6 @@ class Primal2Env(MAPFEnv):
         self.fresh = True
         if self.viewer is not None:
             self.viewer = None
-
-    def step(self, movement_dict):
-        obs_dict, reward_dict = self.step_all(movement_dict)
-        return obs_dict, reward_dict
 
     def give_moving_reward(self, agentID):
         """

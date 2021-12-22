@@ -12,7 +12,6 @@ from matplotlib.colors import *
 from gym.envs.classic_control import rendering
 import imageio
 from gym import spaces
-from ray.rllib.env.multi_agent_env import MultiAgentEnv, make_multi_agent
 
 
 def make_gif(images, fname):
@@ -754,7 +753,7 @@ class World:
         return status_dict, newPos_dict
 
 
-class MAPFEnv(MultiAgentEnv):
+class MAPFEnv(gym.Env):
     metadata = {"render.modes": ["human", "ansi"]}
 
     def __init__(self, observer, map_generator, num_agents=None,
@@ -775,9 +774,9 @@ class MAPFEnv(MultiAgentEnv):
         self.mutex = Lock()
         self.GIF_frame = []
         if IsDiagonal:
-            self.action_space = spaces.Discrete(9)
+            self.action_space = spaces.Tuple([spaces.Discrete(self.num_agents), spaces.Discrete(9)])
         else:
-            self.action_space = spaces.Discrete(5)
+            self.action_space = spaces.Tuple([spaces.Discrete(self.num_agents), spaces.Discrete(5)])
 
         self.ACTION_COST, self.GOAL_REWARD, self.COLLISION_REWARD = -0.3, 5., -2.
 
@@ -883,9 +882,6 @@ class MAPFEnv(MultiAgentEnv):
             for frozen_agent in freeze_list:
                 free_agents.remove(frozen_agent)
         return self._observe(free_agents), self.individual_rewards
-
-    def reset(self):
-        return self._observe(list(range(1, self.num_agents + 1)))
 
     def give_moving_reward(self, agentID):
         raise NotImplementedError

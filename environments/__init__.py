@@ -15,7 +15,7 @@ from environments.gym_env_example import Example_v0
 register_env("ToyExample-V0", lambda config: Example_v0(config))
 
 ### Primal
-from environments.primal.Primal2Env import Primal2Env as Primal
+from environments.primal.primal import Primal
 register_env("Primal", lambda config: Primal(config))
 
 ### MinecraftEnv
