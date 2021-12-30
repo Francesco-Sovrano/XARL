@@ -9,16 +9,19 @@ from explanation import Explanation
 class ShepherdObserver:
     explainers = {}
 
-    def __init__(self, game: ShepherdGame):
+    def __init__(self, game: ShepherdGame, max_observed_neighbours):
         self.game = game
         self.buffer_size = 2
         self.observation_buffer = {}  # {agent : obs_buffer}
+        self.max_observed_neighbours = max_observed_neighbours
 
         for agent in self.game.dogs:
             self.observation_buffer[agent] = deque(maxlen=self.buffer_size)
 
     def update(self):
         saved, lost = self.game.count_sheep(count_and_remove=False)
+        reward = saved - lost
+
         for agent in self.game.dogs:
             obs = {"agent_pos": np.copy(agent.pos), "pen_pos": np.copy(self.game.sheep_pen.pos), "saved": saved, "lost": lost}
 
@@ -36,6 +39,20 @@ class ShepherdObserver:
 
             obs["neighbours"] = neighbour_data
             self.observation_buffer[agent].append(obs)
+
+    def prepare_obs_for_env(self, obs):
+        new_obs = {}
+        new_obs["agent_pos"] = obs["agent_pos"]
+        new_obs["pen_pos"] = obs["pen_pos"]
+        new_obs["neighbours"] = {}
+        type_list = np.empty(shape=(self.max_observed_neighbours,), dtype=np.int8)
+        pos_list = np.empty(shape=(self.max_observed_neighbours, 2), dtype=np.float32)
+        empty_spaces = self.max_observed_neighbours - len(obs["neighbours"])
+        for neighbour in obs["neighbours"]:
+            particle_type = 1 if neighbour["type"] == Dog else 2
+            # type_list.append(particle_type)
+
+
 
     def separate_neighbours_by_type(self, neighbours):
         neighbour_dict = {}

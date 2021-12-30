@@ -1,11 +1,12 @@
 from itertools import count
 import numpy as np
+from scipy.spatial import KDTree, distance
 
 
 class Particle:
     """A class representing a two-dimensional particle."""
     _ids = count(0)
-
+    MAX_MOVE = 0.0
     def __init__(self, x, y, radius=0.01):
         """Initialize the particle's position, velocity, and radius.
         """
@@ -60,5 +61,10 @@ class Particle:
 
     def advance(self, dt):
         """Advance the Particle's position forward in time by dt."""
+        old_pos = np.copy(self.pos)
         self.pos += self.velocity * dt
+        d = distance.euclidean((old_pos[0], old_pos[1]), (self.pos[0], self.pos[1]))
+        if d > self.MAX_MOVE:
+            self.MAX_MOVE = d
+            print("New maximum move: ", d)
 

@@ -1,7 +1,9 @@
 import numpy as np
 import math
 import pygame
+import pygame.freetype
 import random
+import os
 from scipy.spatial import KDTree, distance
 
 from particle import Particle
@@ -16,6 +18,7 @@ class Sheep(Particle):
     def move(self, vector):
         self.x = self.pos[0] + vector[0]
         self.y = self.pos[1] + vector[1]
+
 
     def draw(self, screen):
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius)
@@ -52,12 +55,12 @@ class ShepherdGame:
     def __init__(self, num_dogs, num_sheep, render=True, save_frames=False):
         self.num_dogs = num_dogs
         self.num_sheep = num_sheep
-        self.sheep_size = 6.0
-        self.dog_size = 5.0
+        self.sheep_size = 1.0
+        self.dog_size = 1.0
         self.pen_radius = self.sheep_size * 10.0
-        self.dt = 0.15
-        self.sheep_sense_radius = 75.0
-        self.dog_sense_radius = 150.0
+        self.dt = 0.4
+        self.sheep_sense_radius = 15.0
+        self.dog_sense_radius = 30.0
         self.render = render
         self.save_frames = save_frames
 
@@ -92,11 +95,10 @@ class ShepherdGame:
 
         self.particles.append(particle)
 
-    def generate_map(self, map_sparsity=30):
+    def generate_map(self, map_sparsity=5):
 
         self.map_side = map_sparsity * self.num_sheep
-        if self.map_side < 400:
-            self.map_side = 400
+
         self.map_centre = (self.map_side / 2.0, self.map_side / 2.0)
 
         random_angle = random.uniform(0, 2*np.pi)
@@ -152,21 +154,26 @@ class ShepherdGame:
         self.screen.fill((122, 22, 22))  # Fill with red.
         pygame.draw.circle(self.screen, color=(22, 120, 52), center=self.map_centre, radius=self.map_side / 2.0)
 
+        # Draw sheep pen (represented as a blue circle).
+        self.sheep_pen.draw(self.screen)
+
         # Draw sheep and dogs.
         for sheep in self.sheep:
             sheep.draw(self.screen)
         for dog in self.dogs:
             dog.draw(self.screen)
 
-        # Draw sheep pen (represented as a blue circle).
-        self.sheep_pen.draw(self.screen)
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
 
+
         pygame.display.update()
+        # delay = 1
+        # print(f"Frame {self.frame_count} drawn. Waiting {delay} seconds. Sheep count {len(self.sheep)}.")
+        # pygame.time.delay(delay*1000)
+
 
 
     def count_sheep(self, count_and_remove=True):
@@ -224,11 +231,12 @@ class ShepherdGame:
         self.update_KD_tree()
 
         # self.total_reward += reward
-
+        self.frame_count += 1
         if self.render:
             self.draw_screen()
             if self.save_frames:
-                self.frame_count += 1
+                if not os.path.exists('frames'):
+                    os.makedirs('frames')
                 pygame.image.save(self.screen, "frames/screen{:04d}.png".format(self.frame_count))
 
     def move_sheep(self, sheep):
@@ -247,12 +255,12 @@ class ShepherdGame:
             d = distance.euclidean((px, py), (sx, sy))
             df = bound(d / max_distance, 0.0, 1.0)
             if type(particle) == Sheep:
-                # Small attractive force.
                 desired_heading = math.atan2(py - sy, px - sx)
+                # Small attractive force to encourage flocking.
                 # Repulsive force to avoid collisions.
                 intensity = 0.2 if d > 3 * sheep.radius else -0.2
                 if d < 2 * sheep.radius:
-                    intensity = -30.0
+                    intensity = -3.0
             elif type(particle) == Dog:
                 # Strong repulsive force.
                 desired_heading = math.atan2(sy - py, sx - px)
