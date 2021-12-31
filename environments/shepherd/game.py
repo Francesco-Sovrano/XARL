@@ -63,6 +63,8 @@ class ShepherdGame:
         self.dog_sense_radius = 30.0
         self.render = render
         self.save_frames = save_frames
+        self.base_grid = None
+        self.global_grid = None
 
         self.dogs = []
         self.sheep = []
@@ -101,7 +103,8 @@ class ShepherdGame:
 
         self.map_centre = (self.map_side / 2.0, self.map_side / 2.0)
 
-        random_angle = random.uniform(0, 2*np.pi)
+        # Add sheep pen to random part of green space.
+        random_angle = random.uniform(0, 2 * np.pi)
         random_distance = random.uniform(0, (self.map_side / 2) - self.pen_radius)
         pen_x = self.map_centre[0] + random_distance * math.cos(random_angle)
         pen_y = self.map_centre[1] + random_distance * math.sin(random_angle)
@@ -109,6 +112,22 @@ class ShepherdGame:
         sheep_pen = Pen(x=pen_x, y=pen_y, radius=self.pen_radius)
         self.add_to_game(sheep_pen)
 
+        # Generate grid map
+        dim = self.map_side
+        self.base_grid = np.zeros(shape=(dim, dim), dtype=np.int8)
+        radius = self.map_side / 2
+        for x in range(self.map_side):
+            for y in range(self.map_side):
+                if distance.euclidean((x,y), self.map_centre) > radius:
+                    # Adding red cells.
+                    self.base_grid[x][y] = 1
+                if distance.euclidean((x,y), self.sheep_pen.pos) < self.pen_radius:
+                    # Adding blue cells (pen).
+                    self.base_grid[x][y] = 2
+
+        self.global_grid = np.copy(self.base_grid)
+
+        # Place moving particles.
         placed_sheep = 0
         placed_dogs = 0
 
@@ -168,7 +187,6 @@ class ShepherdGame:
                 pygame.quit()
                 exit()
 
-
         pygame.display.update()
         # delay = 1
         # print(f"Frame {self.frame_count} drawn. Waiting {delay} seconds. Sheep count {len(self.sheep)}.")
@@ -201,6 +219,27 @@ class ShepherdGame:
         points = [(p.x, p.y) for p in self.particles]
         self.particle_tree = KDTree(points)
 
+    def compute_global_grid(self):
+        """
+        Converts an obs dict into an agent_view grid.
+        Cell values:
+        0: empty pasture cell (green)
+        1: empty external cell (red)
+        2: pen cell (blue)
+        3: sheep
+        4: other dogs
+        5: agent (self)
+        """
+        self.global_grid = np.copy(self.base_grid)
+        coord_space = np.linspace(0, self.map_side-1, self.map_side, dtype=np.float32)
+        for particle in self.particles:
+            x = np.searchsorted(coord_space, particle.x)
+            y = np.searchsorted(coord_space, particle.y)
+            if type(particle) == Sheep:
+                self.global_grid[x][y] = 3
+            elif type(particle) == Dog:
+                self.global_grid[x][y] = 4
+
     def get_neighbours_of(self, particle, radius=None):
         if not radius:
             radius = particle.radius
@@ -229,6 +268,7 @@ class ShepherdGame:
             sheep.advance(self.dt)
 
         self.update_KD_tree()
+        self.compute_global_grid()
 
         # self.total_reward += reward
         self.frame_count += 1
@@ -278,3 +318,18 @@ class ShepherdGame:
         action = np.array((1.0, 1.0))  # Fixed motion for test
         self.dogs[agent_id].velocity = action
         self.dogs[agent_id].advance(self.dt)
+
+        # Avoid agent going out of bounds
+        x = self.dogs[agent_id].x
+        y = self.dogs[agent_id].y
+        if x < 0.0:
+            x = 0.0
+        elif x > self.map_side:
+            x = self.map_side
+            
+        if y < 0.0:
+            y = 0.0
+        elif y > self.map_side:
+            y = self.map_side
+        self.dogs[agent_id].pos[0] = x
+        self.dogs[agent_id].pos[1] = y

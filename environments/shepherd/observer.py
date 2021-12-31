@@ -15,6 +15,8 @@ class ShepherdObserver:
         self.observation_buffer = {}  # {agent : obs_buffer}
         self.max_observed_neighbours = max_observed_neighbours
 
+        self.coordinate_space = np.linspace(0, self.game.map_side-1, self.game.map_side, dtype=np.float32)
+
         for agent in self.game.dogs:
             self.observation_buffer[agent] = deque(maxlen=self.buffer_size)
 
@@ -41,16 +43,36 @@ class ShepherdObserver:
             self.observation_buffer[agent].append(obs)
 
     def prepare_obs_for_env(self, obs):
+
         new_obs = {}
         new_obs["agent_pos"] = obs["agent_pos"]
         new_obs["pen_pos"] = obs["pen_pos"]
-        new_obs["neighbours"] = {}
-        type_list = np.empty(shape=(self.max_observed_neighbours,), dtype=np.int8)
-        pos_list = np.empty(shape=(self.max_observed_neighbours, 2), dtype=np.float32)
-        empty_spaces = self.max_observed_neighbours - len(obs["neighbours"])
-        for neighbour in obs["neighbours"]:
-            particle_type = 1 if neighbour["type"] == Dog else 2
-            # type_list.append(particle_type)
+
+        # Preparing local view
+        local_dim = (self.game.dog_sense_radius * 2) + 1
+        global_dim = self.game.map_side - 1
+        global_grid = self.game.global_grid
+
+        coord_space = np.linspace(0, self.game.map_side - 1, self.game.map_side, dtype=np.float32)
+        x = np.searchsorted(coord_space, obs["agent_pos"][0])
+        y = np.searchsorted(coord_space, obs["agent_pos"][1])
+
+        excess_x = 0
+        excess_y = 0
+        margin = local_dim/2
+        if x < margin or x > global_dim - margin:
+            excess_x = x - margin
+        if y < margin or y > global_dim - margin:
+            excess_y = y - margin
+
+        cx = x - excess_x
+        cy = y - excess_y
+
+        local_view = global_grid[cy - margin: cy + margin, cx - margin, cy + margin]
+        new_obs["local_view"] = np.copy(local_view)
+
+        return new_obs
+
 
 
 
