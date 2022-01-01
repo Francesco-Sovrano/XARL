@@ -9,11 +9,12 @@ from explanation import Explanation
 class ShepherdObserver:
     explainers = {}
 
-    def __init__(self, game: ShepherdGame, max_observed_neighbours):
+    def __init__(self, game: ShepherdGame):
         self.game = game
         self.buffer_size = 2
         self.observation_buffer = {}  # {agent : obs_buffer}
-        self.max_observed_neighbours = max_observed_neighbours
+        self.processed_observations = {}
+        self.timeout = 2000
 
         self.coordinate_space = np.linspace(0, self.game.map_side-1, self.game.map_side, dtype=np.float32)
 
@@ -23,6 +24,7 @@ class ShepherdObserver:
     def update(self):
         saved, lost = self.game.count_sheep(count_and_remove=False)
         reward = saved - lost
+        sheep_remaining = self.game.num_sheep - saved - lost
 
         for agent in self.game.dogs:
             obs = {"agent_pos": np.copy(agent.pos), "pen_pos": np.copy(self.game.sheep_pen.pos), "saved": saved, "lost": lost}
@@ -41,40 +43,54 @@ class ShepherdObserver:
 
             obs["neighbours"] = neighbour_data
             self.observation_buffer[agent].append(obs)
+            self.processed_observations[agent] = self.prepare_obs_for_env(obs)
+
+        done = (not sheep_remaining) or self.game.frame_count >= self.timeout
+
+        return self.processed_observations, reward, done
 
     def prepare_obs_for_env(self, obs):
-
+        flatten = False
         new_obs = {}
         new_obs["agent_pos"] = obs["agent_pos"]
         new_obs["pen_pos"] = obs["pen_pos"]
 
         # Preparing local view
-        local_dim = (self.game.dog_sense_radius * 2) + 1
-        global_dim = self.game.map_side - 1
+        r = int(self.game.dog_sense_radius)
+        global_dim = self.game.map_side
         global_grid = self.game.global_grid
 
-        coord_space = np.linspace(0, self.game.map_side - 1, self.game.map_side, dtype=np.float32)
-        x = np.searchsorted(coord_space, obs["agent_pos"][0])
-        y = np.searchsorted(coord_space, obs["agent_pos"][1])
+        coord_space = np.linspace(0.5, self.game.map_side - 0.5, self.game.map_side-1, dtype=np.float32)
+        row = np.searchsorted(coord_space, obs["agent_pos"][0])
+        col = np.searchsorted(coord_space, obs["agent_pos"][1])
 
-        excess_x = 0
-        excess_y = 0
-        margin = local_dim/2
-        if x < margin or x > global_dim - margin:
-            excess_x = x - margin
-        if y < margin or y > global_dim - margin:
-            excess_y = y - margin
+        row_min, row_max = row-r, row+r+1
+        col_min, col_max = col-r, col+r+1
 
-        cx = x - excess_x
-        cy = y - excess_y
+        agent_row, agent_col = row - row_min, col - col_min
 
-        local_view = global_grid[cy - margin: cy + margin, cx - margin, cy + margin]
-        new_obs["local_view"] = np.copy(local_view)
+        if row - r < 0:
+            row_min = 0
+            row_max += abs(row-r)
+            agent_row -= abs(row-r)
+        elif row + r > global_dim:
+            row_min -= abs(row+r-global_dim)+1
+            row_max = global_dim
+            agent_row += abs(row+r-global_dim)+1
+        if col - r < 0:
+            col_min = 0
+            col_max += abs(col-r)
+            agent_col -= abs(col-r)
+        elif col + r > global_dim:
+            col_min -= abs(col+r-global_dim)+1
+            col_max = global_dim
+            agent_col += abs(col+r-global_dim)+1
+
+        local_view = np.copy(global_grid[row_min:row_max, col_min:col_max])
+        local_view[agent_row][agent_col] = 5
+        new_obs["local_view"] = local_view.flatten() if flatten else local_view
 
         return new_obs
-
-
-
 
     def separate_neighbours_by_type(self, neighbours):
         neighbour_dict = {}

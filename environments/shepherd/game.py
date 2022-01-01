@@ -231,7 +231,7 @@ class ShepherdGame:
         5: agent (self)
         """
         self.global_grid = np.copy(self.base_grid)
-        coord_space = np.linspace(0, self.map_side-1, self.map_side, dtype=np.float32)
+        coord_space = np.linspace(0.5, self.map_side-0.5, self.map_side-1, dtype=np.float32)
         for particle in self.particles:
             x = np.searchsorted(coord_space, particle.x)
             y = np.searchsorted(coord_space, particle.y)

@@ -13,26 +13,24 @@ class ShepherdEnv(MultiAgentEnv):
         self.render = True
         self.save_frames = False
         self.game = ShepherdGame(self.num_dogs, self.num_sheep, render=self.render, save_frames=self.save_frames)
-        self.max_observed_neighbours = 20
-        self.observer = ShepherdObserver(self.game, self.max_observed_neighbours)
+        self.observer = ShepherdObserver(self.game)
 
     def reset(self):
         self.game = ShepherdGame(self.num_dogs, self.num_sheep, render=self.render, save_frames=self.save_frames)
-        self.observer = ShepherdObserver(self.game, self.max_observed_neighbours)
+        self.observer = ShepherdObserver(self.game)
 
     def run(self):
         while True:
-            self.step({})
+            observations, reward, done, explanations = self.step({})
+            if done:
+                exit(999)
 
     @property
     def observation_space(self) -> gym.spaces.Space:
         return gym.spaces.Dict({
             'agent_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32),
             'pen_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32),
-            'neighbours': gym.spaces.Dict({
-                'types': gym.spaces.Box(low=0, high=2, shape=(self.max_observed_neighbours,), dtype=np.int8),
-                'pos': gym.spaces.Box(low=0.0, high=1.0, shape=(self.max_observed_neighbours, 2), dtype=np.float32)
-            })
+            'local_view': gym.spaces.Box(low=0, high=5, shape=(61,61), dtype=np.int8), #TODO: Send to CNN
         })
 
     @property
@@ -42,11 +40,12 @@ class ShepherdEnv(MultiAgentEnv):
     def step(self, action_dict):
         fake_action_dict = {i: i for i in range(self.num_dogs)}
         self.game.step(fake_action_dict)
-        self.observer.update()
+        observations, reward, done = self.observer.update()
+        explanations = {}
         for agent in self.game.dogs:
-            # print(f"Explanations for agent {agent.pid}: {self.observer.explain(agent)}")
-            pass
+            explanations[agent] = self.observer.explain(agent)
+        return observations, reward, done, explanations
 
-env = ShepherdEnv(20, 50)
+env = ShepherdEnv(10, 50)
 # print(env.observation_space.sample())
 env.run()

@@ -61,10 +61,4 @@ class Particle:
 
     def advance(self, dt):
         """Advance the Particle's position forward in time by dt."""
-        old_pos = np.copy(self.pos)
         self.pos += self.velocity * dt
-        d = distance.euclidean((old_pos[0], old_pos[1]), (self.pos[0], self.pos[1]))
-        if d > self.MAX_MOVE:
-            self.MAX_MOVE = d
-            print("New maximum move: ", d)
-
