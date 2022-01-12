@@ -2,8 +2,8 @@ from collections import deque
 from scipy.spatial import distance
 import numpy as np
 
-from game import ShepherdGame, Dog, Sheep, Pen
-from explanation import Explanation
+from environments.shepherd.game import ShepherdGame, Dog, Sheep, Pen
+from environments.shepherd.explanation import Explanation
 
 
 class ShepherdObserver:

@@ -6,7 +6,7 @@ import random
 import os
 from scipy.spatial import KDTree, distance
 
-from particle import Particle
+from environments.shepherd.particle import Particle
 
 
 class Sheep(Particle):

@@ -18,6 +18,10 @@ register_env("ToyExample-V0", lambda config: Example_v0(config))
 from environments.primal.primal import Primal
 register_env("Primal", lambda config: Primal(config))
 
+### Primal
+from environments.shepherd.env import ShepherdEnv
+register_env("Shepherd", lambda config: ShepherdEnv(config))
+
 ### MinecraftEnv
 # from environments.distributed_construction.minecraft import MinecraftEnv
 # register_env("MinecraftEnv-V0", lambda config: MinecraftEnv(config))

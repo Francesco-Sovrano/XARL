@@ -2,12 +2,14 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv, make_multi_agent
 import gym
 import numpy as np
 
-from game import ShepherdGame
-from observer import ShepherdObserver
+from environments.shepherd.game import ShepherdGame
+from environments.shepherd.observer import ShepherdObserver
 
 
 class ShepherdEnv(MultiAgentEnv):
-    def __init__(self, num_dogs, num_sheep):
+    def __init__(self, config):
+        num_dogs = config.get('num_dogs',5)
+        num_sheep = config.get('num_sheep',50)
         self.num_dogs = num_dogs
         self.num_sheep = num_sheep
         self.render = True
