@@ -1,2 +1,2 @@
-pygame
-scipy
+pygame==2.1.0
+scipy==1.7.3
