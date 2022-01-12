@@ -19,8 +19,8 @@ from environments.primal.primal import Primal
 register_env("Primal", lambda config: Primal(config))
 
 ### Primal
-from environments.shepherd.env import ShepherdEnv
-register_env("Shepherd", lambda config: ShepherdEnv(config))
+from environments.shepherd.env import ShepherdEnv as Shepherd
+register_env("Shepherd", lambda config: Shepherd(config))
 
 ### MinecraftEnv
 # from environments.distributed_construction.minecraft import MinecraftEnv

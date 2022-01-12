@@ -48,6 +48,10 @@ class ShepherdEnv(MultiAgentEnv):
             explanations[agent] = self.observer.explain(agent)
         return observations, reward, done, explanations
 
-env = ShepherdEnv(10, 50)
-# print(env.observation_space.sample())
-env.run()
+if __name__ == '__main__':
+    env = ShepherdEnv({
+        'num_dogs': 10,
+        'num_sheep': 50,
+    })
+    # print(env.observation_space.sample())
+    env.run()
