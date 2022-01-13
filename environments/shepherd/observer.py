@@ -90,7 +90,7 @@ class ShepherdObserver:
         local_view[agent_row][agent_col] = 5
         new_obs["local_view"] = local_view.flatten() if flatten else local_view
 
-        return new_obs
+        return {new_obs}
 
     def separate_neighbours_by_type(self, neighbours):
         neighbour_dict = {}

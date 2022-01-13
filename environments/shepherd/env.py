@@ -12,7 +12,7 @@ class ShepherdEnv(MultiAgentEnv):
         num_sheep = config.get('num_sheep',50)
         self.num_dogs = num_dogs
         self.num_sheep = num_sheep
-        self.render = True
+        self.render = False
         self.save_frames = False
         self.game = ShepherdGame(self.num_dogs, self.num_sheep, render=self.render, save_frames=self.save_frames)
         self.observer = ShepherdObserver(self.game)
@@ -20,10 +20,12 @@ class ShepherdEnv(MultiAgentEnv):
     def reset(self):
         self.game = ShepherdGame(self.num_dogs, self.num_sheep, render=self.render, save_frames=self.save_frames)
         self.observer = ShepherdObserver(self.game)
+        return self.observation_space.sample()
 
     def run(self):
+        fake_action_dict = {i: i for i in range(self.num_dogs)}
         while True:
-            observations, reward, done, explanations = self.step({})
+            observations, reward, done, explanations = self.step(fake_action_dict)
             if done:
                 exit(999)
 
@@ -40,8 +42,7 @@ class ShepherdEnv(MultiAgentEnv):
         return gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
 
     def step(self, action_dict):
-        fake_action_dict = {i: i for i in range(self.num_dogs)}
-        self.game.step(fake_action_dict)
+        self.game.step(action_dict)
         observations, reward, done = self.observer.update()
         explanations = {}
         for agent in self.game.dogs:
@@ -53,5 +54,5 @@ if __name__ == '__main__':
         'num_dogs': 10,
         'num_sheep': 50,
     })
-    # print(env.observation_space.sample())
+    print(env.observation_space.sample())
     env.run()
