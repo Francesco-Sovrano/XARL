@@ -27,6 +27,7 @@ class ShepherdEnv(MultiAgentEnv):
         return self.observer.update()[0]
 
     def run(self):
+        self.reset()
         fake_action_dict = {i: i for i in range(self.num_dogs)}
         while True:
             observations, reward, done, explanations = self.step(fake_action_dict)

@@ -61,8 +61,13 @@ class ShepherdObserver:
     def prepare_obs_for_env(self, obs):
         flatten = False
         new_obs = {}
-        new_obs["agent_pos"] = obs["agent_pos"]
-        new_obs["pen_pos"] = obs["pen_pos"]
+        def normalise_pos(pos, max_dim):
+            x, y = pos
+            x /= max_dim
+            y /= max_dim
+            return np.array([x, y])
+        new_obs["agent_pos"] = normalise_pos(obs["agent_pos"], self.game.map_side)
+        new_obs["pen_pos"] = normalise_pos(obs["pen_pos"], self.game.map_side)
 
         # Preparing local view
         r = int(self.game.dog_sense_radius)
