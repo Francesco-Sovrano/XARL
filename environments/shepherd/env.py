@@ -21,8 +21,8 @@ class ShepherdEnv(MultiAgentEnv):
         self.game = ShepherdGame(self.num_dogs, self.num_sheep, render=self.render, save_frames=self.save_frames)
         self.observer = ShepherdObserver(self.game)
         return {
-            agent: self.observation_space.sample() 
-            for agent in self.game.dogs
+            i: self.observation_space.sample() 
+            for i in range(self.num_dogs)
         }
 
     def run(self):
@@ -48,8 +48,8 @@ class ShepherdEnv(MultiAgentEnv):
         self.game.step(action_dict)
         observations, reward, done = self.observer.update()
         explanations = {}
-        for agent in self.game.dogs:
-            explanations[agent] = self.observer.explain(agent)
+        for i in range(self.num_dogs):
+            explanations[i] = self.observer.explain(i)
         return observations, reward, done, explanations
 
 if __name__ == '__main__':

@@ -18,15 +18,15 @@ class ShepherdObserver:
 
         self.coordinate_space = np.linspace(0, self.game.map_side-1, self.game.map_side, dtype=np.float32)
 
-        for agent in self.game.dogs:
-            self.observation_buffer[agent] = deque(maxlen=self.buffer_size)
+        for i,agent in enumerate(self.game.dogs):
+            self.observation_buffer[i] = deque(maxlen=self.buffer_size)
 
     def update(self):
         saved, lost = self.game.count_sheep(count_and_remove=False)
         reward = saved - lost
         sheep_remaining = self.game.num_sheep - saved - lost
 
-        for agent in self.game.dogs:
+        for i,agent in enumerate(self.game.dogs):
             obs = {"agent_pos": np.copy(agent.pos), "pen_pos": np.copy(self.game.sheep_pen.pos), "saved": saved, "lost": lost}
 
             # Get neighbours.
@@ -42,8 +42,8 @@ class ShepherdObserver:
                 neighbour_data.append(neighbour_dict)
 
             obs["neighbours"] = neighbour_data
-            self.observation_buffer[agent].append(obs)
-            self.processed_observations[agent] = self.prepare_obs_for_env(obs)
+            self.observation_buffer[i].append(obs)
+            self.processed_observations[i] = self.prepare_obs_for_env(obs)
 
         done = (not sheep_remaining) or self.game.frame_count >= self.timeout
 
@@ -90,7 +90,7 @@ class ShepherdObserver:
         local_view[agent_row][agent_col] = 5
         new_obs["local_view"] = local_view.flatten() if flatten else local_view
 
-        return {new_obs}
+        return new_obs
 
     def separate_neighbours_by_type(self, neighbours):
         neighbour_dict = {}
@@ -101,8 +101,8 @@ class ShepherdObserver:
                 neighbour_dict[neighbour["type"]] = [neighbour]
         return neighbour_dict
 
-    def explain(self, agent):
-        obs_buffer = self.observation_buffer[agent]
+    def explain(self, agent_id):
+        obs_buffer = self.observation_buffer[agent_id]
 
         if len(obs_buffer) < 2:
             return []
