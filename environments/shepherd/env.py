@@ -20,10 +20,11 @@ class ShepherdEnv(MultiAgentEnv):
     def reset(self):
         self.game = ShepherdGame(self.num_dogs, self.num_sheep, render=self.render, save_frames=self.save_frames)
         self.observer = ShepherdObserver(self.game)
-        return {
-            i: self.observation_space.sample() 
-            for i in range(self.num_dogs)
-        }
+        # return {
+        #     i: self.observation_space.sample() 
+        #     for i in range(self.num_dogs)
+        # }
+        return self.observer.update()[0]
 
     def run(self):
         fake_action_dict = {i: i for i in range(self.num_dogs)}

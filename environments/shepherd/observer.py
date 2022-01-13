@@ -47,7 +47,16 @@ class ShepherdObserver:
 
         done = (not sheep_remaining) or self.game.frame_count >= self.timeout
 
-        return self.processed_observations, reward, done
+        multi_agent_reward = {
+            i: reward 
+            for i in range(self.game.num_dogs)
+        }
+        multi_agent_done = {
+            i: done 
+            for i in range(self.game.num_dogs)
+        }
+        multi_agent_done['__all__'] = done
+        return self.processed_observations, multi_agent_reward, multi_agent_done
 
     def prepare_obs_for_env(self, obs):
         flatten = False
