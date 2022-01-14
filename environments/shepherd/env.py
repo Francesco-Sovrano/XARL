@@ -1,7 +1,6 @@
 from ray.rllib.env.multi_agent_env import MultiAgentEnv, make_multi_agent
 import gym
 import numpy as np
-
 from environments.shepherd.game import ShepherdGame
 from environments.shepherd.observer import ShepherdObserver
 
@@ -28,17 +27,20 @@ class ShepherdEnv(MultiAgentEnv):
 
     def run(self):
         self.reset()
-        fake_action_dict = {i: i for i in range(self.num_dogs)}
+        fake_action_dict = {i: (1.0, 1.0) for i in range(self.num_dogs)}
         while True:
             observations, reward, done, explanations = self.step(fake_action_dict)
+            for k in observations.keys():
+                if observations[k]['local_view'].shape != (61, 61):
+                    print("Wrong shape")
             if done:
                 exit(999)
 
     @property
     def observation_space(self) -> gym.spaces.Space:
         return gym.spaces.Dict({
-            'agent_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32),
-            'pen_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32),
+            'agent_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float64),
+            'pen_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float64),
             'local_view': gym.spaces.Box(low=0, high=5, shape=(61,61), dtype=np.int8), #TODO: Send to CNN
         })
 
@@ -49,15 +51,18 @@ class ShepherdEnv(MultiAgentEnv):
     def step(self, action_dict):
         self.game.step(action_dict)
         observations, reward, done = self.observer.update()
-        explanations = {}
-        for i in range(self.num_dogs):
-            explanations[i] = self.observer.explain(i)
-        return observations, reward, done, explanations
+        info = {
+            k: {
+                'explanation': self.observer.explain(k)
+            }
+            for k in observations.keys()
+        }
+        return observations, reward, done, info
 
 if __name__ == '__main__':
     env = ShepherdEnv({
         'num_dogs': 10,
         'num_sheep': 50,
     })
-    print(env.observation_space.sample())
+    # print(env.observation_space.sample())
     env.run()

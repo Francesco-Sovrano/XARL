@@ -87,7 +87,7 @@ class ShepherdObserver:
             row_min = 0
             row_max += abs(row-r)
             agent_row -= abs(row-r)
-        elif row + r > global_dim:
+        elif row + r >= global_dim:
             row_min -= abs(row+r-global_dim)+1
             row_max = global_dim
             agent_row += abs(row+r-global_dim)+1
@@ -95,7 +95,7 @@ class ShepherdObserver:
             col_min = 0
             col_max += abs(col-r)
             agent_col -= abs(col-r)
-        elif col + r > global_dim:
+        elif col + r >= global_dim:
             col_min -= abs(col+r-global_dim)+1
             col_max = global_dim
             agent_col += abs(col+r-global_dim)+1
