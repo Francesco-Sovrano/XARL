@@ -105,3 +105,36 @@ class long_HW(HW):
 		batch_type = explanation_iter[0][-2]
 		explanation_iter = map(lambda x:x[-1], explanation_iter)
 		return ((episode_type, batch_type, sorted(explanation_iter)),)
+
+# class ClusterManager():
+
+# 	def __init__(self, cluster_typeset, cluster_generator_args):
+# 		self.cluster_label_generator_list = [
+# 			eval(f'{cluster_type}(**cluster_generator_args)')
+# 			for cluster_type in cluster_typeset
+# 		]
+		
+# 	def get_episode_type(self, episode):
+# 		return tuple(
+# 			gen.get_episode_type(episode) 
+# 			for gen in self.cluster_label_generator_list
+# 		)
+			
+# 	def get_batch_type(self, batch, episode_type='none'):
+# 		cluster_type_list = [
+# 			gen.get_batch_type(batch)
+# 			for gen in self.cluster_label_generator_list
+# 		]
+# 		# merge episode type with batch type
+# 		batch_type_iter = (
+# 			(episode_type,) + t
+# 			for t in cluster_type_list[0]
+# 		)
+# 		# combine batch types
+# 		for cluster_type in cluster_type_list[1:]:
+# 			batch_type_iter = (
+# 				l + r
+# 				for l in batch_type_iter
+# 				for r in cluster_type
+# 			)
+# 		return tuple(batch_type_iter)

@@ -394,7 +394,11 @@ class PseudoPrioritizedBuffer(Buffer):
 
 	def get_transition_probability(self, priority, type_=None, norm_fn=None):
 		if norm_fn is None:
-			norm_fn = (lambda p,n: p) if self._priority_lower_limit is not None else (lambda x,n: self.normalise_priority(x, self.__historical_min_priority, n=n))
+			if self._priority_lower_limit is not None:
+				norm_fn = (lambda p,n: p)
+			else:
+				if priority < self.__historical_min_priority: self.__historical_min_priority = priority
+				norm_fn = (lambda x,n: self.normalise_priority(x, self.__historical_min_priority, n=n))
 		if type_ is None:
 			return norm_fn(priority, 1) / norm_fn(self.__tot_priority, self.__tot_elements)
 		p_cluster = self.__cluster_priority_list[type_] / self.__tot_cluster_priority # clusters priorities are already > 0
