@@ -92,7 +92,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		self.batches.append([])
 		new_sample_priority_tree = SumSegmentTree(
 			self._it_capacity, 
-			with_min_tree=self._prioritization_importance_beta or self._cluster_prioritisation_strategy is not None or self._priority_can_be_negative or (self._prioritized_drop_probability > 0 and not self._global_distribution_matching), 
+			with_min_tree=self._prioritization_importance_beta or (self._cluster_prioritisation_strategy is not None) or self._priority_can_be_negative or (self._prioritized_drop_probability > 0 and not self._global_distribution_matching), 
 			with_max_tree=self._priority_can_be_negative, 
 		)
 		self._sample_priority_tree.append(new_sample_priority_tree)
