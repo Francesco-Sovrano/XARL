@@ -123,8 +123,8 @@ class PseudoPrioritizedBuffer(Buffer):
 		self.max_cluster_size = new_max_cluster_size
 	
 	def normalize_priority(self, priority): # O(1)
-		if np.absolute(priority) < self._prioritization_epsilon:
-			priority = 0
+		# if np.absolute(priority) < self._prioritization_epsilon:
+		# 	priority = 0
 		# always add self._prioritization_epsilon so that there is no priority equal to the neutral value of a SumSegmentTree
 		return (-1 if priority < 0 else 1)*(np.absolute(priority) + self._prioritization_epsilon)**self._prioritization_alpha
 
