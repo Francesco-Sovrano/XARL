@@ -39,12 +39,12 @@ CONFIG.update({
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
-	"rollout_fragment_length": 2**2, # Number of transitions per batch in the experience buffer. Default is 50 for APPO.
+	"rollout_fragment_length": 2**3, # Number of transitions per batch in the experience buffer. Default is 50 for APPO.
 	"train_batch_size": 2**7, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
 	"replay_proportion": 4, # Set a p>0 to enable experience replay. Saved samples will be replayed with a p:1 proportion to new data samples.
 	"replay_buffer_num_slots": 2**9, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).	
 	###################################
-	"gae_with_vtrace": True, # Useful when default "vtrace" is not active. Formula for computing the advantages: it combines GAE with V-Trace.
+	"gae_with_vtrace": False, # Useful when default "vtrace" is not active. Formula for computing the advantages: it combines GAE with V-Trace.
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
 	"update_advantages_when_replaying": True, # Whether to recompute advantages when updating priorities.
 	# "learning_starts": 2**12, # How many steps of the model to sample before learning starts. Every batch has size 'rollout_fragment_length' (default is 50).
@@ -80,8 +80,8 @@ CONFIG.update({
 	"collect_cluster_metrics": False, # Whether to collect metrics about the experience clusters. It consumes more resources.
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 	"centralised_buffer": True, # for MARL
-	'batch_mode': 'complete_episodes',
-	'vtrace': False,
+	# 'batch_mode': 'complete_episodes',
+	'vtrace': True,
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 # framework = CONFIG.get("framework","tf")

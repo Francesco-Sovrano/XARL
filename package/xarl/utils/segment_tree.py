@@ -201,6 +201,7 @@ class SumSegmentTree(SegmentTree):
 			min_p = self.min_tree.min()[0] # O(log)
 			scaled_prefix = min_p < 0
 		else:
+			min_p = 0
 			scaled_prefix = False
 		mass = self.sum() # O(log)
 		if scaled_prefix: # Use it in case of negative elements in the sumtree, they would break the tree invariant
@@ -210,7 +211,7 @@ class SumSegmentTree(SegmentTree):
 		prefixsum = prefixsum_fn(mass)
 		# prefixsum = np.clip(prefixsum, 0, mass)
 		# print(prefixsum,mass)
-		assert 0 <= prefixsum <= mass + 1e-5
+		assert 0 <= prefixsum <= mass + 1e-5, f"prefixsum is {prefixsum} and mass is {mass} for {self.inserted_elements} inserted elements with minimum priority equal to {min_p}, but prefixsum must be: 0 <= prefixsum <= mass + 1e-5"
 		idx = 1
 		# While non-leaf (first half of tree).
 		while idx < self._capacity:
