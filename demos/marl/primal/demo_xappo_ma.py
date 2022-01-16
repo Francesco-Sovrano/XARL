@@ -45,12 +45,12 @@ CONFIG.update({
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
-	"rollout_fragment_length": 2**2, # Number of transitions per batch in the experience buffer. Default is 50 for APPO.
+	"rollout_fragment_length": 2**3, # Number of transitions per batch in the experience buffer. Default is 50 for APPO.
 	"train_batch_size": 2**7, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
 	"replay_proportion": 4, # Set a p>0 to enable experience replay. Saved samples will be replayed with a p:1 proportion to new data samples.
 	"replay_buffer_num_slots": 2**9, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).	
 	###################################
-	"gae_with_vtrace": True, # Useful when default "vtrace" is not active. Formula for computing the advantages: it combines GAE with V-Trace.
+	"gae_with_vtrace": False, # Useful when default "vtrace" is not active. Formula for computing the advantages: it combines GAE with V-Trace.
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
 	"update_advantages_when_replaying": True, # Whether to recompute advantages when updating priorities.
 	# "learning_starts": 2**12, # How many steps of the model to sample before learning starts. Every batch has size 'rollout_fragment_length' (default is 50).
@@ -74,20 +74,27 @@ CONFIG.update({
 		# 'clip_cluster_priority_by_max_capacity': False, # Whether to clip the clusters priority so that the 'cluster_prioritisation_strategy' will not consider more elements than the maximum cluster capacity.
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
-	"clustering_scheme": "HW", # Which scheme to use for building clusters. One of the following: "none", "positive_H", "H", "HW", "long_HW", "W", "long_W".
+	"clustering_scheme": ['Who','How_Well','Why','Where','What','How_Many'], # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
 	"clustering_scheme_options": {
+		"n_clusters": {
+			"who": 4,
+			# "why": 8,
+			# "what": 8,
+		},
+		"default_n_clusters": 8,
+		"agent_action_sliding_window": 2**4,
 		"episode_window_size": 2**6, 
 		"batch_window_size": 2**8, 
-		"n_clusters": 8,
+		"training_step_window_size": 2**2,
 	},
 	"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
-	"cluster_with_episode_type": True, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
+	"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
 	"cluster_overview_size": 1, # cluster_overview_size <= train_batch_size. If None, then cluster_overview_size is automatically set to train_batch_size. -- When building a single train batch, do not sample a new cluster before x batches are sampled from it. The closer cluster_overview_size is to train_batch_size, the faster is the batch sampling procedure.
 	"collect_cluster_metrics": False, # Whether to collect metrics about the experience clusters. It consumes more resources.
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 	"centralised_buffer": True, # for MARL
-	'batch_mode': 'complete_episodes',
-	'vtrace': False,
+	# 'batch_mode': 'complete_episodes',
+	'vtrace': True,
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 # framework = CONFIG.get("framework","tf")

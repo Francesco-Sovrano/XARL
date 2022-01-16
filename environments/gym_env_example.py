@@ -55,42 +55,42 @@ class Example_v0(gym.Env):
 				if self.position == self.LF_MIN:
 					# invalid
 					self.reward = self.REWARD_AWAY
-					self.info['explanation'] = 'REWARD_AWAY'
+					self.info['explanation'] = {'why':'REWARD_AWAY'}
 				else:
 					self.position -= 1
 				if self.position == self.goal:
 					# on goal now
 					self.reward = self.REWARD_GOAL
-					self.info['explanation'] = 'REWARD_GOAL'
+					self.info['explanation'] = {'why':'REWARD_GOAL'}
 					self.done = 1
 				elif self.position < self.goal:
 					# moving away from goal
 					self.reward = self.REWARD_AWAY
-					self.info['explanation'] = 'REWARD_AWAY'
+					self.info['explanation'] = {'why':'REWARD_AWAY'}
 				else:
 					# moving toward goal
 					self.reward = self.REWARD_STEP
-					self.info['explanation'] = 'REWARD_STEP'
+					self.info['explanation'] = {'why':'REWARD_STEP'}
 			elif action == self.MOVE_RT:
 				if self.position == self.RT_MAX:
 					# invalid
 					self.reward = self.REWARD_AWAY
-					self.info['explanation'] = 'REWARD_AWAY'
+					self.info['explanation'] = {'why':'REWARD_AWAY'}
 				else:
 					self.position += 1
 				if self.position == self.goal:
 					# on goal now
 					self.reward = self.REWARD_GOAL
-					self.info['explanation'] = 'REWARD_GOAL'
+					self.info['explanation'] = {'why':'REWARD_GOAL'}
 					self.done = 1
 				elif self.position > self.goal:
 					# moving away from goal
 					self.reward = self.REWARD_AWAY
-					self.info['explanation'] = 'REWARD_AWAY'
+					self.info['explanation'] = {'why':'REWARD_AWAY'}
 				else:
 					# moving toward goal
 					self.reward = self.REWARD_STEP
-					self.info['explanation'] = 'REWARD_STEP'
+					self.info['explanation'] = {'why':'REWARD_STEP'}
 			self.state = self.position
 			self.info["dist"] = self.goal - self.position
 		try:

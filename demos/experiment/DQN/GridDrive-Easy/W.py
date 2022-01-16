@@ -73,7 +73,7 @@ CONFIG.update({
 		# 'clip_cluster_priority_by_max_capacity': False, # Whether to clip the clusters priority so that the 'cluster_prioritisation_strategy' will not consider more elements than the maximum cluster capacity.
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
-	"clustering_scheme": "W", # Which scheme to use for building clusters. One of the following: "none", "positive_H", "H", "HW", "long_HW", "W", "long_W".
+	"clustering_scheme": ['Why'], # Which scheme to use for building clusters. Set it to None or to a list of the following: "How_OnZero", "How", "Why", "Why_Verbose"
 	"clustering_scheme_options": {
 		"episode_window_size": 2**6, 
 		"batch_window_size": 2**8, 

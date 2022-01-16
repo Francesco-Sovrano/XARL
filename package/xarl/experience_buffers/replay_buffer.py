@@ -223,6 +223,9 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		for replay_buffer in self.replay_buffers.values():
 			replay_buffer.increase_steps(t)
 
+	def get_train_steps(self):
+		return max((replay_buffer.timesteps for replay_buffer in self.replay_buffers.values())) if self.replay_buffers else 0
+
 	def update_priorities(self, prio_dict):
 		if not self.prioritized_replay:
 			return

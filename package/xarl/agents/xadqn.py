@@ -49,11 +49,18 @@ XADQN_EXTRA_OPTIONS = {
 		# 'clip_cluster_priority_by_max_capacity': False, # Default is False. Whether to clip the clusters priority so that the 'cluster_prioritisation_strategy' will not consider more elements than the maximum cluster capacity. In fact, until al the clusters have reached the minimum size, some clusters may have more elements than the maximum size, to avoid shrinking the buffer capacity with clusters having not enough transitions (i.e. 1 transition).
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
-	"clustering_scheme": "HW", # Which scheme to use for building clusters. One of the following: "none", "positive_H", "H", "HW", "long_HW", "W", "long_W".
+	"clustering_scheme": ['Who','How_Well','Why','Where','What','How_Many'], # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
 	"clustering_scheme_options": {
+		"n_clusters": {
+			"who": 4,
+			# "why": 8,
+			# "what": 8,
+		},
+		"default_n_clusters": 8,
+		"agent_action_sliding_window": 2**4,
 		"episode_window_size": 2**6, 
 		"batch_window_size": 2**8, 
-		"n_clusters": 8,
+		"training_step_window_size": 2**2,
 	},
 	"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
 	"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
@@ -120,7 +127,7 @@ def xadqn_execution_plan(workers, config):
 	# next() on store_op drives this.
 	store_fn = StoreToReplayBuffer(local_buffer=local_replay_buffer)
 	def store_batch(batch):
-		for rollout_fragment in assign_types(batch, clustering_scheme, replay_sequence_length, with_episode_type=config["cluster_with_episode_type"]):
+		for rollout_fragment in assign_types(batch, clustering_scheme, replay_sequence_length, with_episode_type=config["cluster_with_episode_type"], training_step=local_replay_buffer.get_train_steps()):
 			store_fn(rollout_fragment)
 		return batch
 	store_op = rollouts.for_each(store_batch)

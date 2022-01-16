@@ -123,12 +123,16 @@ class ShepherdObserver:
         prev_obs = obs_buffer[-2]
         curr_obs = obs_buffer[-1]
 
-        explanations = []
+        explanations_dict = {}
         for explanation_type, explanation_list in Explanation.explainers.items():
+            explanation_type = explanation_type.lower()
             for explainer in explanation_list:
                 if explainer(self, prev_obs, curr_obs):
-                    explanations.append(explanation_type + ':' + explainer.__name__)
-        return explanations
+                    explanations = explanations_dict.get(explanation_type,None)
+                    if explanations is None:
+                        explanations = explanations_dict[explanation_type] = []
+                    explanations.append(explainer.__name__)
+        return explanations_dict
 
     def herded_sheep(self, obs):
         neighbours = self.separate_neighbours_by_type(obs["neighbours"])

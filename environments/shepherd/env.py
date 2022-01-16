@@ -52,9 +52,7 @@ class ShepherdEnv(MultiAgentEnv):
         self.game.step(action_dict)
         observations, reward, done = self.observer.update()
         info = {
-            k: {
-                'explanation': self.observer.explain(k)
-            }
+            k: {'explanation': self.observer.explain(k)}
             for k in observations.keys()
         }
         return observations, reward, done, info

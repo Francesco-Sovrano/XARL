@@ -36,7 +36,7 @@ class SpecialAtariEnv(AtariEnv):
 		new_ram = self._get_ram()
 		new_lives = self.ale.lives()
 
-		info_dict['explanation'] = self.explanation_fn(reward, terminal, new_ram, old_ram, new_lives, old_lives)
+		info_dict['explanation'] = {'why':self.explanation_fn(reward, terminal, new_ram, old_ram, new_lives, old_lives)}
 
 		self.lives = new_lives
 		# print(reward, terminal, delta)

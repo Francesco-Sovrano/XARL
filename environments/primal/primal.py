@@ -75,7 +75,7 @@ class Primal(MultiAgentEnv):
 		}
 		info = {
 			k: {
-				'explanation': 'change_me_pls'
+				'explanation': {'why':'change_me_pls'}
 			} 
 			for k in obs.keys()
 		}

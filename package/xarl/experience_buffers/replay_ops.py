@@ -16,10 +16,8 @@ from xarl.experience_buffers.clustering_scheme import *
 def get_clustered_replay_buffer(config):
 	assert config["batch_mode"] == "complete_episodes" or not config["cluster_with_episode_type"], f"This algorithm requires 'complete_episodes' as batch_mode when 'cluster_with_episode_type' is True"
 	clustering_scheme_type = config.get("clustering_scheme", None)
-	if not clustering_scheme_type:
-		clustering_scheme_type = 'none'
 	# no need for unclustered_buffer if clustering_scheme_type is none
-	ratio_of_samples_from_unclustered_buffer = config["ratio_of_samples_from_unclustered_buffer"] if clustering_scheme_type != 'none' else 0
+	ratio_of_samples_from_unclustered_buffer = config["ratio_of_samples_from_unclustered_buffer"] if clustering_scheme_type else 0
 	local_replay_buffer = LocalReplayBuffer(
 		prioritized_replay=config["prioritized_replay"],
 		buffer_options=config["buffer_options"], 
@@ -29,10 +27,10 @@ def get_clustered_replay_buffer(config):
 		ratio_of_samples_from_unclustered_buffer=ratio_of_samples_from_unclustered_buffer,
 		centralised_buffer=config["centralised_buffer"]
 	)
-	clustering_scheme = eval(clustering_scheme_type)(**config["clustering_scheme_options"])
+	clustering_scheme = ClusterManager(clustering_scheme_type, config["clustering_scheme_options"])
 	return local_replay_buffer, clustering_scheme
 
-def assign_types(batch, clustering_scheme, batch_fragment_length, with_episode_type=True):
+def assign_types(batch, clustering_scheme, batch_fragment_length, with_episode_type=True, training_step=None):
 	if isinstance(batch, SampleBatch):
 		multi_batch = MultiAgentBatch({DEFAULT_POLICY_ID: batch}, batch.count)
 	else:
@@ -46,13 +44,13 @@ def assign_types(batch, clustering_scheme, batch_fragment_length, with_episode_t
 			for episode in batch.split_by_episode():
 				sub_batch_list = episode.timeslices(batch_fragment_length) if episode.count > batch_fragment_length else [episode]
 				episode_type = clustering_scheme.get_episode_type(sub_batch_list)
-				for sub_batch in sub_batch_list:
-					get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(sub_batch, episode_type)
+				for i,sub_batch in enumerate(sub_batch_list):
+					get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(sub_batch, episode_type=episode_type, training_step=training_step, episode_step=i, agent_id=pid)
 				batch_dict[pid] += sub_batch_list
 		else:
 			sub_batch_list = batch.timeslices(batch_fragment_length) if batch.count > batch_fragment_length else [batch]
-			for sub_batch in sub_batch_list:
-				get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(sub_batch)
+			for i,sub_batch in enumerate(sub_batch_list):
+				get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(sub_batch, training_step=training_step, episode_step=i, agent_id=pid)
 			batch_dict[pid] += sub_batch_list
 	batch_list = [
 		MultiAgentBatch({

@@ -281,7 +281,7 @@ class CescoDriveV0(gym.Env):
 		completed_track = self.is_terminal_position(car_position)
 		out_of_time = self._step >= self.max_step
 		terminal = dead or completed_track or out_of_time
-		info_dict = {'explanation':reward_type}
+		info_dict = {'explanation':{'why':reward_type}}
 		if terminal: # populate statistics
 			self.is_over = True
 			stats = {

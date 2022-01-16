@@ -333,7 +333,7 @@ class GraphDrive(gym.Env):
 		self._step += 1
 		out_of_time = self._step >= self.max_step
 		terminal = dead or out_of_time
-		info_dict = {'explanation':reward_type}
+		info_dict = {'explanation':{'why':reward_type}}
 		if terminal: # populate statistics
 			self.is_over = True
 			info_dict["stats_dict"] = {
