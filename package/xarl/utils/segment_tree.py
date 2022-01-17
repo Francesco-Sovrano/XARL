@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 def is_tuple(val):
 	return type(val) in [list,tuple]
@@ -205,7 +206,9 @@ class SumSegmentTree(SegmentTree):
 			scaled_prefix = False
 		mass = self.sum() # O(log)
 		if scaled_prefix: # Use it in case of negative elements in the sumtree, they would break the tree invariant
-			mass -= min_p*self.inserted_elements # scale mass by min priority
+			mass -= min_p*self.inserted_elements # Scale mass by min priority
+			if mass <= 0: # This may happen due to numerical errors, when all elements have approx. the same (negative) value
+				return random.randrange(0,self.inserted_elements) # Return any element randomly, they all have the same priority.
 			minimum = min(self._neutral_element, min_p)
 			summed_elements = self._capacity
 		prefixsum = prefixsum_fn(mass)
@@ -261,14 +264,28 @@ class MaxSegmentTree(SegmentTree):
 		"""Returns min(arr[start], ...,  arr[end])"""
 		return super(MaxSegmentTree, self).reduce(start, end)
 
-# from random import random
-# test = SumSegmentTree(4)
-# test[2] = -10
-# test[3] = -5
-# test[0] = 1
-# test[1] = 2
-# print('unscaled', test.sum())
-# print('scaled', test.sum()-test.min_tree.min()[0]*test.inserted_elements)
-# i = test.find_prefixsum_idx(lambda x:23)
-# print(i,test[i] )
+if __name__ == "__main__":
+	print('Test 1')
+	test = SumSegmentTree(4)
+	test[2] = -10.0001
+	test[3] = -10.0001
+	test[0] = -10.0001
+	test[1] = -10.0001
+	print('unscaled', test.sum())
+	print('scaled', test.sum()-test.min_tree.min()[0]*test.inserted_elements)
+	i = test.find_prefixsum_idx(lambda x:x*random.random())
+	print(i,test[i] )
+
+	print('Test 2')
+	test = SumSegmentTree(4)
+	test[2] = -10
+	test[3] = -5
+	test[0] = 1
+	test[1] = 2
+	print('unscaled', test.sum())
+	print('scaled', test.sum()-test.min_tree.min()[0]*test.inserted_elements)
+	i = test.find_prefixsum_idx(lambda x:23)
+	print(i,test[i] )
+
+
 
