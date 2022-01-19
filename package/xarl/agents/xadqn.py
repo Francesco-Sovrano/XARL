@@ -15,6 +15,7 @@ from ray.rllib.execution.rollout_ops import ParallelRollouts, ConcatBatches
 from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch, DEFAULT_POLICY_ID
 from ray.rllib.policy.view_requirement import ViewRequirement
 from ray.rllib.execution.train_ops import TrainOneStep, UpdateTargetNetwork, TrainTFMultiGPU
+from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
 
 from xarl.experience_buffers.replay_ops import StoreToReplayBuffer, Replay, get_clustered_replay_buffer, assign_types, add_buffer_metrics, clean_batch
 from xarl.experience_buffers.replay_buffer import get_batch_infos, get_batch_uid
@@ -68,6 +69,7 @@ XADQN_EXTRA_OPTIONS = {
 	"collect_cluster_metrics": False, # Whether to collect metrics about the experience clusters. It consumes more resources.
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 	"centralised_buffer": True, # for MARL
+	"replay_integral_multi_agent_batches": False, # for MARL, set this to True for MADDPG and QMIX
 }
 # The combination of update_insertion_time_when_sampling==True and prioritized_drop_probability==0 helps mantaining in the buffer only those batches with the most up-to-date priorities.
 XADQN_DEFAULT_CONFIG = DQNTrainer.merge_trainer_configs(
@@ -84,10 +86,10 @@ def xa_postprocess_nstep_and_prio(policy, batch, other_agent=None, episode=None)
 	# N-step Q adjustments.
 	if policy.config["n_step"] > 1:
 		_adjust_nstep(policy.config["n_step"], policy.config["gamma"], batch[SampleBatch.CUR_OBS], batch[SampleBatch.ACTIONS], batch[SampleBatch.REWARDS], batch[SampleBatch.NEXT_OBS], batch[SampleBatch.DONES])
-	if 'weights' not in batch:
-		batch['weights'] = np.ones_like(batch[SampleBatch.REWARDS])
+	if PRIO_WEIGHTS not in batch:
+		batch[PRIO_WEIGHTS] = np.ones_like(batch[SampleBatch.REWARDS])
 	if policy.config["buffer_options"]["priority_id"] == "td_errors":
-		batch["td_errors"] = policy.compute_td_error(batch[SampleBatch.CUR_OBS], batch[SampleBatch.ACTIONS], batch[SampleBatch.REWARDS], batch[SampleBatch.NEXT_OBS], batch[SampleBatch.DONES], batch['weights'])
+		batch["td_errors"] = policy.compute_td_error(batch[SampleBatch.CUR_OBS], batch[SampleBatch.ACTIONS], batch[SampleBatch.REWARDS], batch[SampleBatch.NEXT_OBS], batch[SampleBatch.DONES], batch[PRIO_WEIGHTS])
 	return batch
 
 XADQNTFPolicy = DQNTFPolicy.with_updates(
@@ -103,7 +105,7 @@ XADQNTorchPolicy = DQNTorchPolicy.with_updates(
 # XADQN's Execution Plan
 ########################
 
-def xadqn_execution_plan(workers, config):
+def xadqn_execution_plan(workers, config, multiagent=False):
 	random.seed(config["seed"])
 	np.random.seed(config["seed"])
 	replay_batch_size = config["train_batch_size"]
@@ -118,6 +120,7 @@ def xadqn_execution_plan(workers, config):
 			policy.view_requirements[SampleBatch.INFOS] = ViewRequirement(SampleBatch.INFOS, shift=0)
 			if policy.config["buffer_options"]["priority_id"] == "td_errors":
 				policy.view_requirements["td_errors"] = ViewRequirement("td_errors", shift=0)
+			# policy.view_requirements[PRIO_WEIGHTS] = ViewRequirement(PRIO_WEIGHTS, shift=0)
 	workers.foreach_worker(add_view_requirements)
 
 	rollouts = ParallelRollouts(workers, mode="bulk_sync")
@@ -182,13 +185,18 @@ def xadqn_execution_plan(workers, config):
 			shuffle_sequences=True,
 			_fake_gpus=config["_fake_gpus"],
 			framework=config.get("framework"))
+	concat_batch_dict = {
+		'min_batch_size': replay_batch_size
+	}
+	if multiagent:
+		concat_batch_dict['count_steps_by'] = config["multiagent"]["count_steps_by"]
 	replay_op = Replay(
 			local_buffer=local_replay_buffer, 
 			replay_batch_size=replay_batch_size, 
 			cluster_overview_size=config["cluster_overview_size"]
 		) \
 		.flatten() \
-		.combine(ConcatBatches(min_batch_size=replay_batch_size)) \
+		.combine(ConcatBatches(**concat_batch_dict)) \
 		.for_each(lambda x: post_fn(x, workers, config)) \
 		.for_each(train_step_op) \
 		.for_each(update_priorities) \

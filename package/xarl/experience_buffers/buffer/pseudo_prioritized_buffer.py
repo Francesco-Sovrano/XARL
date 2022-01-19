@@ -8,10 +8,12 @@ from xarl.utils.segment_tree import SumSegmentTree, MinSegmentTree, MaxSegmentTr
 import copy
 import uuid
 from xarl.utils.running_statistics import RunningStats
+from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
+from ray.rllib.policy.sample_batch import SampleBatch
 
 logger = logging.getLogger(__name__)
 
-get_batch_infos = lambda x: x["infos"][0]
+get_batch_infos = lambda x: x[SampleBatch.INFOS][0]
 get_batch_indexes = lambda x: get_batch_infos(x)['batch_index']
 get_batch_uid = lambda x: get_batch_infos(x)['batch_uid']
 
@@ -326,8 +328,9 @@ class PseudoPrioritizedBuffer(Buffer):
 			if update_prioritisation_weights: # Update weights after updating priority
 				self._cache_priorities()
 				self.update_beta_weights(batch, idx, type_)
-			elif 'weights' not in batch: # Add default weights
-				batch['weights'] = np.ones(batch.count, dtype=np.float32)
+			# elif PRIO_WEIGHTS not in batch: # Add default weights
+			elif batch[PRIO_WEIGHTS] is None: # Add default weights
+				batch[PRIO_WEIGHTS] = np.ones(batch.count, dtype=np.float32)
 		if self.global_size:
 			assert self.count() <= self.global_size, 'Memory leak in replay buffer; v1'
 			assert super().count() <= self.global_size, 'Memory leak in replay buffer; v2'
@@ -426,7 +429,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		# if self._weight_importance_by_update_time:
 		# 	weight *= self.get_age_weight(type_, idx) # batches with outdated priorities should have a lower weight, they might be just noise
 		##########
-		batch['weights'] = np.full(batch.count, weight, dtype=np.float32)
+		batch[PRIO_WEIGHTS] = np.full(batch.count, weight, dtype=np.float32)
 
 	def get_batch_priority(self, batch):
 		return self._priority_aggregation_fn(batch[self._priority_id])

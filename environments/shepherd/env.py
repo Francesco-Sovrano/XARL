@@ -30,19 +30,20 @@ class ShepherdEnv(MultiAgentEnv):
         fake_action_dict = {i: (1.0, 1.0) for i in range(self.num_dogs)}
         while True:
             observations, reward, done, explanations = self.step(fake_action_dict)
-            for k in observations.keys():
-                if observations[k]['local_view'].shape != (61, 61):
-                    print("Wrong shape")
+            # for k in observations.keys():
+            #     if observations[k]['local_view'].shape != (61, 61):
+            #         print("Wrong shape")
             if done:
                 exit(999)
 
     @property
     def observation_space(self) -> gym.spaces.Space:
-        return gym.spaces.Dict({
-            'agent_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float64),
-            'pen_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float64),
-            'local_view': gym.spaces.Box(low=0, high=5, shape=(61,61), dtype=np.int8), #TODO: Send to CNN
-        })
+        return gym.spaces.Box(low=0, high=5, shape=(61*61+2+2,), dtype=np.int8)
+        # return gym.spaces.Dict({
+        #     'agent_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float64),
+        #     'pen_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float64),
+        #     'local_view': gym.spaces.Box(low=0, high=5, shape=(61,61), dtype=np.int8), #TODO: Send to CNN
+        # })
 
     @property
     def action_space(self):

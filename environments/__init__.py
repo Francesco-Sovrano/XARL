@@ -15,12 +15,14 @@ from environments.gym_env_example import Example_v0
 register_env("ToyExample-V0", lambda config: Example_v0(config))
 
 ### Primal
-# from environments.primal.primal import Primal
-# register_env("Primal", lambda config: Primal(config))
+from environments.primal.primal import Primal
+register_env("Primal", lambda config: Primal(config))
+register_env("Primal-Group", lambda config: build_env_with_agent_groups(Primal,config))
 
-### Primal
+### Shepherd
 from environments.shepherd.env import ShepherdEnv as Shepherd
 register_env("Shepherd", lambda config: Shepherd(config))
+register_env("Shepherd-Group", lambda config: build_env_with_agent_groups(Shepherd,config))
 
 ### MinecraftEnv
 # from environments.distributed_construction.minecraft import MinecraftEnv

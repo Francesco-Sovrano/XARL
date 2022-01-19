@@ -25,13 +25,14 @@ def get_clustered_replay_buffer(config):
 		seed=config["seed"],
 		cluster_selection_policy=config["cluster_selection_policy"],
 		ratio_of_samples_from_unclustered_buffer=ratio_of_samples_from_unclustered_buffer,
-		centralised_buffer=config["centralised_buffer"]
+		centralised_buffer=config["centralised_buffer"],
+		replay_integral_multi_agent_batches=config["replay_integral_multi_agent_batches"],
 	)
 	clustering_scheme = ClusterManager(clustering_scheme_type, config["clustering_scheme_options"])
 	return local_replay_buffer, clustering_scheme
 
 def assign_types(batch, clustering_scheme, batch_fragment_length, with_episode_type=True, training_step=None):
-	if isinstance(batch, SampleBatch):
+	if not isinstance(batch, MultiAgentBatch):
 		multi_batch = MultiAgentBatch({DEFAULT_POLICY_ID: batch}, batch.count)
 	else:
 		multi_batch = batch
@@ -144,7 +145,7 @@ class MixInReplay:
 			n += 1
 		output_batches = []
 		# Put sample_batch in the experience buffer and add it to the output_batches
-		if isinstance(sample_batch, SampleBatch):
+		if not isinstance(sample_batch, MultiAgentBatch):
 			sample_batch = MultiAgentBatch({DEFAULT_POLICY_ID: sample_batch}, sample_batch.count)
 		output_batches.append(sample_batch)
 		self.replay_buffer.add_batch(sample_batch) # Set update_prioritisation_weights=True for updating importance weights

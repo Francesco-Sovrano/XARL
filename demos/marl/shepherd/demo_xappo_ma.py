@@ -5,6 +5,7 @@ import multiprocessing
 import json
 import shutil
 import ray
+from ray.tune.registry import get_trainable_cls, _global_registry, ENV_CREATOR
 import time
 from xarl.utils.workflow import train
 
@@ -99,8 +100,9 @@ CONFIG["callbacks"] = CustomEnvironmentCallbacks
 # ModelCatalog.register_custom_model("fcnet", FCNet)
 
 # Setup MARL training strategy: centralised or decentralised
-obs_space = eval(SELECT_ENV)(CONFIG["env_config"]).observation_space
-act_space = eval(SELECT_ENV)(CONFIG["env_config"]).action_space
+env = _global_registry.get(ENV_CREATOR, SELECT_ENV)(CONFIG["env_config"])
+obs_space = env.observation_space
+act_space = env.action_space
 def gen_policy():
 	return (None, obs_space, act_space, {})
 policy_graphs = {}

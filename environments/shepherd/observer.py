@@ -59,7 +59,7 @@ class ShepherdObserver:
         return self.processed_observations, multi_agent_reward, multi_agent_done
 
     def prepare_obs_for_env(self, obs):
-        flatten = False
+        flatten = True
         new_obs = {}
         def normalise_pos(pos, max_dim):
             x, y = pos
@@ -104,7 +104,8 @@ class ShepherdObserver:
         local_view[agent_row][agent_col] = 5
         new_obs["local_view"] = local_view.flatten() if flatten else local_view
 
-        return new_obs
+        # return new_obs
+        return np.concatenate([new_obs["local_view"],new_obs["agent_pos"],new_obs["pen_pos"]], -1)
 
     def separate_neighbours_by_type(self, neighbours):
         neighbour_dict = {}
