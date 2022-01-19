@@ -1,7 +1,5 @@
 import numpy as np
 import math
-import pygame
-import pygame.freetype
 import random
 import os
 from scipy.spatial import KDTree, distance
@@ -83,6 +81,8 @@ class ShepherdGame:
         self.frame_count = 0
 
         if self.render:
+            # Only load pygame if we're actually rendering things.
+            globals()["pygame"] = __import__("pygame")
             self.init_render()
 
     def add_to_game(self, particle):
