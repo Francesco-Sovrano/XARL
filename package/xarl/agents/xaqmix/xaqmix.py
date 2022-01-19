@@ -1,8 +1,9 @@
-from ray.rllib.agents.dqn.dqn import GenericOffPolicyTrainer
-from ray.rllib.agents.qmix.qmix_policy import QMixTorchPolicy
-
-from ray.rllib.agents.qmix.qmix import QMixTrainer, DEFAULT_CONFIG as QMIX_DEFAULT_CONFIG
 from xarl.agents.xadqn import xa_postprocess_nstep_and_prio, xadqn_execution_plan, XADQN_EXTRA_OPTIONS
+from ray.rllib.agents.dqn.dqn import GenericOffPolicyTrainer
+
+from ray.rllib.agents.qmix.qmix_policy import QMixTorchPolicy
+from ray.rllib.agents.qmix.qmix import QMixTrainer, DEFAULT_CONFIG as QMIX_DEFAULT_CONFIG
+
 from xarl.agents.xaqmix.xaqmix_torch_loss import xaddpg_actor_critic_loss as torch_xaddpg_actor_critic_loss
 
 XAQMIX_DEFAULT_CONFIG = QMixTrainer.merge_trainer_configs(
@@ -15,7 +16,7 @@ XAQMIX_DEFAULT_CONFIG = QMixTrainer.merge_trainer_configs(
 XAQMixTorchPolicy = QMixTorchPolicy.with_updates(
     name="XAQMixTorchPolicy",
     postprocess_fn=xa_postprocess_nstep_and_prio,
-    loss_fn=tf_xaddpg_actor_critic_loss,
+    loss_fn=torch_xaddpg_actor_critic_loss,
 )
 
 XAQMixTrainer = GenericOffPolicyTrainer.with_updates(
