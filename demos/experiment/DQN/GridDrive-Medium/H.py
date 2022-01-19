@@ -75,9 +75,16 @@ CONFIG.update({
 	},
 	"clustering_scheme": ['How_Well'], # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
 	"clustering_scheme_options": {
+		"n_clusters": {
+			"who": 4,
+			# "why": 8,
+			# "what": 8,
+		},
+		"default_n_clusters": 8,
+		"agent_action_sliding_window": 2**4,
 		"episode_window_size": 2**6, 
 		"batch_window_size": 2**8, 
-		"n_clusters": 4,
+		"training_step_window_size": 2**2,
 	},
 	"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
 	"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
