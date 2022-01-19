@@ -72,7 +72,7 @@ CONFIG.update({
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
 	"clustering_scheme": [ # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
-		# 'Who',
+		'Who',
 		'How_Well',
 		'Why',
 		# 'Where',
@@ -116,8 +116,7 @@ def gen_policy(i):
 	)
 
 policy_graphs = {}
-# if not CENTRALISED_TRAINING:
-if CENTRALISED_TRAINING:
+if not CENTRALISED_TRAINING:
 	for i in range(NUM_AGENTS):
 		policy_graphs[f'policy_{i}'] = gen_policy(i)
 	def policy_mapping_fn(agent_id):
