@@ -15,6 +15,7 @@ class ShepherdObserver:
         self.observation_buffer = {}  # {agent : obs_buffer}
         self.processed_observations = {}
         self.timeout = 2000
+        self.early_terminate = True
 
         self.coordinate_space = np.linspace(0, self.game.map_side-1, self.game.map_side, dtype=np.float32)
 
@@ -34,7 +35,8 @@ class ShepherdObserver:
             # Remove duplicates.
             if self.game.sheep_pen in neighbour_objs:
                 neighbour_objs.remove(self.game.sheep_pen)
-            neighbour_objs.remove(agent)
+            if agent in neighbour_objs:
+                neighbour_objs.remove(agent)
 
             neighbour_data = []
             for n in neighbour_objs:
@@ -46,6 +48,8 @@ class ShepherdObserver:
             self.processed_observations[i] = self.prepare_obs_for_env(obs)
 
         done = (not sheep_remaining) or self.game.frame_count >= self.timeout
+        if self.early_terminate and lost > 0:
+            done = True
 
         multi_agent_reward = {
             i: reward 
@@ -142,7 +146,7 @@ class ShepherdObserver:
         sheep = neighbours[Sheep]
         herding_sheep = []
         for s in sheep:
-            if distance.euclidean(s["pos"], obs["agent_pos"]) < self.game.sheep_sense_radius:
+            if distance.euclidean(s["pos"], obs["agent_pos"]) <= self.game.sheep_sense_radius + 1:
                 herding_sheep.append(s)
         return herding_sheep
 
@@ -177,9 +181,9 @@ class ShepherdObserver:
         that gets out of the safe zone.
         """
         # Preliminary checks to avoid extra computation.
-        agent_distance_to_centre = distance.euclidean(curr_obs["agent_pos"], self.game.map_centre)
-        if agent_distance_to_centre < (self.game.map_side / 2.0) - self.game.sheep_sense_radius:
-            return False
+        # agent_distance_to_centre = distance.euclidean(curr_obs["agent_pos"], self.game.map_centre)
+        # if agent_distance_to_centre < (self.game.map_side / 2.0) - self.game.sheep_sense_radius:
+        #     return False
         # Find sheep being herded.
         herding_sheep = self.herded_sheep(curr_obs)
         # If there's a sheep that got out of the safe zone, return True.
@@ -218,8 +222,8 @@ class ShepherdObserver:
     @Explanation('WHY')
     def someone_else_lost_sheep(self, prev_obs, curr_obs):
         """
-        This WHY explanation returns True if the agent receives a positive reward
-        but did not push any sheep into a pen.
+        This WHY explanation returns True if the agent receives a negative reward
+        but did not push any sheep outside the valid area.
         """
         return curr_obs["lost"] > 0 and not self.lost_sheep(prev_obs, curr_obs)
 

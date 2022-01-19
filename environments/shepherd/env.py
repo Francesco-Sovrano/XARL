@@ -1,3 +1,5 @@
+import random
+
 from ray.rllib.env.multi_agent_env import MultiAgentEnv, make_multi_agent
 import gym
 import numpy as np
@@ -30,10 +32,11 @@ class ShepherdEnv(MultiAgentEnv):
         fake_action_dict = {i: (1.0, 1.0) for i in range(self.num_dogs)}
         while True:
             observations, reward, done, explanations = self.step(fake_action_dict)
+            print(f"frame: {self.game.frame_count}\nexplanations: {explanations}")
             # for k in observations.keys():
             #     if observations[k]['local_view'].shape != (61, 61):
             #         print("Wrong shape")
-            if done:
+            if done['__all__']:
                 exit(999)
 
     @property
@@ -59,9 +62,13 @@ class ShepherdEnv(MultiAgentEnv):
         return observations, reward, done, info
 
 if __name__ == '__main__':
+    seed = 1
+    random.seed(seed)
     env = ShepherdEnv({
-        'num_dogs': 10,
+        'num_dogs': 3,
         'num_sheep': 50,
     })
     # print(env.observation_space.sample())
     env.run()
+
+

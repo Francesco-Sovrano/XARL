@@ -57,7 +57,7 @@ class Particle:
 
     def contains(self, other):
         """Does the circle of this Particle fully contains that of other?"""
-        return self.radius >= other.radius and np.hypot(*(self.pos - other.pos)) + other.radius <= self.radius
+        return self.radius >= other.radius and np.hypot(*(self.pos - other.pos)) + other.radius <= self.radius + 1.0
 
     def advance(self, dt):
         """Advance the Particle's position forward in time by dt."""

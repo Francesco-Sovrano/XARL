@@ -279,6 +279,7 @@ class ShepherdGame:
                     os.makedirs('frames')
                 pygame.image.save(self.screen, "frames/screen{:04d}.png".format(self.frame_count))
 
+
     def move_sheep(self, sheep):
         neighbours = self.get_neighbours_of(sheep, self.sheep_sense_radius)
         sheep.velocity = np.zeros(2, dtype=np.float32)
