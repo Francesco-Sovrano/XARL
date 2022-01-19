@@ -17,6 +17,7 @@ class ShepherdObserver:
         self.timeout = 2000
         self.early_terminate = True
         self.proportional_rewards = True
+        self.ignore_doubled_rewards = True
 
         self.coordinate_space = np.linspace(0, self.game.map_side-1, self.game.map_side, dtype=np.float32)
 
@@ -26,6 +27,8 @@ class ShepherdObserver:
     def update(self):
         saved, lost = self.game.count_sheep(count_and_remove=False)
         reward = saved - lost
+        if self.ignore_doubled_rewards:
+            reward = sorted((-1.0, reward, 1.0))[1]
         if self.proportional_rewards:
             reward /= self.game.num_dogs
         sheep_remaining = self.game.num_sheep - saved - lost
