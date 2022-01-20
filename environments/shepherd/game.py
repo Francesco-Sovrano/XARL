@@ -100,6 +100,8 @@ class ShepherdGame:
     def generate_map(self, map_sparsity=5):
 
         self.map_side = map_sparsity * self.num_sheep
+        if self.map_side < 250:
+            self.map_side = 250
 
         self.map_centre = (self.map_side / 2.0, self.map_side / 2.0)
 
