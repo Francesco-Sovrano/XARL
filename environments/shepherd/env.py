@@ -53,6 +53,7 @@ class ShepherdEnv(MultiAgentEnv):
         return gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
 
     def step(self, action_dict):
+        #print(action_dict)
         self.game.step(action_dict)
         observations, reward, done = self.observer.update()
         info = {

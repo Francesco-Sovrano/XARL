@@ -318,7 +318,6 @@ class ShepherdGame:
             sheep.velocity += calculate_field_velocity(sheep, neighbour, max_distance=self.sheep_sense_radius)
 
     def local_act(self, agent_id, action):
-        action = np.array((1.0, 1.0))  # Fixed motion for test
         self.dogs[agent_id].velocity = action
         self.dogs[agent_id].advance(self.dt)
 

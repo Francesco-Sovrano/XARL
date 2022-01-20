@@ -56,6 +56,9 @@ class ShepherdObserver:
         done = (not sheep_remaining) or self.game.frame_count >= self.timeout
         if self.early_terminate and lost > 0:
             done = True
+        if self.early_terminate and self.game.frame_count > 400 and sheep_remaining == self.game.num_sheep:
+            done = True
+            #reward = - 2.0 / self.game.num_dogs
 
         multi_agent_reward = {
             i: reward 
