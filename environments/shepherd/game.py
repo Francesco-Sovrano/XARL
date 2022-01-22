@@ -103,29 +103,33 @@ class ShepherdGame:
         if self.map_side < 250:
             self.map_side = 250
 
-        self.map_centre = (self.map_side / 2.0, self.map_side / 2.0)
+        self.map_padding = int(self.map_side / 2)
+
+        self.relative_map_centre = (self.map_side / 2.0, self.map_side / 2.0)
+        self.padded_map_centre = (self.map_side, self.map_side)
 
         # Add sheep pen to random part of green space.
         random_angle = random.uniform(0, 2 * np.pi)
         random_distance = random.uniform(0, (self.map_side / 2) - self.pen_radius)
-        pen_x = self.map_centre[0] + random_distance * math.cos(random_angle)
-        pen_y = self.map_centre[1] + random_distance * math.sin(random_angle)
+        pen_x = self.relative_map_centre[0] + random_distance * math.cos(random_angle)
+        pen_y = self.relative_map_centre[1] + random_distance * math.sin(random_angle)
 
         sheep_pen = Pen(x=pen_x, y=pen_y, radius=self.pen_radius)
         self.add_to_game(sheep_pen)
 
         # Generate grid map
-        dim = self.map_side
-        self.base_grid = np.zeros(shape=(dim, dim), dtype=np.int8)
+        dim = self.map_side * 2 # Double the size due to padding.
+        self.base_grid = np.zeros(shape=(dim, dim), dtype=np.uint8)
         radius = self.map_side / 2
-        for x in range(self.map_side):
-            for y in range(self.map_side):
-                if distance.euclidean((x,y), self.map_centre) > radius:
+        pad = self.map_padding
+        for x in range(dim):
+            for y in range(dim):
+                if distance.euclidean((x,y), self.padded_map_centre) > radius:
                     # Adding red cells.
                     self.base_grid[x][y] = 1
                 if distance.euclidean((x,y), self.sheep_pen.pos) < self.pen_radius:
                     # Adding blue cells (pen).
-                    self.base_grid[x][y] = 2
+                    self.base_grid[x+pad][y+pad] = 2
 
         self.global_grid = np.copy(self.base_grid)
 
@@ -143,7 +147,7 @@ class ShepherdGame:
             if particle.overlaps(self.sheep_pen):
                 return False
             # No overlaps established.
-            distance_to_centre = distance.euclidean(particle.pos, self.map_centre)
+            distance_to_centre = distance.euclidean(particle.pos, self.relative_map_centre)
             if distance_to_centre > self.map_side / 2.0:
                 return False
 
@@ -173,7 +177,7 @@ class ShepherdGame:
         # self.screen.fill((22, 120, 52))  # Fill with green.
 
         self.screen.fill((122, 22, 22))  # Fill with red.
-        pygame.draw.circle(self.screen, color=(22, 120, 52), center=self.map_centre, radius=self.map_side / 2.0)
+        pygame.draw.circle(self.screen, color=(22, 120, 52), center=self.relative_map_centre, radius=self.map_side / 2.0)
 
         # Draw sheep pen (represented as a blue circle).
         self.sheep_pen.draw(self.screen)
@@ -207,7 +211,7 @@ class ShepherdGame:
                 saved += 1
                 to_remove.append(particle)
         for particle in self.sheep:
-            distance_to_centre = distance.euclidean(particle.pos, self.map_centre)
+            distance_to_centre = distance.euclidean(particle.pos, self.relative_map_centre)
             if distance_to_centre > self.map_side / 2.0:
                 lost += 1
                 to_remove.append(particle)
@@ -235,8 +239,9 @@ class ShepherdGame:
         self.global_grid = np.copy(self.base_grid)
         coord_space = np.linspace(0.5, self.map_side-0.5, self.map_side-1, dtype=np.float32)
         for particle in self.particles:
-            x = np.searchsorted(coord_space, particle.x)
-            y = np.searchsorted(coord_space, particle.y)
+            pad = self.map_padding
+            x = pad + np.searchsorted(coord_space, particle.x)
+            y = pad + np.searchsorted(coord_space, particle.y)
             if type(particle) == Sheep:
                 self.global_grid[x][y] = 3
             elif type(particle) == Dog:

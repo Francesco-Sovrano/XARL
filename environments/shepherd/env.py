@@ -29,9 +29,10 @@ class ShepherdEnv(MultiAgentEnv):
 
     def run(self):
         self.reset()
-        fake_action_dict = {i: (1.0, 1.0) for i in range(self.num_dogs)}
+        fake_action_dict = {i: np.array([1.0, 1.0]) for i in range(self.num_dogs)}
         while True:
             observations, reward, done, explanations = self.step(fake_action_dict)
+            sample_obs = env.observation_space.sample()
             print(f"frame: {self.game.frame_count}\nexplanations: {explanations}")
             # for k in observations.keys():
             #     if observations[k]['local_view'].shape != (61, 61):
@@ -39,9 +40,17 @@ class ShepherdEnv(MultiAgentEnv):
             if done['__all__']:
                 exit(999)
 
+
     @property
     def observation_space(self) -> gym.spaces.Space:
-        return gym.spaces.Box(low=0, high=5, shape=(61*61+2+2,), dtype=np.int8)
+        fc_dict = {"positions" : gym.spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float64)}
+        return gym.spaces.Dict({
+            "cnn": gym.spaces.Dict({
+                "grid": gym.spaces.Box(low=0, high=255, shape=(61,61,3,), dtype=np.uint8)
+            }),
+            "fc": gym.spaces.Dict(fc_dict),
+        })
+        # return gym.spaces.Box(low=0.0, high=5.0, shape=(61*61+2+2,), dtype=np.float32)
         # return gym.spaces.Dict({
         #     'agent_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float64),
         #     'pen_pos': gym.spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float64),
@@ -63,10 +72,10 @@ class ShepherdEnv(MultiAgentEnv):
         return observations, reward, done, info
 
 if __name__ == '__main__':
-    seed = 1
-    random.seed(seed)
+    # seed = 1
+    # random.seed(seed)
     env = ShepherdEnv({
-        'num_dogs': 3,
+        'num_dogs': 10,
         'num_sheep': 50,
     })
     # print(env.observation_space.sample())
