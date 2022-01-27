@@ -51,7 +51,10 @@ class ShepherdObserver:
 
             obs["neighbours"] = neighbour_data
             self.observation_buffer[i].append(obs)
-            self.processed_observations[i] = self.prepare_obs_for_env(obs)
+            if self.game.map_side == self.game.dog_sense_radius * 2:
+                self.processed_observations[i] = self.prepare_global_obs_for_env(obs)
+            else:
+                self.processed_observations[i] = self.prepare_local_obs_for_env(obs)
 
         done = (not sheep_remaining) or self.game.frame_count >= self.timeout
         if self.early_terminate and lost > 0:
@@ -71,7 +74,7 @@ class ShepherdObserver:
         multi_agent_done['__all__'] = done
         return self.processed_observations, multi_agent_reward, multi_agent_done
 
-    def prepare_obs_for_env(self, obs):
+    def prepare_local_obs_for_env(self, obs):
         """
         Cell values:
         0: empty pasture cell (green)
@@ -100,8 +103,8 @@ class ShepherdObserver:
         row = pad + np.searchsorted(coord_space, obs["agent_pos"][0])
         col = pad + np.searchsorted(coord_space, obs["agent_pos"][1])
 
-        row_min, row_max = row-r, row+r+1
-        col_min, col_max = col-r, col+r+1
+        row_min, row_max = row-r, row+r + 1
+        col_min, col_max = col-r, col+r + 1
 
         agent_row, agent_col = row - row_min, col - col_min
 
@@ -121,6 +124,65 @@ class ShepherdObserver:
 
         # print(agent_layer.tolist())
         
+        stacked_obs = np.dstack([map_layer, pen_layer, sheep_layer, dog_layer, agent_layer])
+        print(stacked_obs.shape)
+
+        return {
+            "cnn": {
+                "grid": stacked_obs.flatten() if flatten else stacked_obs,
+            },
+        }
+
+    def prepare_global_obs_for_env(self, obs):
+        """
+        Cell values:
+        0: empty pasture cell (green)
+        1: empty external cell (red)
+        2: pen cell (blue)
+        3: sheep
+        4: other dogs
+        5: agent (self)
+        """
+        EMPTY = 0
+        RED = 1
+        PEN = 2
+        SHEEP = 3
+        DOG = 4
+        AGENT = 5
+
+        flatten = False
+
+        # Preparing local view
+        r = int(self.game.dog_sense_radius)
+        global_dim = self.game.map_side
+        global_grid = self.game.global_grid
+        pad = self.game.map_padding
+
+        coord_space = np.linspace(0.5, self.game.map_side - 0.5, self.game.map_side - 1, dtype=np.float32)
+        row = pad + np.searchsorted(coord_space, obs["agent_pos"][0])
+        col = pad + np.searchsorted(coord_space, obs["agent_pos"][1])
+
+        row_min, row_max = row - r, row + r
+        col_min, col_max = col - r, col + r
+
+        agent_row, agent_col = row - pad, col - pad
+
+        local_view = np.copy(global_grid[pad:3*pad, pad:3*pad])
+
+        # Transform each different value into another layer
+        map_layer = np.where(local_view == RED, 1, 0).astype(np.uint8)
+        pen_layer = np.where(local_view == PEN, 1, 0).astype(np.uint8)
+        sheep_layer = np.where(local_view == SHEEP, 1, 0).astype(np.uint8)
+        dog_layer = np.where(local_view == DOG, 1, 0).astype(np.uint8)
+
+        # Agent layer
+        # local_view[agent_row][agent_col] = AGENT
+        # agent_layer = np.where(local_view == AGENT, 1, 0).astype(np.uint8)
+        agent_layer = np.zeros_like(local_view)
+        agent_layer[agent_row][agent_col] = 1
+
+        # print(agent_layer.tolist())
+
         stacked_obs = np.dstack([map_layer, pen_layer, sheep_layer, dog_layer, agent_layer])
         print(stacked_obs.shape)
 

@@ -11,7 +11,7 @@ class ShepherdEnv(MultiAgentEnv):
     def __init__(self, config):
         self.num_dogs = config.get('num_dogs',5)
         self.num_sheep = config.get('num_sheep',50)
-        self.dog_sense_radius = config.get('dog_sense_radius',30)
+        self.dog_sense_radius = config.get('dog_sense_radius',125)
         self.map_sparsity = config.get('map_sparsity',5)
         self.render = False
         self.save_frames = False
