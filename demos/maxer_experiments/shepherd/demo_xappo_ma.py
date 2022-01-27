@@ -30,9 +30,9 @@ NUM_AGENTS = 5
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_dogs': NUM_AGENTS,
-	'num_sheep': 10,
+	'num_sheep': 25,
 	'dog_sense_radius': float('inf'), # set it to None for full observability
-	'map_sparsity': 2,
+	'map_sparsity': 5,
 }
 CONFIG.update({
 	"horizon": 2**10, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
