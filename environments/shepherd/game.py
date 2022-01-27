@@ -63,7 +63,7 @@ class ShepherdGame:
         self.pen_radius = self.sheep_size * 10.0
         self.dt = 0.4
         self.sheep_sense_radius = 15.0
-        self.dog_sense_radius = min(dog_sense_radius,self.map_dim)
+        self.dog_sense_radius = min(dog_sense_radius,self.map_side/2)
         print('Shepherd: Full observability' if self.dog_sense_radius == self.map_side/2 else 'Shepherd: Partial observability')
         self.render = render
         self.save_frames = save_frames
