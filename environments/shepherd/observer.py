@@ -72,51 +72,6 @@ class ShepherdObserver:
         return self.processed_observations, multi_agent_reward, multi_agent_done
 
     def prepare_obs_for_env(self, obs):
-        flatten = False
-        new_obs = {}
-        def normalise_pos(pos, max_dim):
-            x, y = pos
-            x /= max_dim
-            y /= max_dim
-            return np.array([x, y])
-        new_obs["agent_pos"] = normalise_pos(obs["agent_pos"], self.game.map_side)
-        new_obs["pen_pos"] = normalise_pos(obs["pen_pos"], self.game.map_side)
-
-        # Preparing local view
-        r = int(self.game.dog_sense_radius)
-        global_dim = self.game.map_side
-        global_grid = self.game.global_grid
-        pad = self.game.map_padding
-
-        coord_space = np.linspace(0.5, self.game.map_side - 0.5, self.game.map_side-1, dtype=np.float32)
-        row = pad + np.searchsorted(coord_space, obs["agent_pos"][0])
-        col = pad + np.searchsorted(coord_space, obs["agent_pos"][1])
-
-        row_min, row_max = row-r, row+r+1
-        col_min, col_max = col-r, col+r+1
-
-        agent_row, agent_col = row - row_min, col - col_min
-
-        # if row - r < 0:
-        #     row_min = 0
-        #     row_max += abs(row-r)
-        #     agent_row -= abs(row-r)
-        # elif row + r >= global_dim:
-        #     row_min -= abs(row+r-global_dim)+1
-        #     row_max = global_dim
-        #     agent_row += abs(row+r-global_dim)+1
-        # if col - r < 0:
-        #     col_min = 0
-        #     col_max += abs(col-r)
-        #     agent_col -= abs(col-r)
-        # elif col + r >= global_dim:
-        #     col_min -= abs(col+r-global_dim)+1
-        #     col_max = global_dim
-        #     agent_col += abs(col+r-global_dim)+1
-
-        local_view = np.copy(global_grid[row_min:row_max, col_min:col_max])
-        local_view[agent_row][agent_col] = 5
-        # Transform each different value into another layer
         """
         Cell values:
         0: empty pasture cell (green)
@@ -132,46 +87,48 @@ class ShepherdObserver:
         SHEEP = 3
         DOG = 4
         AGENT = 5
-        map_layer = np.where(local_view == RED, 255, 0).astype(np.uint8)
-        sheep_layer = np.where(local_view == SHEEP, 255, 0).astype(np.uint8)
-        dog_layer = np.where(local_view >= DOG, 255, 0).astype(np.uint8)
-        # pen_layer = np.where(local_view == PEN, 255, 0).astype(np.uint8)
-        # no_pen = not pen_layer.any()
-        # # Pen case is special. If the pen is out of sight, we will create a projection at the edge of the local view.
-        # if no_pen:
-        #     pen_row = pad + np.searchsorted(coord_space, obs["pen_pos"][0])
-        #     pen_col = pad + np.searchsorted(coord_space, obs["pen_pos"][1])
-        #     x_diff = obs["pen_pos"][0] - obs["agent_pos"][0]
-        #     y_diff = obs["pen_pos"][1] - obs["agent_pos"][1]
-        #     angle = np.arctan2(y_diff, x_diff)
-        #     deg_angle = np.rad2deg(angle)
-        #     # Use angle to find the distance to the edge of pen_layer
-        #     length = r / np.cos(angle)
-        #     lmod = r / np.cos(np.fmod(angle, np.pi/4))
-        #     pr = int(r + np.cos(angle) * length)
-        #     pc = int(r + np.sin(angle) * length)
-        #     pr2 = int(r + np.cos(angle) * lmod)
-        #     pc2 = int(r + np.sin(angle) * lmod)
-        #     pen_layer[0][0] = 255
-        #     # pen_layer[pr][pc] = 255
 
-        stacked_obs = np.dstack([map_layer, sheep_layer, dog_layer])
+        flatten = False
+        
+        # Preparing local view
+        r = int(self.game.dog_sense_radius)
+        global_dim = self.game.map_side
+        global_grid = self.game.global_grid
+        pad = self.game.map_padding
 
-        new_obs["local_view"] = local_view.flatten() if flatten else stacked_obs
+        coord_space = np.linspace(0.5, self.game.map_side - 0.5, self.game.map_side-1, dtype=np.float32)
+        row = pad + np.searchsorted(coord_space, obs["agent_pos"][0])
+        col = pad + np.searchsorted(coord_space, obs["agent_pos"][1])
 
-        positions = np.concatenate([new_obs["agent_pos"], new_obs["pen_pos"]])
+        row_min, row_max = row-r, row+r+1
+        col_min, col_max = col-r, col+r+1
 
-        fc_dict = {"positions": positions}
+        agent_row, agent_col = row - row_min, col - col_min
 
-        final_obs = {
+        local_view = np.copy(global_grid[row_min:row_max, col_min:col_max])
+
+        # Transform each different value into another layer
+        map_layer = np.where(local_view == RED, 1, 0).astype(np.uint8)
+        pen_layer = np.where(local_view == PEN, 1, 0).astype(np.uint8)
+        sheep_layer = np.where(local_view == SHEEP, 1, 0).astype(np.uint8)
+        dog_layer = np.where(local_view == DOG, 1, 0).astype(np.uint8)
+
+        # Agent layer
+        # local_view[agent_row][agent_col] = AGENT
+        # agent_layer = np.where(local_view == AGENT, 1, 0).astype(np.uint8)
+        agent_layer = np.zeros_like(local_view)
+        agent_layer[agent_row][agent_col] = 1
+
+        # print(agent_layer.tolist())
+        
+        stacked_obs = np.dstack([map_layer, pen_layer, sheep_layer, dog_layer, agent_layer])
+        print(stacked_obs.shape)
+
+        return {
             "cnn": {
-                "grid": new_obs["local_view"],
+                "grid": stacked_obs.flatten() if flatten else stacked_obs,
             },
-            "fc": fc_dict
         }
-        return final_obs
-        # return new_obs
-        # return np.concatenate([new_obs["local_view"],new_obs["agent_pos"],new_obs["pen_pos"]], -1)
 
     def separate_neighbours_by_type(self, neighbours):
         neighbour_dict = {}

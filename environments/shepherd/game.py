@@ -50,15 +50,21 @@ class Pen(Particle):
 
 
 class ShepherdGame:
-    def __init__(self, num_dogs, num_sheep, render=True, save_frames=False):
+    def __init__(self, num_dogs, num_sheep, render=True, save_frames=False, dog_sense_radius=None, map_sparsity=5):
         self.num_dogs = num_dogs
         self.num_sheep = num_sheep
+        self.map_side = map_sparsity * self.num_sheep
+        if self.map_side < 250:
+            self.map_side = 250
+        self.map_dim = self.map_side * 2 # Double the size due to padding.
+
         self.sheep_size = 1.0
         self.dog_size = 1.0
         self.pen_radius = self.sheep_size * 10.0
         self.dt = 0.4
         self.sheep_sense_radius = 15.0
-        self.dog_sense_radius = 30.0
+        self.dog_sense_radius = min(dog_sense_radius,self.map_dim)
+        print('Shepherd: Full observability' if self.dog_sense_radius == self.map_dim else 'Shepherd: Partial observability')
         self.render = render
         self.save_frames = save_frames
         self.base_grid = None
@@ -97,12 +103,7 @@ class ShepherdGame:
 
         self.particles.append(particle)
 
-    def generate_map(self, map_sparsity=5):
-
-        self.map_side = map_sparsity * self.num_sheep
-        if self.map_side < 250:
-            self.map_side = 250
-
+    def generate_map(self):
         self.map_padding = int(self.map_side / 2)
 
         self.relative_map_centre = (self.map_side / 2.0, self.map_side / 2.0)
@@ -118,12 +119,12 @@ class ShepherdGame:
         self.add_to_game(sheep_pen)
 
         # Generate grid map
-        dim = self.map_side * 2 # Double the size due to padding.
-        self.base_grid = np.zeros(shape=(dim, dim), dtype=np.uint8)
+        # dim = self.map_side * 2 # Double the size due to padding.
+        self.base_grid = np.zeros(shape=(self.map_dim, self.map_dim), dtype=np.uint8)
         radius = self.map_side / 2
         pad = self.map_padding
-        for x in range(dim):
-            for y in range(dim):
+        for x in range(self.map_dim):
+            for y in range(self.map_dim):
                 if distance.euclidean((x,y), self.padded_map_centre) > radius:
                     # Adding red cells.
                     self.base_grid[x][y] = 1
