@@ -45,7 +45,7 @@ class ShepherdEnv(MultiAgentEnv):
     def observation_space(self) -> gym.spaces.Space:
         return gym.spaces.Dict({
             "cnn": gym.spaces.Dict({
-                "grid": gym.spaces.Box(low=0, high=1, shape=(61,61,5), dtype=np.uint8)
+                "grid": gym.spaces.Box(low=0, high=1, shape=(self.game.map_dim,self.game.map_dim,5), dtype=np.uint8)
             }),
         })
 

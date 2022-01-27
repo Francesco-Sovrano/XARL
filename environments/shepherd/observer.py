@@ -125,7 +125,7 @@ class ShepherdObserver:
         # print(agent_layer.tolist())
         
         stacked_obs = np.dstack([map_layer, pen_layer, sheep_layer, dog_layer, agent_layer])
-        print(stacked_obs.shape)
+        # print(stacked_obs.shape)
 
         return {
             "cnn": {
