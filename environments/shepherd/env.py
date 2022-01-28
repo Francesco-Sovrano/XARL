@@ -43,12 +43,13 @@ class ShepherdEnv(MultiAgentEnv):
 
     @property
     def observation_space(self) -> gym.spaces.Space:
-        view_dim = int(self.game.dog_sense_radius*2+1)
+        view_dim = int(self.game.dog_sense_radius*2)
         return gym.spaces.Dict({
             "cnn": gym.spaces.Dict({
                 "grid": gym.spaces.Box(low=0, high=1, shape=(view_dim,view_dim,5), dtype=np.uint8)
             }),
         })
+        # return gym.spaces.Box(low=0, high=1, shape=(view_dim*view_dim*5,), dtype=np.uint8)
 
     @property
     def action_space(self):

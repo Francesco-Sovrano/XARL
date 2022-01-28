@@ -31,7 +31,7 @@ CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_dogs': NUM_AGENTS,
 	'num_sheep': 25,
-	'dog_sense_radius': float('inf'), # set it to None for full observability
+	'dog_sense_radius': 30, #float('inf'), # set it to None for full observability
 	'map_sparsity': 5,
 }
 CONFIG.update({
