@@ -55,29 +55,54 @@ class Primal(MultiAgentEnv):
 		self.isOneShot = config.get('isOneShot',False)
 		
 		self._env = Primal2Env(observer=self.observer, map_generator=self.map_generator, num_agents=self.num_agents, IsDiagonal=self.IsDiagonal, frozen_steps=self.frozen_steps, isOneShot=self.isOneShot)
+		self._agent_ids = list(range(1, self.num_agents + 1))
 	
 	def reset(self):
 		self._env._reset()
-		obs = self._env._observe(list(range(1, self.num_agents + 1)))
+		obs = self._env._observe()
 		# print(obs[1][0].shape, obs[1][1].shape)
 		return self.preprocess_observation_dict(obs)
+
+	def get_why_explanation(self, new_pos, old_astar_pos, old_mstar_pos):
+		explanation_list = []
+		# print(new_pos, old_astar_pos)
+		if new_pos == old_astar_pos:
+			explanation_list.append('acting_as_A*')
+		if new_pos == old_mstar_pos:
+			explanation_list.append('acting_as_M*')
+		if not explanation_list:
+			explanation_list = ['acting_differently']
+		return explanation_list
 
 	# Executes an action by an agent
 	def step(self, action_dict):
 		# print(action_dict[1])
-		obs,rew = self._env.step_all(action_dict)
+		astar_pos_dict = {
+			i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
+			for i in self._agent_ids
+		}
+		mstar_pos_dict = {
+			i: path[0]
+			for i,path in zip(self._agent_ids, self._env.expert_until_first_goal(agent_ids=self._agent_ids))
+		}	
 
+		obs,rew = self._env.step_all(action_dict)
 		obs = self.preprocess_observation_dict(obs)
+
 		# print('qwqw', step_r.obs[0].shape)
 		done = {
 			k: False 
 			for k in obs.keys()
 		}
+
+		positions = self._env.getPositions()
 		info = {
 			k: {
-				'explanation': {'why':'change_me_pls'}
-			} 
-			for k in obs.keys()
+				'explanation': {
+					'why': self.get_why_explanation(positions[k], astar_pos_dict[k], mstar_pos_dict[k])
+				}
+			}
+			for k in self._agent_ids
 		}
 		# print(info)
 		done["__all__"] = False # all(done.values())
