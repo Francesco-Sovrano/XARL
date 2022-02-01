@@ -55,6 +55,7 @@ CONFIG.update({
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
 	"update_advantages_when_replaying": True, # Whether to recompute advantages when updating priorities.
 	# "learning_starts": 2**12, # How many steps of the model to sample before learning starts. Every batch has size 'rollout_fragment_length' (default is 50).
+	'vtrace': True,
 	##################################
 	"buffer_options": {
 		'priority_id': 'gains', # Which batch column to use for prioritisation. One of the following: gains, advantages, rewards, prev_rewards, action_logp.
@@ -102,7 +103,6 @@ CONFIG.update({
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 	"centralised_buffer": True, # for MARL
 	# 'batch_mode': 'complete_episodes',
-	'vtrace': True,
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 # framework = CONFIG.get("framework","tf")

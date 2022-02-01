@@ -9,7 +9,6 @@ from environments.primal.od_mstar3 import od_mstar
 from environments.primal.od_mstar3 import cpp_mstar
 from environments.primal.GroupLock import Lock
 from matplotlib.colors import *
-from gym.envs.classic_control import rendering
 import imageio
 from gym import spaces
 
@@ -950,6 +949,7 @@ class MAPFEnv(gym.Env):
             self.viewer.add_onetime(entry)
 
     def _render(self, mode='human', close=False, screen_width=800, screen_height=800):
+        from gym.envs.classic_control import rendering
 
         def painter(state_map, agents_dict, goals_dict):
             def initColors(num_agents):
