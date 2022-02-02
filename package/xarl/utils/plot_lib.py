@@ -311,14 +311,14 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 	}
 	for k in ["episode_reward_mean","episode_reward_max","episode_reward_min","episode_len_mean"]:
 		obj[k] = val_dict[k] 
-	default_learner = val_dict["info"]["learner"]["default_policy"]
+	default_learner = val_dict["info"]["learner"].get("default_policy", val_dict["info"]["learner"].get("centralised_agent", {}))
 	obj.update({
 		k:v 
 		for k,v in default_learner.items()
 		if isinstance(v, numbers.Number)
 	})
 	if 'buffer' in val_dict:
-		default_buffer = val_dict["buffer"]["default_policy"]
+		default_buffer = val_dict["buffer"].get("default_policy", val_dict["buffer"].get("centralised_agent", {}))
 		if 'cluster_capacity' in default_buffer:
 			obj.update({
 				f'capacity_{k}':v 

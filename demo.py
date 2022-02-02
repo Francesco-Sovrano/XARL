@@ -5,6 +5,8 @@ import json
 import ray
 from ray.rllib.models import ModelCatalog
 from xarl.utils.workflow import train
+from ray.tune.registry import get_trainable_cls, _global_registry, ENV_CREATOR
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
 from environments import *
 
@@ -70,10 +72,44 @@ CONFIG, TRAINER = get_algorithm_by_name(sys.argv[1])
 ENVIRONMENT = sys.argv[2]
 TEST_EVERY_N_STEP = int(float(sys.argv[3]))
 STOP_TRAINING_AFTER_N_STEP = int(float(sys.argv[4]))
-if len(sys.argv) > 5:
-	OPTIONS = json.loads(' '.join(sys.argv[5:]))
+CENTRALISED_TRAINING = sys.argv[5].lower() == 'true'
+NUM_AGENTS = int(float(sys.argv[6]))
+if len(sys.argv) > 7:
+	OPTIONS = json.loads(' '.join(sys.argv[7:]))
 	CONFIG.update(OPTIONS)
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
+
+# Setup MARL training strategy: centralised or decentralised
+env = _global_registry.get(ENV_CREATOR, ENVIRONMENT)(CONFIG["env_config"])
+if isinstance(env,MultiAgentEnv):
+	print('Is MultiAgentEnv')
+	obs_space = env.observation_space
+	act_space = env.action_space
+	def gen_policy():
+		return (None, obs_space, act_space, {})
+	policy_graphs = {}
+	if not CENTRALISED_TRAINING:
+		for i in range(NUM_AGENTS):
+			policy_graphs[f'agent-{i}'] = gen_policy()
+		def policy_mapping_fn(agent_id):
+				return f'agent-{agent_id}'
+	else:
+		policy_graphs[f'centralised_agent'] = gen_policy()
+		def policy_mapping_fn(agent_id):
+				return f'centralised_agent'
+	CONFIG.update({
+		"multiagent": {
+			"policies": policy_graphs,
+			"policy_mapping_fn": policy_mapping_fn,
+			# Which metric to use as the "batch size" when building a
+			# MultiAgentBatch. The two supported values are:
+			# env_steps: Count each time the env is "stepped" (no matter how many
+			#   multi-agent actions are passed/how many multi-agent observations
+			#   have been returned in the previous step).
+			# agent_steps: Count each individual agent step as one step.
+			"count_steps_by": "agent_steps",
+		},
+	})
 print(CONFIG)
 
 ####################################################################################

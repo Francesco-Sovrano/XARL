@@ -77,19 +77,15 @@ class Primal(MultiAgentEnv):
 	# Executes an action by an agent
 	def step(self, action_dict):
 		# print(action_dict[1])
-		path_list = [
-			self._env.expert_until_first_goal(agent_ids=[i])[0][0]
-			for i in self._agent_ids
-		]
 		astar_pos_dict = {
-			i: path_list[i] if path_list[i] else None
+			i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
 			for i in self._agent_ids
 		}
 		path_list = self._env.expert_until_first_goal(agent_ids=self._agent_ids)
 		mstar_pos_dict = {
-			i: path_list[i][0] if path_list and path_list[i] else None
-			for i in self._agent_ids
-		}	
+			i: path_list[e][0] if path_list else None
+			for e,i in enumerate(self._agent_ids)
+		}
 
 		obs,rew = self._env.step_all(action_dict)
 		obs = self.preprocess_observation_dict(obs)
