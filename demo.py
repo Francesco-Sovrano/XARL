@@ -75,7 +75,9 @@ STOP_TRAINING_AFTER_N_STEP = int(float(sys.argv[4]))
 CENTRALISED_TRAINING = sys.argv[5].lower() == 'true'
 NUM_AGENTS = int(float(sys.argv[6]))
 if len(sys.argv) > 7:
+	print('Updating options..')
 	OPTIONS = json.loads(' '.join(sys.argv[7:]))
+	print('New options:', CONFIG)
 	CONFIG.update(OPTIONS)
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 
@@ -110,7 +112,7 @@ if isinstance(env,MultiAgentEnv):
 			"count_steps_by": "agent_steps",
 		},
 	})
-print(CONFIG)
+print('Config:', CONFIG)
 
 ####################################################################################
 ####################################################################################

@@ -86,7 +86,7 @@ class Primal(MultiAgentEnv):
 		}
 		path_list = self._env.expert_until_first_goal(agent_ids=self._agent_ids)
 		mstar_pos_dict = {
-			i: path_list[e][0] if path_list else None
+			i: path_list[e][0] if path_list and len(path_list) == len(self._agent_ids) else None
 			for e,i in enumerate(self._agent_ids)
 		}
 
