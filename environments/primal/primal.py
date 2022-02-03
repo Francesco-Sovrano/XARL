@@ -43,7 +43,10 @@ class Primal(MultiAgentEnv):
 	def __init__(self, config):
 		super().__init__()
 		self.observation_size = config.get('observation_size',3)
-		self.observer = Primal2Observer(self.observation_size)
+		self.observer = Primal2Observer(
+			observation_size=self.observation_size, 
+			num_future_steps=config.get('num_future_steps',3),
+		)
 		self.map_generator = maze_generator(
 			env_size = config.get('env_size',(10, 30)), 
 			wall_components = config.get('wall_components',(3, 8)),
@@ -92,21 +95,30 @@ class Primal(MultiAgentEnv):
 
 		# print('qwqw', step_r.obs[0].shape)
 		done = {
-			k: False 
+			k: False #self._env.world.getDone(k) 
 			for k in obs.keys()
 		}
 
 		positions = self._env.getPositions()
+		rew = {
+			k: 1 if self._env.isStandingOnGoal[k] else 0
+			for k in self._agent_ids
+		}
+		# throughput = sum((1 if self._env.isStandingOnGoal[k] else 0 for k in self._agent_ids))
 		info = {
 			k: {
 				'explanation': {
 					'why': self.get_why_explanation(positions[k], astar_pos_dict[k], mstar_pos_dict[k])
-				}
+				},
+				# 'stats_dict': {
+				# 	"throughput": throughput
+				# }
 			}
 			for k in self._agent_ids
 		}
+		
 		# print(info)
-		done["__all__"] = False # all(done.values())
+		done["__all__"] = False #terminal = all(done.values())
 		# rew["__all__"] = np.sum([r for r in step_r.reward.values()])
 		return obs, rew, done, info
 

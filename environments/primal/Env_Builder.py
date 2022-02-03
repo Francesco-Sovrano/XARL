@@ -907,15 +907,17 @@ class MAPFEnv(gym.Env):
 
         except OutOfTimeError:
             # M* timed out
-            print("timeout")
-            print('World', world)
-            print('Start Pos', start_positions)
-            print('Goals', goals)
+            # print("timeout")
+            # print('World', world)
+            # print('Start Pos', start_positions)
+            # print('Goals', goals)
+            pass
         except NoSolutionError:
-            print("nosol????")
-            print('World', world)
-            print('Start Pos', start_positions)
-            print('Goals', goals)
+            # print("nosol????")
+            # print('World', world)
+            # print('Start Pos', start_positions)
+            # print('Goals', goals)
+            pass
 
         except:
             c_time = time.time() - start_time
@@ -928,15 +930,17 @@ class MAPFEnv(gym.Env):
                                                 inflation=inflation, time_limit=time_limit - c_time)
             except OutOfTimeError:
                 # M* timed out
-                print("timeout")
-                print('World', world)
-                print('Start Pos', start_positions)
-                print('Goals', goals)
+                # print("timeout")
+                # print('World', world)
+                # print('Start Pos', start_positions)
+                # print('Goals', goals)
+                pass
             except NoSolutionError:
-                print("nosol????")
-                print('World', world)
-                print('Start Pos', start_positions)
-                print('Goals', goals)
+                # print("nosol????")
+                # print('World', world)
+                # print('Start Pos', start_positions)
+                # print('Goals', goals)
+                pass
             except:
                 print("Unknown bug?!")
 
