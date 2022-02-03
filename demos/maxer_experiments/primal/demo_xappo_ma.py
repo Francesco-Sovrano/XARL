@@ -24,7 +24,7 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 SELECT_ENV = "Primal"
 
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 2**10
+NUM_AGENTS = 9
 
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
