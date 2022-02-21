@@ -11,8 +11,10 @@ from xarl.utils.workflow import train
 from ray.rllib.agents.ddpg.td3 import TD3Trainer, TD3_DEFAULT_CONFIG
 from environments import *
 from ray.rllib.models import ModelCatalog
-from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadDDPG)
+from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG as TFAdaptiveMultiHeadNet
+from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+# Register the models to use.
+ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
 # SELECT_ENV = "CescoDrive-V1"
 SELECT_ENV = "GraphDrive-Hard"

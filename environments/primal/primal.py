@@ -22,8 +22,8 @@ class Primal(MultiAgentEnv):
 	def preprocess_observation_dict(obs_dict):
 		return {
 			k: {
-				'cnn': state,
-				'fc': vector,
+				'map': state,
+				'goal': vector,
 			}
 			for k,(state,vector) in obs_dict.items()
 		}
@@ -31,8 +31,8 @@ class Primal(MultiAgentEnv):
 	@property
 	def observation_space(self) -> gym.spaces.Space:
 		return gym.spaces.Dict({
-			'cnn': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
-			'fc': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
+			'map': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
+			'goal': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
 		})
 
 	@property
@@ -66,10 +66,10 @@ class Primal(MultiAgentEnv):
 		# print(obs[1][0].shape, obs[1][1].shape)
 		return self.preprocess_observation_dict(obs)
 
-	def get_why_explanation(self, new_pos, old_astar_pos, old_mstar_pos):
+	def get_why_explanation(self, new_pos, old_mstar_pos, old_astar_pos=None):
 		explanation_list = []
 		# print(new_pos, old_astar_pos)
-		if new_pos == old_astar_pos:
+		if old_astar_pos and new_pos == old_astar_pos:
 			explanation_list.append('acting_as_A*')
 		if new_pos == old_mstar_pos:
 			explanation_list.append('acting_as_M*')
@@ -81,7 +81,8 @@ class Primal(MultiAgentEnv):
 	def step(self, action_dict):
 		# print(action_dict[1])
 		astar_pos_dict = {
-			i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
+			# i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
+			i: None
 			for i in self._agent_ids
 		}
 		path_list = self._env.expert_until_first_goal(agent_ids=self._agent_ids)
@@ -108,7 +109,7 @@ class Primal(MultiAgentEnv):
 		info = {
 			k: {
 				'explanation': {
-					'why': self.get_why_explanation(positions[k], astar_pos_dict[k], mstar_pos_dict[k])
+					'why': self.get_why_explanation(positions[k], mstar_pos_dict[k], old_astar_pos=astar_pos_dict[k])
 				},
 				# 'stats_dict': {
 				# 	"throughput": throughput

@@ -12,7 +12,9 @@ from ray.rllib.agents.ppo.appo import APPOTrainer, DEFAULT_CONFIG as APPO_DEFAUL
 from environments import *
 from ray.rllib.models import ModelCatalog
 from xarl.models.appo import TFAdaptiveMultiHeadNet
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet)
+from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+# Register the models to use.
+ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
 # SELECT_ENV = "Taxi-v3"
 # SELECT_ENV = "ToyExample-V0"

@@ -12,7 +12,9 @@ from ray.rllib.agents.sac.sac import SACTrainer, DEFAULT_CONFIG as SAC_DEFAULT_C
 from environments import *
 from ray.rllib.models import ModelCatalog
 from xarl.models.sac import TFAdaptiveMultiHeadNet
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet)
+from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+# Register the models to use.
+ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
 # SELECT_ENV = "CescoDrive-V1"
 SELECT_ENV = "GraphDrive-Hard"

@@ -13,10 +13,11 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
 from ray.rllib.contrib.maddpg import MADDPGTrainer, DEFAULT_CONFIG as MADDPG_DEFAULT_CONFIG
 from environments import *
-from xarl.models.dqn import TFAdaptiveMultiHeadDQN
+from xarl.models.dqn import TFAdaptiveMultiHeadDQN as TFAdaptiveMultiHeadNet
 from ray.rllib.models import ModelCatalog
+from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
 # Register the models to use.
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadDQN)
+ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
 # SELECT_ENV = "Taxi-v3"
 # SELECT_ENV = "ToyExample-V0"
