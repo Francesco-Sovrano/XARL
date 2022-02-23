@@ -50,7 +50,8 @@ def GetConnectedRegion(world, regions_dict, x, y):
             continue  # crashes
         if world[i, j] > 0:
             regions_dict[(i, j)] = visited
-        if (i, j) in visited: continue
+        if (i, j) in visited:
+            continue
         visited.add((i, j))
         work_list.append((i + 1, j))
         work_list.append((i, j + 1))
@@ -62,29 +63,29 @@ def GetConnectedRegion(world, regions_dict, x, y):
 
 def maze_generator(env_size=(10, 70), wall_components=(1, 8), obstacle_density=None,
                    go_straight=0.8):
-    min_size, max_size = env_size
-    min_component, max_component = wall_components
-    num_components = np.random.randint(low=min_component, high=max_component + 1)
-    assert min_size > 5
-    # todo: write comments
-    """
-    num_agents,
-    IsDiagonal,
-    min_size: min length of the 'radius' of the map,
-    max_size: max length of the 'radius' of the map,
-    complexity,
-    obstacle_density,
-    go_straight,
-    """
+    # allow both one-dimensional args and tuple args
     if obstacle_density is None:
-        obstacle_density = [0, 1]
+        obstacle_density = (0, 1)
+    if isinstance(env_size, tuple):
+        assert len(env_size) == 2 and min(env_size) > 5
+        world_size = np.random.randint(min(env_size), max(env_size))
+    else:
+        world_size = env_size
+    if isinstance(wall_components, tuple):
+        assert len(wall_components) == 2
+        num_components = np.random.randint(low=min(wall_components), high=max(wall_components) + 1)
+    else:
+        num_components = wall_components
+    if isinstance(obstacle_density, tuple):
+        assert len(obstacle_density) == 2
+        obs_dense = np.random.uniform(min(obstacle_density), max(obstacle_density))
+    else:
+        obs_dense = obstacle_density
 
     def maze(h, w, total_density=0):
-        # Only odd shapes
         assert h > 0 and w > 0, "You are giving non-positive width and height"
         shape = ((h // 2) * 2 + 3, (w // 2) * 2 + 3)
         # Adjust num_components and density relative to maze world_size
-        # density    = int(density * ((shape[0] // 2) * (shape[1] // 2))) // 20 # world_size of components
         density = int(shape[0] * shape[1] * total_density // num_components) if num_components != 0 else 0
 
         # Build actual maze
@@ -123,7 +124,7 @@ def maze_generator(env_size=(10, 70), wall_components=(1, 8), obstacle_density=N
                             elif diff[k][0] + last_dir[0] == 0 and diff[k][1] + last_dir[1] == 0:
                                 index_B = k
                         assert (index_B >= 0)
-                        if (index_F + 1):
+                        if index_F + 1:
                             p = (1 - go_straight) * np.ones(len(neighbours)) / (len(neighbours) - 2)
                             p[index_B] = 0
                             p[index_F] = go_straight
@@ -146,15 +147,29 @@ def maze_generator(env_size=(10, 70), wall_components=(1, 8), obstacle_density=N
         return Z
 
     def generator():
-        # randomize the world RANDOMIZE THE STATIC OBSTACLES obstacle_density =
-        # np.random.triangular(obstacle_density[0], .33 * obstacle_density[0] + .66 * obstacle_density[1],
-        # obstacle_density[1])
-        world_size = np.random.randint(min_size, max_size + 1)
         world = -maze(int(world_size), int(world_size),
-                      total_density=np.random.uniform(obstacle_density[0], obstacle_density[1]),
+                      total_density=obs_dense,
                       ).astype(int)
         world = np.array(world)
         return world, None
+
+    return generator
+
+
+def DummyGenerator():
+    state_map = np.array([[1, 0, 0, 0, 0],
+                          [0, 0, 0, 0, 0],
+                          [0, 0, 0, 0, 0],
+                          [0, 0, 0, 0, 0],
+                          [0, 0, 0, 0, 0]])
+    goals_map = np.array([[0, 0, 0, 0, 0],
+                          [0, 0, 0, 0, 0],
+                          [0, 0, 0, 0, 0],
+                          [0, 0, 0, 0, 0],
+                          [0, 0, 0, 0, 1]])
+
+    def generator():
+        return state_map, goals_map
 
     return generator
 

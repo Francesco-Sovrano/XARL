@@ -14,6 +14,9 @@ pip install -r environments/primal/requirements.txt
 cd environments/primal/od_mstar3
 python3 setup.py build_ext --inplace
 cd ../../..
+cd environments/primal/astarlib3
+python3 setup.py build_ext --inplace
+cd ../../..
 
 echo "Installing other environments' dependencies.."
 pip install -r environments/requirements.txt

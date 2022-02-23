@@ -2,3 +2,4 @@ ray==1.2.0
 gym==0.18.0
 imageio==2.8.0
 Cython
+networkx

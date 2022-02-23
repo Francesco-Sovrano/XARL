@@ -49,6 +49,7 @@ def _build_net(inputs, goal_pos, rnn_size, a_size):
 			tf.keras.layers.MaxPool2D(pool_size=[2, 2]),
 		])
 
+	inputs = tf.transpose(inputs, perm=[0, 2, 3, 1])
 	vgg1 = VGG_Block()(inputs)
 	vgg2 = VGG_Block()(vgg1)
 

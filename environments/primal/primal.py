@@ -81,8 +81,8 @@ class Primal(MultiAgentEnv):
 	def step(self, action_dict):
 		# print(action_dict[1])
 		astar_pos_dict = {
-			# i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
-			i: None
+			i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
+			# i: None
 			for i in self._agent_ids
 		}
 		path_list = self._env.expert_until_first_goal(agent_ids=self._agent_ids)
