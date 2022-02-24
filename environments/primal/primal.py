@@ -64,10 +64,13 @@ class Primal(MultiAgentEnv):
 		self._env._reset()
 		obs = self._env._observe()
 		# print(obs[1][0].shape, obs[1][1].shape)
+		self.last_obs = obs
 		return self.preprocess_observation_dict(obs)
 
-	def get_why_explanation(self, new_pos, old_mstar_pos, old_astar_pos=None):
+	def get_why_explanation(self, new_pos, old_mstar_pos, old_astar_pos=None, is_valid_action=True):
 		explanation_list = []
+		if not is_valid_action:
+			explanation_list.append('invalid_action')
 		# print(new_pos, old_astar_pos)
 		if old_astar_pos and new_pos == old_astar_pos:
 			explanation_list.append('acting_as_A*')
@@ -77,12 +80,24 @@ class Primal(MultiAgentEnv):
 			explanation_list = ['acting_differently']
 		return explanation_list
 
+	def get_reward(self, standing_on_goal, is_valid_action):
+		if standing_on_goal:
+			return 1
+		if not is_valid_action:
+			return -1
+		return 0
+
 	# Executes an action by an agent
 	def step(self, action_dict):
+		# print(list(action_dict.keys()), list(self.last_obs.keys()))
+		valid_action_dict = {
+			k: action_dict[k] in self._env.listValidActions(k, self.last_obs[k])
+			for k in self._agent_ids
+		}
 		# print(action_dict[1])
 		astar_pos_dict = {
-			i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
-			# i: None
+			# i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
+			i: None
 			for i in self._agent_ids
 		}
 		path_list = self._env.expert_until_first_goal(agent_ids=self._agent_ids)
@@ -91,25 +106,31 @@ class Primal(MultiAgentEnv):
 			for e,i in enumerate(self._agent_ids)
 		}
 
-		obs,rew = self._env.step_all(action_dict)
-		obs = self.preprocess_observation_dict(obs)
+		_obs,rew = self._env.step_all(action_dict)
+		obs = self.preprocess_observation_dict(_obs)
 
 		# print('qwqw', step_r.obs[0].shape)
 		done = {
-			k: False #self._env.world.getDone(k) 
+			k: False
+			# k: not valid_action_dict[k] #self._env.world.getDone(k) 
 			for k in obs.keys()
 		}
 
 		positions = self._env.getPositions()
 		rew = {
-			k: 1 if self._env.isStandingOnGoal[k] else 0
+			k: self.get_reward(self._env.isStandingOnGoal[k], valid_action_dict[k])
 			for k in self._agent_ids
 		}
 		# throughput = sum((1 if self._env.isStandingOnGoal[k] else 0 for k in self._agent_ids))
 		info = {
 			k: {
 				'explanation': {
-					'why': self.get_why_explanation(positions[k], mstar_pos_dict[k], old_astar_pos=astar_pos_dict[k])
+					'why': self.get_why_explanation(
+						positions[k], 
+						mstar_pos_dict[k], 
+						old_astar_pos=astar_pos_dict[k], 
+						is_valid_action=valid_action_dict[k],
+					)
 				},
 				# 'stats_dict': {
 				# 	"throughput": throughput
@@ -119,8 +140,9 @@ class Primal(MultiAgentEnv):
 		}
 		
 		# print(info)
-		done["__all__"] = False #terminal = all(done.values())
+		done["__all__"] = False #= all(done.values())
 		# rew["__all__"] = np.sum([r for r in step_r.reward.values()])
+		self.last_obs = _obs
 		return obs, rew, done, info
 
 	def render(self,mode='human'):

@@ -6,21 +6,27 @@ import math
 import warnings
 import time
 from environments.primal.od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
-from environments.primal.od_mstar3 import od_mstar
 import sys
 import traceback
 
 try:
     from environments.primal.od_mstar3 import cpp_mstar
-except ImportError:
-    raise ImportError('cpp_mstar not compiled. Please refer to README')
+    USE_Cython_MSTAR = True
+except:
+    print('cpp_mstar not compiled. Please refer to README')
+    USE_Cython_MSTAR = False
+    from environments.primal.od_mstar3 import od_mstar
 try:
     from environments.primal.astarlib3.astarlib import aStar
-
     USE_Cython_ASTAR = True
-except ImportError:
+except:
     USE_Cython_ASTAR = False
-    raise ImportError('cpp_aStar not compiled. Please refer to README. Switched to py-astar automatically')
+    print('cpp_aStar not compiled. Please refer to README. Switched to py-astar automatically')
+
+# USE_Cython_ASTAR = False
+# USE_Cython_MSTAR = False
+# from environments.primal.od_mstar3 import od_mstar
+
 from environments.primal.GroupLock import Lock
 from matplotlib.colors import *
 import imageio
@@ -495,7 +501,15 @@ class World:
                     try:
                         assert (len(free_space1) > 1)
                         random_pos = np.random.choice(len(free_space1))
-                    except AssertionError or ValueError:
+                    except AssertionError:
+                        print('wrong agent')
+                        self.reset_world()
+                        self.init_agents_and_goals()
+                        break_completely = True
+                        if idx == id_list[-1]:
+                            return None
+                        break
+                    except ValueError:
                         print('wrong agent')
                         self.reset_world()
                         self.init_agents_and_goals()
@@ -949,8 +963,13 @@ class MAPFEnv(gym.Env):
             goals.append(goals_dir[i])
         mstar_path = None
         start_time = time.time()
-        # try:
-        #     mstar_path = cpp_mstar.find_path(world, start_positions, goals, inflation, time_limit)
+        try:
+            if USE_Cython_MSTAR:
+                mstar_path = cpp_mstar.find_path(world, start_positions, goals, inflation, time_limit)
+            else:
+                mstar_path = od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=5 * time_limit)
+        except:
+            pass
         # except OutOfTimeError:
         #     # M* timed out
         #     # print("timeout")
@@ -958,24 +977,17 @@ class MAPFEnv(gym.Env):
         #     # print('Start Pos', start_positions)
         #     # print('Goals', goals)
         #     pass
+        # except ValueError:
+        #     pass
         # except NoSolutionError:
         #     # print("nosol????")
         #     # print('World', world)
         #     # print('Start Pos', start_positions)
         #     # print('Goals', goals)
         #     pass
-
-        # except :
-        #     tb = sys.exc_info()[-1]
-        #     # print(traceback.extract_tb(tb, limit=1)[-1][1])
-        #     c_time = time.time() - start_time
-        #     if c_time > time_limit:
-        #         return mstar_path
-
-        #     # print("cpp_mstar crash most likely... trying python mstar instead")
+        # except:
         #     try:
-        #         mstar_path = od_mstar.find_path(world, start_positions, goals,
-        #                                         inflation=inflation, time_limit=5 * time_limit)
+        #         mstar_path = od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=5 * time_limit)
         #     except OutOfTimeError:
         #         # M* timed out
         #         # print("timeout")
@@ -991,25 +1003,6 @@ class MAPFEnv(gym.Env):
         #         pass
         #     except:
         #         print("Unknown bug?!")
-
-        # print("cpp_mstar crash most likely... trying python mstar instead")
-        try:
-            mstar_path = od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=5 * time_limit)
-        except OutOfTimeError:
-            # M* timed out
-            # print("timeout")
-            # print('World', world)
-            # print('Start Pos', start_positions)
-            # print('Goals', goals)
-            pass
-        except NoSolutionError:
-            # print("nosol????")
-            # print('World', world)
-            # print('Start Pos', start_positions)
-            # print('Goals', goals)
-            pass
-        except:
-            print("Unknown bug?!")
 
         return mstar_path
 
