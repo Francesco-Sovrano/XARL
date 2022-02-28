@@ -119,71 +119,73 @@ def getAstarDistanceMap(map: np.array, start: tuple, goal: tuple, isCPython):
             neighbors.add((ax + dx, ay + dy))
         return neighbors
 
-    if not isCPython:
-        # NOTE THAT WE REVERSE THE DIRECTION OF SEARCH SO THAT THE GSCORE WILL BE DISTANCE TO GOAL
-        start, goal = goal, start
-        start, goal = tuple(start), tuple(goal)
-        # The set of nodes already evaluated
-        closedSet = set()
+    if isCPython:
+        try:
+            planner = aStar(array=map)  # where 0 is free space, -1 is obstacle
+            return planner.getAstarDistanceMap(goal)  # should give you the distance map for a given goal
+        except:
+            pass
+    # NOTE THAT WE REVERSE THE DIRECTION OF SEARCH SO THAT THE GSCORE WILL BE DISTANCE TO GOAL
+    start, goal = goal, start
+    start, goal = tuple(start), tuple(goal)
+    # The set of nodes already evaluated
+    closedSet = set()
 
-        # The set of currently discovered nodes that are not evaluated yet.
-        # Initially, only the start node is known.
-        openSet = set()
-        openSet.add(start)
+    # The set of currently discovered nodes that are not evaluated yet.
+    # Initially, only the start node is known.
+    openSet = set()
+    openSet.add(start)
 
-        # For each node, which node it can most efficiently be reached from.
-        # If a node can be reached from many nodes, cameFrom will eventually contain the
-        # most efficient previous step.
-        cameFrom = dict()
+    # For each node, which node it can most efficiently be reached from.
+    # If a node can be reached from many nodes, cameFrom will eventually contain the
+    # most efficient previous step.
+    cameFrom = dict()
 
-        # For each node, the cost of getting from the start node to that node.
-        gScore = dict()  # default value infinity
+    # For each node, the cost of getting from the start node to that node.
+    gScore = dict()  # default value infinity
 
-        # The cost of going from start to start is zero.
-        gScore[start] = 0
+    # The cost of going from start to start is zero.
+    gScore[start] = 0
 
-        # For each node, the total cost of getting from the start node to the goal
-        # by passing by that node. That value is partly known, partly heuristic.
-        fScore = dict()  # default infinity
+    # For each node, the total cost of getting from the start node to the goal
+    # by passing by that node. That value is partly known, partly heuristic.
+    fScore = dict()  # default infinity
 
-        # our heuristic is euclidean distance to goal
-        heuristic_cost_estimate = lambda x, y: math.hypot(x[0] - y[0], x[1] - y[1])
+    # our heuristic is euclidean distance to goal
+    heuristic_cost_estimate = lambda x, y: math.hypot(x[0] - y[0], x[1] - y[1])
 
-        # For the first node, that value is completely heuristic.
-        fScore[start] = heuristic_cost_estimate(start, goal)
+    # For the first node, that value is completely heuristic.
+    fScore[start] = heuristic_cost_estimate(start, goal)
 
-        while len(openSet) != 0:
-            # current = the node in openSet having the lowest fScore value
-            current = lowestF(fScore, openSet)
+    while len(openSet) != 0:
+        # current = the node in openSet having the lowest fScore value
+        current = lowestF(fScore, openSet)
 
-            openSet.remove(current)
-            closedSet.add(current)
-            for neighbor in getNeighbors(current):
-                if neighbor in closedSet:
-                    continue  # Ignore the neighbor which is already evaluated.
+        openSet.remove(current)
+        closedSet.add(current)
+        for neighbor in getNeighbors(current):
+            if neighbor in closedSet:
+                continue  # Ignore the neighbor which is already evaluated.
 
-                if neighbor not in openSet:  # Discover a new node
-                    openSet.add(neighbor)
+            if neighbor not in openSet:  # Discover a new node
+                openSet.add(neighbor)
 
-                # The distance from start to a neighbor
-                # in our case the distance between is always 1
-                tentative_gScore = gScore[current] + 1
-                if tentative_gScore >= gScore.get(neighbor, 2 ** 31 - 1):
-                    continue  # This is not a better path.
+            # The distance from start to a neighbor
+            # in our case the distance between is always 1
+            tentative_gScore = gScore[current] + 1
+            if tentative_gScore >= gScore.get(neighbor, 2 ** 31 - 1):
+                continue  # This is not a better path.
 
-                # This path is the best until now. Record it!
-                cameFrom[neighbor] = current
-                gScore[neighbor] = tentative_gScore
-                fScore[neighbor] = gScore[neighbor] + heuristic_cost_estimate(neighbor, goal)
+            # This path is the best until now. Record it!
+            cameFrom[neighbor] = current
+            gScore[neighbor] = tentative_gScore
+            fScore[neighbor] = gScore[neighbor] + heuristic_cost_estimate(neighbor, goal)
 
-                # parse through the gScores
-        Astar_map = map.copy()
-        for (i, j) in gScore:
-            Astar_map[i, j] = gScore[i, j]
-        return Astar_map
-    else:
-        planner = aStar(array=map)  # where 0 is free space, -1 is obstacle
-        return planner.getAstarDistanceMap(goal)  # should give you the distance map for a given goal
+            # parse through the gScores
+    Astar_map = map.copy()
+    for (i, j) in gScore:
+        Astar_map[i, j] = gScore[i, j]
+    return Astar_map
 
 
 class Agent:

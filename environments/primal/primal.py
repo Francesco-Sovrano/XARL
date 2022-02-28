@@ -84,14 +84,14 @@ class Primal(MultiAgentEnv):
 		if standing_on_goal:
 			return 1
 		if not is_valid_action:
-			return -1
+			return -0.01
 		return 0
 
 	# Executes an action by an agent
 	def step(self, action_dict):
 		# print(list(action_dict.keys()), list(self.last_obs.keys()))
 		valid_action_dict = {
-			k: action_dict[k] in self._env.listValidActions(k, self.last_obs[k])
+			k: action_dict.get(k,0) in self._env.listValidActions(k, self.last_obs[k])
 			for k in self._agent_ids
 		}
 		# print(action_dict[1])
