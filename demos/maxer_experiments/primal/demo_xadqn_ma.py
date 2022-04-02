@@ -13,7 +13,7 @@ from xarl.agents.xadqn import XADQNTrainer, XADQN_DEFAULT_CONFIG
 from environments import *
 from xarl.models.dqn import TFAdaptiveMultiHeadDQN as TFAdaptiveMultiHeadNet
 from ray.rllib.models import ModelCatalog
-from xarl.models.head_generator.primal_adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
 # Register the models to use.
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
@@ -24,7 +24,7 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 SELECT_ENV = "Primal"
 
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 9
+NUM_AGENTS = 8
 
 CONFIG = XADQN_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
@@ -38,14 +38,19 @@ CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatl
 	'IsDiagonal': False,
 	'frozen_steps': 0,
 	'isOneShot': False,
+	"time_limit": 5, # max. number of seconds to wait for getting an answer from M*
 }
 CONFIG.update({
-	"horizon": 2**10, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	"horizon": 256, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
+		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "adaptive_multihead_network",
 	},
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
+	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
+	###########################
 	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
 	"train_batch_size": 2**8, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
 	# "batch_mode": "truncate_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
@@ -65,12 +70,12 @@ CONFIG.update({
 	# },
 	# 'timesteps_per_iteration': 10000,
 	###########################
-	"grad_clip": None, # no need of gradient clipping with huber loss
+	# "grad_clip": None, # no need of gradient clipping with huber loss
 	"dueling": True,
 	"double_q": True,
 	"num_atoms": 21,
-	# "v_max": 2**5,
-	# "v_min": -1,
+	"v_max": NUM_AGENTS*2,
+	"v_min": 0,
 	"clip_rewards": False,
 	##################################
 	"buffer_options": {
@@ -134,9 +139,9 @@ if not CENTRALISED_TRAINING:
 	def policy_mapping_fn(agent_id):
 			return f'agent-{agent_id}'
 else:
-	policy_graphs[f'centralised_agent'] = gen_policy()
+	policy_graphs['centralised_agent'] = gen_policy()
 	def policy_mapping_fn(agent_id):
-			return f'centralised_agent'
+			return 'centralised_agent'
 
 CONFIG.update({
 	"multiagent": {

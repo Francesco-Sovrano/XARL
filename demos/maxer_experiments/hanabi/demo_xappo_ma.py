@@ -22,30 +22,35 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 # SELECT_ENV = "CescoDrive-V1"
 # SELECT_ENV = "GraphDrive-Hard"
 # SELECT_ENV = "GridDrive-Hard"
-SELECT_ENV = "Primal"
+SELECT_ENV = "hanabi_v4"
 
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 16
+NUM_AGENTS = 5
 
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
-CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
-	'seed': 42,
-	'num_agents': NUM_AGENTS,
-	'observation_size': 11,
-	'num_future_steps': 3,
-	'env_size': 20, 
-	'wall_components': 20,
-	'obstacle_density': 0.3,
-	'IsDiagonal': False,
-	'frozen_steps': 0,
-	'isOneShot': False,
-	"time_limit": 5, # max. number of seconds to wait for getting an answer from M*
+CONFIG["env_config"] = { # https://www.pettingzoo.ml/classic/hanabi
+	'colors':5, 
+	'players':min(5,max(2,NUM_AGENTS)), 
+	'hand_size':5, 
+	'max_information_tokens':8, 
+	'max_life_tokens':3, 
+	'observation_type':1
 }
+# CONFIG["env_config"] = { 
+# 	'n_pistons': 8, 
+# 	'time_penalty': -0.1,
+# 	'continuous': True,
+# 	'random_drop': True,
+# 	'random_rotate': True,
+# 	'ball_mass': 0.75,
+# 	'ball_friction': 0.3,
+# 	'ball_elasticity': 1.5,
+# 	'max_cycles': 125
+# }
 CONFIG.update({
 	"horizon": 256, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
-		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "adaptive_multihead_network",
 	},
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
@@ -77,7 +82,7 @@ CONFIG.update({
 		'cluster_prioritisation_strategy': 'sum', # Whether to select which cluster to replay in a prioritised fashion -- Options: None; 'sum', 'avg', 'weighted_avg'.
 		'cluster_prioritization_alpha': 1, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'cluster_level_weighting': True, # Whether to use only cluster-level information to compute importance weights rather than the whole buffer.
-		'clustering_xi': 3, # Let X be the minimum cluster's size, and C be the number of clusters, and q be clustering_xi, then the cluster's size is guaranteed to be in [X, X+(q-1)CX], with q >= 1, when all clusters have reached the minimum capacity X. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
+		'clustering_xi': 4, # Let X be the minimum cluster's size, and C be the number of clusters, and q be clustering_xi, then the cluster's size is guaranteed to be in [X, X+(q-1)CX], with q >= 1, when all clusters have reached the minimum capacity X. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
 		# 'clip_cluster_priority_by_max_capacity': False, # Whether to clip the clusters priority so that the 'cluster_prioritisation_strategy' will not consider more elements than the maximum cluster capacity.
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},

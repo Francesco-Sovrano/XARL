@@ -126,13 +126,41 @@ def train(trainer_class, config, environment_class, test_every_n_step=None, stop
 	agent = trainer_class(config, env=environment_class)
 	# # Inspect the trained policy and model, to see the results of training in detail
 	# policy = agent.get_policy()
-	# model = policy.model
-	# if hasattr(model, 'base_model'):
-	# 	print(model.base_model.summary())
-	# if hasattr(model, 'q_value_head'):
-	# 	print(model.q_value_head.summary())
-	# if hasattr(model, 'heads_model'):
-	# 	print(model.heads_model.summary())
+	# if not policy:
+	# 	policy_list = [
+	# 		agent.get_policy(policy_id)
+	# 		for policy_id in config["multiagent"]["policies"].keys()
+	# 	]
+	# else:
+	# 	policy_list = [policy]
+	# for i,policy in enumerate(policy_list):
+	# 	model = policy.model
+	# 	print(f'Members of model of agent with ID {i}:', dir(model))
+	# 	if hasattr(model, 'action_space'):
+	# 		print('#'*10)
+	# 		print(f'action_space of agent with ID {i}:')
+	# 		print(model.action_space)
+	# 		print('#'*10)
+	# 	if hasattr(model, 'obs_space'):
+	# 		print('#'*10)
+	# 		print(f'obs_space of agent with ID {i}:')
+	# 		print(model.obs_space)
+	# 		print('#'*10)
+	# 	if hasattr(model, 'base_model'):
+	# 		print('#'*10)
+	# 		print(f'base_model of agent with ID {i}:')
+	# 		print(model.base_model.summary())
+	# 		print('#'*10)
+	# 	if hasattr(model, 'q_value_head'):
+	# 		print('#'*10)
+	# 		print(f'q_value_head of agent with ID {i}:')
+	# 		print(model.q_value_head.summary())
+	# 		print('#'*10)
+	# 	if hasattr(model, 'heads_model'):
+	# 		print('#'*10)
+	# 		print(f'heads_model of agent with ID {i}:')
+	# 		print(model.heads_model.summary())
+	# 		print('#'*10)
 	# Start training
 	n = 0
 	sample_steps = 0

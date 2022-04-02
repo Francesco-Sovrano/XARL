@@ -9,6 +9,7 @@ from environments.primal.od_mstar3.col_set_addition import OutOfTimeError, NoSol
 import sys
 import traceback
 
+############################################
 try:
     from environments.primal.od_mstar3 import cpp_mstar
     USE_Cython_MSTAR = True
@@ -16,16 +17,17 @@ except:
     print('cpp_mstar not compiled. Please refer to README')
     USE_Cython_MSTAR = False
     from environments.primal.od_mstar3 import od_mstar
+# USE_Cython_MSTAR = False # Cython MSTAR causes random crashes, see https://github.com/marmotlab/PRIMAL2/issues/6
+# from environments.primal.od_mstar3 import od_mstar
+############################################
 try:
     from environments.primal.astarlib3.astarlib import aStar
     USE_Cython_ASTAR = True
 except:
     USE_Cython_ASTAR = False
     print('cpp_aStar not compiled. Please refer to README. Switched to py-astar automatically')
-
 # USE_Cython_ASTAR = False
-# USE_Cython_MSTAR = False
-# from environments.primal.od_mstar3 import od_mstar
+############################################
 
 from environments.primal.GroupLock import Lock
 from matplotlib.colors import *
@@ -80,10 +82,10 @@ def get_key(dict, value):
     return [k for k, v in dict.items() if v == value]
 
 
-def getAstarDistanceMap(map: np.array, start: tuple, goal: tuple, isCPython):
+def getAstarDistanceMap(m: np.array, start: tuple, goal: tuple, isCPython):
     """
     returns a numpy array of same dims as map with the distance to the goal from each coord
-    :param map: a n by m np array, where -1 denotes obstacle
+    :param m: a n by m np array, where -1 denotes obstacle
     :param start: start_position
     :param goal: goal_position
     :return: optimal distance map
@@ -111,19 +113,20 @@ def getAstarDistanceMap(map: np.array, start: tuple, goal: tuple, isCPython):
             dy = direction[1]
             ax = node[0]
             ay = node[1]
-            if (ax + dx >= map.shape[0] or ax + dx < 0 or ay + dy >= map.shape[
+            if (ax + dx >= m.shape[0] or ax + dx < 0 or ay + dy >= m.shape[
                 1] or ay + dy < 0):  # out of bounds
                 continue
-            if map[ax + dx, ay + dy] == -1:  # collide with static obstacle
+            if m[ax + dx, ay + dy] == -1:  # collide with static obstacle
                 continue
             neighbors.add((ax + dx, ay + dy))
         return neighbors
 
     if isCPython:
         try:
-            planner = aStar(array=map)  # where 0 is free space, -1 is obstacle
+            planner = aStar(array=m)  # where 0 is free space, -1 is obstacle
             return planner.getAstarDistanceMap(goal)  # should give you the distance map for a given goal
         except:
+            print('planner.getAstarDistanceMap failed!')
             pass
     # NOTE THAT WE REVERSE THE DIRECTION OF SEARCH SO THAT THE GSCORE WILL BE DISTANCE TO GOAL
     start, goal = goal, start
@@ -182,7 +185,7 @@ def getAstarDistanceMap(map: np.array, start: tuple, goal: tuple, isCPython):
             fScore[neighbor] = gScore[neighbor] + heuristic_cost_estimate(neighbor, goal)
 
             # parse through the gScores
-    Astar_map = map.copy()
+    Astar_map = m.copy()
     for (i, j) in gScore:
         Astar_map[i, j] = gScore[i, j]
     return Astar_map
@@ -967,9 +970,9 @@ class MAPFEnv(gym.Env):
         start_time = time.time()
         try:
             if USE_Cython_MSTAR:
-                mstar_path = cpp_mstar.find_path(world, start_positions, goals, inflation, time_limit)
+                mstar_path = cpp_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=time_limit)
             else:
-                mstar_path = od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=5 * time_limit)
+                mstar_path = od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=time_limit)
         except:
             pass
         # except OutOfTimeError:

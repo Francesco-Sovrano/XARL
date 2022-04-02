@@ -136,6 +136,7 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 						'mean': v_mean,
 						'mean+std': v_mean+v_std,
 					})
+				# print(key, min(value_list))
 				stats_dict["min"] = min(stats_dict["min"], min(value_list))
 				stats_dict["max"] = max(stats_dict["max"], max(value_list))
 				x[key].append(last_step)
@@ -311,23 +312,36 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 	}
 	for k in ["episode_reward_mean","episode_reward_max","episode_reward_min","episode_len_mean"]:
 		obj[k] = val_dict[k] 
-	default_learner = val_dict["info"]["learner"].get("default_policy", val_dict["info"]["learner"].get("centralised_agent", {}))
-	obj.update({
-		k:v 
-		for k,v in default_learner.items()
-		if isinstance(v, numbers.Number)
-	})
-	if 'buffer' in val_dict:
-		default_buffer = val_dict["buffer"].get("default_policy", val_dict["buffer"].get("centralised_agent", {}))
+
+	if "multiagent" in val_dict["config"] and "policies" in val_dict["config"]["multiagent"]:
+		agent_names = list(val_dict["config"]["multiagent"]["policies"].keys())
+		for agent_id in agent_names:
+			for k in ["policy_reward_mean","policy_reward_max","policy_reward_min"]:
+				obj[f'{agent_id}_{k}'] = val_dict[k].get(agent_id,0)
+			obj[f"{agent_id}_policy_reward_median"] = np.median(np.median(val_dict["hist_stats"].get(f"policy_{agent_id}_reward",[0]), axis=-1))
+	else:
+		agent_names = ["default_policy"]
+
+	get_label = (lambda i,x: f"{i}_{x}") if len(agent_names) > 1 else (lambda i,x: x)
+	for agent_id in agent_names:
+		default_learner = val_dict["info"]["learner"].get(agent_id, {})
+		obj.update({
+			get_label(agent_id,k): v 
+			for k,v in default_learner.items()
+			if isinstance(v, numbers.Number)
+		})
+		if 'buffer' not in val_dict:
+			continue
+		default_buffer = val_dict["buffer"].get(agent_id, {})
 		if 'cluster_capacity' in default_buffer:
 			obj.update({
-				f'capacity_{k}':v 
+				f'capacity_{get_label(agent_id,k)}':v 
 				for k,v in default_buffer['cluster_capacity'].items()
 				if isinstance(v, numbers.Number)
 			})
 		if 'cluster_priority' in default_buffer:
 			obj.update({
-				f'priority_{k}':v 
+				f'priority_{get_label(agent_id,k)}':v 
 				for k,v in default_buffer['cluster_priority'].items()
 				if isinstance(v, numbers.Number)
 			})

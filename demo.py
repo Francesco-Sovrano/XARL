@@ -108,21 +108,21 @@ if isinstance(env,MultiAgentEnv):
 		def policy_mapping_fn(agent_id):
 				return f'agent-{agent_id}'
 	else:
-		policy_graphs[f'centralised_agent'] = gen_policy()
+		policy_graphs['centralised_agent'] = gen_policy()
 		def policy_mapping_fn(agent_id):
-				return f'centralised_agent'
-	CONFIG.update({
-		"multiagent": {
-			"policies": policy_graphs,
-			"policy_mapping_fn": policy_mapping_fn,
-			# Which metric to use as the "batch size" when building a
-			# MultiAgentBatch. The two supported values are:
-			# env_steps: Count each time the env is "stepped" (no matter how many
-			#   multi-agent actions are passed/how many multi-agent observations
-			#   have been returned in the previous step).
-			# agent_steps: Count each individual agent step as one step.
-			"count_steps_by": "agent_steps",
-		},
+				return 'centralised_agent'
+	if not "multiagent" in CONFIG:
+		CONFIG["multiagent"] = {}	
+	CONFIG["multiagent"].update({
+		"policies": policy_graphs,
+		"policy_mapping_fn": policy_mapping_fn,
+		# Which metric to use as the "batch size" when building a
+		# MultiAgentBatch. The two supported values are:
+		# env_steps: Count each time the env is "stepped" (no matter how many
+		#   multi-agent actions are passed/how many multi-agent observations
+		#   have been returned in the previous step).
+		# agent_steps: Count each individual agent step as one step.
+		"count_steps_by": "agent_steps",
 	})
 print('Config:', CONFIG)
 

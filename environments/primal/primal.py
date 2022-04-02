@@ -22,8 +22,8 @@ class Primal(MultiAgentEnv):
 	def preprocess_observation_dict(obs_dict):
 		return {
 			k: {
-				'map': state,
-				'goal': vector,
+				'cnn': state,
+				'fc': vector,
 			}
 			for k,(state,vector) in obs_dict.items()
 		}
@@ -31,8 +31,8 @@ class Primal(MultiAgentEnv):
 	@property
 	def observation_space(self) -> gym.spaces.Space:
 		return gym.spaces.Dict({
-			'map': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
-			'goal': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
+			'cnn': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
+			'fc': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
 		})
 
 	@property
@@ -56,6 +56,7 @@ class Primal(MultiAgentEnv):
 		self.IsDiagonal = config.get('IsDiagonal',False)
 		self.frozen_steps = config.get('frozen_steps',0)
 		self.isOneShot = config.get('isOneShot',False)
+		self.time_limit = config.get('time_limit',5)
 		
 		self._env = Primal2Env(observer=self.observer, map_generator=self.map_generator, num_agents=self.num_agents, IsDiagonal=self.IsDiagonal, frozen_steps=self.frozen_steps, isOneShot=self.isOneShot)
 		self._agent_ids = list(range(1, self.num_agents + 1))
@@ -83,8 +84,8 @@ class Primal(MultiAgentEnv):
 	def get_reward(self, standing_on_goal, is_valid_action):
 		if standing_on_goal:
 			return 1
-		if not is_valid_action:
-			return -0.01
+		# if not is_valid_action:
+		# 	return -0.01
 		return 0
 
 	# Executes an action by an agent
@@ -96,11 +97,11 @@ class Primal(MultiAgentEnv):
 		}
 		# print(action_dict[1])
 		astar_pos_dict = {
-			# i: self._env.expert_until_first_goal(agent_ids=[i])[0][0]
+			# i: self._env.expert_until_first_goal(agent_ids=[i], time_limit=self.time_limit)[0][0]
 			i: None
 			for i in self._agent_ids
 		}
-		path_list = self._env.expert_until_first_goal(agent_ids=self._agent_ids)
+		path_list = self._env.expert_until_first_goal(agent_ids=self._agent_ids, time_limit=self.time_limit)
 		mstar_pos_dict = {
 			i: path_list[e][0] if path_list and len(path_list) == len(self._agent_ids) else None
 			for e,i in enumerate(self._agent_ids)
@@ -111,8 +112,8 @@ class Primal(MultiAgentEnv):
 
 		# print('qwqw', step_r.obs[0].shape)
 		done = {
-			k: False
-			# k: not valid_action_dict[k] #self._env.world.getDone(k) 
+			# k: False
+			k: (not valid_action_dict[k]) or self._env.isStandingOnGoal[k]
 			for k in obs.keys()
 		}
 
@@ -140,7 +141,7 @@ class Primal(MultiAgentEnv):
 		}
 		
 		# print(info)
-		done["__all__"] = False #= all(done.values())
+		done["__all__"] = all(done.values())
 		# rew["__all__"] = np.sum([r for r in step_r.reward.values()])
 		self.last_obs = _obs
 		return obs, rew, done, info

@@ -8,3 +8,5 @@ ale-py==0.7.1
 #flatland-rl==2.2.1
 #pyhumps==3.0.2
 gym[atari]==0.18.0
+#gfootball==2.10.2
+#pettingzoo[classic]==1.17.0
