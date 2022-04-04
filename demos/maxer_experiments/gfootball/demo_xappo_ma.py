@@ -17,29 +17,29 @@ from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model
 # Register the models to use.
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
-# SELECT_ENV = "Taxi-v3"
-# SELECT_ENV = "ToyExample-V0"
-# SELECT_ENV = "CescoDrive-V1"
-# SELECT_ENV = "GraphDrive-Hard"
-# SELECT_ENV = "GridDrive-Hard"
-# SELECT_ENV = "Primal"
-SELECT_ENV = "Shepherd"
+SELECT_ENV = "gfootball"
 
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 5
+NUM_AGENTS = 3
 
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
-	'num_dogs': NUM_AGENTS,
-	'num_sheep': 25,
-	'dog_sense_radius': 30, #float('inf'), # set it to None for full observability
-	'map_sparsity': 5,
+	'num_agents': NUM_AGENTS,
+	'number_of_left_players_agent_controls': NUM_AGENTS,
+	'env_name': 'test_example_multiagent', 
+	'stacked': False,
+	'logdir': os.environ["TUNE_RESULT_DIR"],
+	'write_goal_dumps': False, 
+	'write_full_episode_dumps': False, 
+	'render': False,
+	'dump_frequency': 0,
+	'channel_dimensions': (42, 42)
 }
 CONFIG.update({
-	"horizon": 2**10, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	"horizon": 256, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	"model": { # this is for GraphDrive and GridDrive
 		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-		"custom_model": "adaptive_multihead_network"
+		"custom_model": "adaptive_multihead_network",
 	},
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
@@ -49,10 +49,30 @@ CONFIG.update({
 	"replay_proportion": 4, # Set a p>0 to enable experience replay. Saved samples will be replayed with a p:1 proportion to new data samples.
 	"replay_buffer_num_slots": 2**9, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).	
 	###################################
+	# 'lambda': 0.95,
+	# 'kl_coeff': 0.2,
+	# 'clip_rewards': False,
+	# 'vf_clip_param': 10.0,
+	# 'entropy_coeff': 0.01,
+	# 'train_batch_size': 2000,
+	# 'sample_batch_size': 100,
+	# 'sgd_minibatch_size': 500,
+	# 'num_sgd_iter': 10,
+	# 'num_workers': 10,
+	# 'num_envs_per_worker': 1,
+	# 'batch_mode': 'truncate_episodes',
+	# 'observation_filter': 'NoFilter',
+	# 'vf_share_layers': 'true',
+	# 'num_gpus': 1,
+	# 'lr': 2.5e-4,
+	# 'log_level': 'DEBUG',
+	# 'simple_optimizer': True,
+	###################################
 	"gae_with_vtrace": False, # Useful when default "vtrace" is not active. Formula for computing the advantages: it combines GAE with V-Trace.
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
 	"update_advantages_when_replaying": True, # Whether to recompute advantages when updating priorities.
 	# "learning_starts": 2**12, # How many steps of the model to sample before learning starts. Every batch has size 'rollout_fragment_length' (default is 50).
+	'vtrace': True,
 	##################################
 	"buffer_options": {
 		'priority_id': 'gains', # Which batch column to use for prioritisation. One of the following: gains, advantages, rewards, prev_rewards, action_logp.
@@ -100,7 +120,6 @@ CONFIG.update({
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 	"centralised_buffer": True, # for MARL
 	# 'batch_mode': 'complete_episodes',
-	'vtrace': True,
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 # framework = CONFIG.get("framework","tf")
@@ -123,9 +142,9 @@ if not CENTRALISED_TRAINING:
 	def policy_mapping_fn(agent_id):
 			return f'agent-{agent_id}'
 else:
-	policy_graphs[f'centralised_agent'] = gen_policy()
+	policy_graphs['centralised_agent'] = gen_policy()
 	def policy_mapping_fn(agent_id):
-			return f'centralised_agent'
+			return 'centralised_agent'
 
 CONFIG.update({
 	"multiagent": {
@@ -137,7 +156,7 @@ CONFIG.update({
 		#   multi-agent actions are passed/how many multi-agent observations
 		#   have been returned in the previous step).
 		# agent_steps: Count each individual agent step as one step.
-		# "count_steps_by": "agent_steps",
+		# "count_steps_by": "env_steps",
 	},
 })
 

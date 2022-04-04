@@ -36,6 +36,10 @@ CONFIG["env_config"] = {
 }
 CONFIG.update({
 	"horizon": 2**10, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	"model": { # this is for GraphDrive and GridDrive
+		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+		"custom_model": "adaptive_multihead_network"
+	},
 	"centralised_buffer": True, # for MARL
 	"replay_integral_multi_agent_batches": True, # for MARL, set this to True for MADDPG and QMIX
 
@@ -140,7 +144,7 @@ CONFIG.update({
 		#   multi-agent actions are passed/how many multi-agent observations
 		#   have been returned in the previous step).
 		# agent_steps: Count each individual agent step as one step.
-		"count_steps_by": "agent_steps",
+		# "count_steps_by": "agent_steps",
 	}),
 })
 

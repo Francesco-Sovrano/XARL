@@ -38,6 +38,10 @@ CONFIG.update({
 	"horizon": 2**10, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "centralised_buffer": True, # for MARL
 	# "replay_integral_multi_agent_batches": True, # for MARL, set this to True for MADDPG and QMIX
+	"model": { # this is for GraphDrive and GridDrive
+		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+		"custom_model": "adaptive_multihead_network"
+	},
 
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	# "gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.

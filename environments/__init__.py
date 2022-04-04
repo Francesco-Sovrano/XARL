@@ -26,6 +26,10 @@ register_env("pistonball_v6", lambda config: ParallelPettingZooEnv(pistonball_v6
 from pettingzoo.classic import hanabi_v4
 register_env("hanabi_v4", lambda config: PettingZooEnv(hanabi_v4.env(**config)))
 
+### GFootball
+from environments.gfootball_env import RllibGFootball
+register_env('gfootball', lambda config: RllibGFootball(config))
+
 ### Primal
 from environments.primal.primal import Primal
 register_env("Primal", lambda config: Primal(config))

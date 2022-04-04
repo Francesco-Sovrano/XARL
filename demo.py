@@ -122,7 +122,7 @@ if isinstance(env,MultiAgentEnv):
 		#   multi-agent actions are passed/how many multi-agent observations
 		#   have been returned in the previous step).
 		# agent_steps: Count each individual agent step as one step.
-		"count_steps_by": "agent_steps",
+		# "count_steps_by": "env_steps",
 	})
 print('Config:', CONFIG)
 

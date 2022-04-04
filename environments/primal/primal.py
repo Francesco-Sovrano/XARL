@@ -22,8 +22,8 @@ class Primal(MultiAgentEnv):
 	def preprocess_observation_dict(obs_dict):
 		return {
 			k: {
-				'cnn': state,
-				'fc': vector,
+				'map': state,
+				'goal': vector,
 			}
 			for k,(state,vector) in obs_dict.items()
 		}
@@ -31,8 +31,8 @@ class Primal(MultiAgentEnv):
 	@property
 	def observation_space(self) -> gym.spaces.Space:
 		return gym.spaces.Dict({
-			'cnn': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
-			'fc': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
+			'map': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
+			'goal': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
 		})
 
 	@property

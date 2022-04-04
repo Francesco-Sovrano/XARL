@@ -970,7 +970,7 @@ class MAPFEnv(gym.Env):
         start_time = time.time()
         try:
             if USE_Cython_MSTAR:
-                mstar_path = cpp_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=time_limit)
+                mstar_path = cpp_mstar.find_path(world, start_positions, goals, inflation, time_limit)
             else:
                 mstar_path = od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=time_limit)
         except:
