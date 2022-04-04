@@ -23,8 +23,8 @@ pip install -U pip setuptools wheel
 # echo 'Installing env Shepherd..'
 # pip install -r environments/shepherd/requirements.txt
 
-echo 'Installing env GFootball..'
-pip install -r environments/gfootball/requirements.txt
+# echo 'Installing env GFootball..'
+# pip install -r environments/gfootball/requirements.txt
 
 echo 'Installing env PettingZoo..'
 pip install -r environments/petting_zoo/requirements.txt

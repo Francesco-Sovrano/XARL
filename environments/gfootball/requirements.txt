@@ -1,2 +1,1 @@
 gfootball==2.10.2
-#git+https://github.com/google-research/football.git
