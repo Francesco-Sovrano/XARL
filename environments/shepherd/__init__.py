@@ -9,7 +9,7 @@ def build_env_with_agent_groups(env_class, config):
 	act_space = gym.spaces.Tuple([env.action_space]*config.get('num_agents',1))
 	return env.with_agent_groups(grouping, obs_space=obs_space, act_space=act_space)
 
-### Primal
-from environments.primal.primal import Primal
-register_env("Primal", lambda config: Primal(config))
-register_env("Primal-Group", lambda config: build_env_with_agent_groups(Primal,config))
+### Shepherd
+from environments.shepherd.env import ShepherdEnv as Shepherd
+register_env("Shepherd", lambda config: Shepherd(config))
+register_env("Shepherd-Group", lambda config: build_env_with_agent_groups(Shepherd,config))

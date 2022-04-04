@@ -20,10 +20,13 @@ class Primal(MultiAgentEnv):
 
 	@staticmethod
 	def preprocess_observation_dict(obs_dict):
+		# for k,(state,vector) in obs_dict.items():
+		# 	print(state.shape)
+		# 	print(np.array(vector).shape)
 		return {
 			k: {
-				'map': state,
-				'goal': vector,
+				'map': np.array(state, dtype=np.float32),
+				'goal': np.array(vector, dtype=np.float32),
 			}
 			for k,(state,vector) in obs_dict.items()
 		}
