@@ -302,7 +302,7 @@ def get_length_and_line_example(file):
 
 def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 	val_dict = json.loads(line)
-	step = val_dict["info"][step_type] # "num_steps_sampled", "num_steps_trained"
+	step = val_dict["info"][step_type] # "num_steps_sampled", "num_steps_trained", "num_agent_steps_sampled"
 	# obj = {
 	# 	"median cum. reward": np.median(val_dict["hist_stats"]["episode_reward"]),
 	# 	"mean visited roads": val_dict['custom_metrics'].get('visited_junctions_mean',val_dict['custom_metrics'].get('visited_cells_mean',0))
@@ -310,7 +310,7 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 	obj = {
 		"episode_reward_median": np.median(val_dict["hist_stats"]["episode_reward"]),
 	}
-	for k in ["episode_reward_mean","episode_reward_max","episode_reward_min","episode_len_mean"]:
+	for k in ["episode_reward_mean","episode_reward_max","episode_reward_min","episode_len_mean","episodes_total"]:
 		obj[k] = val_dict[k] 
 
 	if "multiagent" in val_dict["config"] and "policies" in val_dict["config"]["multiagent"]:

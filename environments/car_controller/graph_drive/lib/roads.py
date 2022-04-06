@@ -32,12 +32,25 @@ class Road(RoadCell):
 		self.end = end
 		self.edge = (start.pos, end.pos)
 		self.is_connected = False
-		self.is_visited = False
+		self.visiting_dict = {}
 		self.colour = None
 		if connect:
 			self.connect_to_junctions()
 			self.is_connected = True
 
+	def is_visited_by(self, agent, set_to=None):
+		if set_to is not None:
+			self.visiting_dict[agent] = set_to
+		return self.visiting_dict.get(agent,False)
+
+	@property
+	def is_visited(self):
+		return len(self.visiting_dict) > 0 and any(self.visiting_dict.values())
+
+	@is_visited.setter
+	def is_visited(self, value):
+		self.visiting_dict['anonymous'] = value
+	
 	def __eq__(self, other):
 		if not isinstance(other,Road):
 			return False
@@ -66,6 +79,14 @@ class RoadNetwork:
 		self.road_culture = culture
 		self.agent.set_culture(culture)
 		self.road_culture.initialise_random_agent(self.agent)
+
+	@staticmethod
+	def get_closest_junction(junction_list, point):
+		return min(junction_list, key=lambda x: euclidean_distance(x.pos,point))
+
+	@staticmethod
+	def get_furthest_junction(junction_list, point):
+		return max(junction_list, key=lambda x: euclidean_distance(x.pos,point))
 
 	def run_dialogue(self, road, agent, explanation_type="verbose"):
 		"""

@@ -6,8 +6,8 @@ source .env/bin/activate
 # echo 'Update the virtual environment'
 pip install -U pip setuptools wheel psutil
 
-# echo 'Installing env CarController..'
-# pip install -r environments/car_controller/requirements.txt
+echo 'Installing env CarController..'
+pip install -r environments/car_controller/requirements.txt
 
 # echo 'Installing env SpecialAtari..'
 # pip install -r environments/special_atari/requirements.txt
@@ -44,4 +44,4 @@ echo 'Installing XARL..'
 pip install -e ./package # cmake is needed
 
 # echo 'Fixing environments rendering'
-# pip install pyglet==1.5.11 # fix for rendering environments
+pip install pyglet==1.5.11 # fix for rendering environments

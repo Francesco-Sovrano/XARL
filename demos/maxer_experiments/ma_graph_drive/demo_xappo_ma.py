@@ -17,26 +17,51 @@ from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model
 # Register the models to use.
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
-SELECT_ENV = "gfootball"
+# SELECT_ENV = "Taxi-v3"
+# SELECT_ENV = "ToyExample-V0"
+# SELECT_ENV = "CescoDrive-V1"
+# SELECT_ENV = "GraphDrive-Hard"
+# SELECT_ENV = "GridDrive-Hard"
+SELECT_ENV = "MAGraphDrive-Hard"
 
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 3
+NUM_AGENTS = 5
 
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
-	'num_agents': NUM_AGENTS,
-	'number_of_left_players_agent_controls': NUM_AGENTS,
-	'env_name': 'test_example_multiagent', 
-	'stacked': False,
-	'logdir': os.environ["TUNE_RESULT_DIR"],
-	'write_goal_dumps': False, 
-	'write_full_episode_dumps': False, 
-	'render': False,
-	'dump_frequency': 0,
-	'channel_dimensions': (42, 42)
+	'n_agents': NUM_AGENTS,
+	'agent_collision_radius': 0.25,
+	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
+	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
+	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
+	'wheelbase': 0.35, # meters # https://en.wikipedia.org/wiki/Wheelbase
+	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
+	'min_speed': 0.2, # m/s
+	'max_speed': 1.2, # m/s
+	# the fastest car has max_acceleration 9.25 m/s^2 (https://en.wikipedia.org/wiki/List_of_fastest_production_cars_by_acceleration)
+	# the slowest car has max_acceleration 0.7 m/s^2 (http://automdb.com/max_acceleration)
+	'max_acceleration': 1, # m/s^2
+	# the best car has max_deceleration 29.43 m/s^2 (https://www.quora.com/What-can-be-the-maximum-deceleration-during-braking-a-car?share=1)
+	# a normal car has max_deceleration 7.1 m/s^2 (http://www.batesville.k12.in.us/Physics/PhyNet/Mechanics/Kinematics/BrakingDistData.html)
+	'max_deceleration': 7, # m/s^2
+	'max_steering_degree': 45,
+	# max_step = 2**9
+	'max_distance_to_path': 0.5, # meters
+	# min_speed_lower_limit = 0.7 # m/s # used together with max_speed to get the random speed upper limit
+	# max_speed_noise = 0.25 # m/s
+	# max_steering_noise_degree = 2
+	'max_speed_noise': 0, # m/s
+	'max_steering_noise_degree': 0,
+	# multi-road related stuff
+	'max_dimension': 50,
+	'junction_number': 16,
+	'max_roads_per_junction': 4,
+	'junction_radius': 2,
+	'max_normalised_speed': 120,
 }
 CONFIG.update({
 	"horizon": 256, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "adaptive_multihead_network",
@@ -48,25 +73,6 @@ CONFIG.update({
 	"train_batch_size": 2**7, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
 	"replay_proportion": 4, # Set a p>0 to enable experience replay. Saved samples will be replayed with a p:1 proportion to new data samples.
 	"replay_buffer_num_slots": 2**9, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).	
-	###################################
-	# 'lambda': 0.95,
-	# 'kl_coeff': 0.2,
-	# 'clip_rewards': False,
-	# 'vf_clip_param': 10.0,
-	# 'entropy_coeff': 0.01,
-	# 'train_batch_size': 2000,
-	# 'sample_batch_size': 100,
-	# 'sgd_minibatch_size': 500,
-	# 'num_sgd_iter': 10,
-	# 'num_workers': 10,
-	# 'num_envs_per_worker': 1,
-	# 'batch_mode': 'truncate_episodes',
-	# 'observation_filter': 'NoFilter',
-	# 'vf_share_layers': 'true',
-	# 'num_gpus': 1,
-	# 'lr': 2.5e-4,
-	# 'log_level': 'DEBUG',
-	# 'simple_optimizer': True,
 	###################################
 	"gae_with_vtrace": False, # Useful when default "vtrace" is not active. Formula for computing the advantages: it combines GAE with V-Trace.
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
@@ -89,7 +95,7 @@ CONFIG.update({
 		'cluster_prioritisation_strategy': 'sum', # Whether to select which cluster to replay in a prioritised fashion -- Options: None; 'sum', 'avg', 'weighted_avg'.
 		'cluster_prioritization_alpha': 1, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'cluster_level_weighting': True, # Whether to use only cluster-level information to compute importance weights rather than the whole buffer.
-		'clustering_xi': 4, # Let X be the minimum cluster's size, and C be the number of clusters, and q be clustering_xi, then the cluster's size is guaranteed to be in [X, X+(q-1)CX], with q >= 1, when all clusters have reached the minimum capacity X. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
+		'clustering_xi': 3, # Let X be the minimum cluster's size, and C be the number of clusters, and q be clustering_xi, then the cluster's size is guaranteed to be in [X, X+(q-1)CX], with q >= 1, when all clusters have reached the minimum capacity X. This shall help having a buffer reflecting the real distribution of tasks (where each task is associated to a cluster), thus avoiding over-estimation of task's priority.
 		# 'clip_cluster_priority_by_max_capacity': False, # Whether to clip the clusters priority so that the 'cluster_prioritisation_strategy' will not consider more elements than the maximum cluster capacity.
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},

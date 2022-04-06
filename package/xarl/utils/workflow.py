@@ -9,7 +9,9 @@ from io import StringIO
 from contextlib import closing
 from ray.rllib.env.wrappers.atari_wrappers import wrap_deepmind, is_atari
 from ray.rllib.utils.deprecation import DEPRECATED_VALUE
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
+# import json
 
 def test(tester_class, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=5):
 	"""Tests and renders a previously trained model"""
@@ -78,6 +80,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 			raise Exception(f"No compatible render mode (rgb_array,ansi,ascii,human) in {render_modes}.")
 		return filename
 
+	multiagent = isinstance(env, MultiAgentEnv)
 	for episode_id in range(n_episodes):
 		episode_directory = os.path.join(checkpoint_directory, f'episode_{episode_id}')
 		os.mkdir(episode_directory)
@@ -87,25 +90,54 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 		sum_reward = 0
 		step = 0
 		done = False
-		state = np.squeeze(env.reset())
-		file_list = [print_screen(screens_directory, step)]
-		while not done:
-			step += 1
-			# action = env.action_space.sample()
-			action = agent.compute_action(state, full_fetch=True, explore=False)
-			state, reward, done, info = env.step(action[0])
-			state = np.squeeze(state)
-			sum_reward += reward
-			file_list.append(print_screen(screens_directory, step))
-			log_list.append(', '.join([
-				f'step: {step}',
-				f'reward: {reward}',
-				f'done: {done}',
-				f'info: {info}',
-				f'action: {action}',
-				f'state: {state}',
-				f'\n\n',
-			]))
+		
+		if multiagent:
+			policy_mapping_fn = config["multiagent"]["policy_mapping_fn"]
+			state_dict = env.reset()
+			# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
+			file_list = [print_screen(screens_directory, step)]
+			while not done:
+				step += 1
+				# action = env.action_space.sample()
+				action_dict = {
+					k: agent.compute_action(v, policy_id=policy_mapping_fn(k), full_fetch=True, explore=False)[0]
+					for k,v in state_dict.items()
+				}
+				# print('action_dict', action_dict)
+				state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
+				done = done_dict['__all__']
+				# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
+				sum_reward += sum(reward_dict.values())
+				file_list.append(print_screen(screens_directory, step))
+				log_list.append(', '.join([
+					f'step: {step}',
+					f'reward: {reward_dict}',
+					f'done: {done_dict}',
+					f'info: {info_dict}',
+					f'action: {action_dict}',
+					f'state: {state_dict}',
+					f'\n\n',
+				]))
+		else:
+			state = np.squeeze(env.reset())
+			file_list = [print_screen(screens_directory, step)]
+			while not done:
+				step += 1
+				# action = env.action_space.sample()
+				action = agent.compute_action(state, full_fetch=True, explore=False)
+				state, reward, done, info = env.step(action[0])
+				state = np.squeeze(state)
+				sum_reward += reward
+				file_list.append(print_screen(screens_directory, step))
+				log_list.append(', '.join([
+					f'step: {step}',
+					f'reward: {reward}',
+					f'done: {done}',
+					f'info: {info}',
+					f'action: {action}',
+					f'state: {state}',
+					f'\n\n',
+				]))
 		with open(episode_directory + f'/episode_{step}_{sum_reward}.log', 'w') as f:
 			f.writelines(log_list)
 		if save_gif:
@@ -175,6 +207,7 @@ def train(trainer_class, config, environment_class, test_every_n_step=None, stop
 			test(trainer_class, config, environment_class, checkpoint)
 		except Exception as e:
 			print(e)
+		
 	while sample_steps < stop_training_after_n_step:
 		n += 1
 		last_time = time.time()

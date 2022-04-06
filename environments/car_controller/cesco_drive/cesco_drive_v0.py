@@ -295,7 +295,7 @@ class CescoDriveV0(gym.Env):
 		return [state, reward, terminal, info_dict]
 		
 	def has_collided_obstacle(self, old_car_point, car_point, obstacle):
-		return segment_collide_circle(circle=obstacle, segment=(old_car_point, car_point))
+		return segment_collide_circle(segment=(old_car_point, car_point), circle=obstacle)
 		
 	def get_reward(self, car_speed, car_point, old_car_point, car_progress, car_position, obstacles):
 		max_distance_to_path = self.max_distance_to_path
