@@ -857,6 +857,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		for a in self.agent_list:
 			seed = a.seed(seed)[0]
 		self.np_random, _ = seeding.np_random(seed)
+		self.seed = seed
 		return [seed]
 
 	def __init__(self, config=None):
@@ -903,6 +904,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 
 	def reset(self):
 		self.culture.np_random = self.np_random
+		self.culture.seed = self.seed
 		# print(0, self.np_random.random())
 		self.is_over = False
 		###########################

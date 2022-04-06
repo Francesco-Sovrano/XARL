@@ -46,7 +46,7 @@ class TFAdaptiveMultiHeadNet:
 					TFModelV2: The TFModelV2 policy sub-model.
 				"""
 
-				model = APPOTFAdaptiveMultiHeadNet(
+				model = APPOTFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input)(
 					obs_space,
 					self.action_space,
 					num_outputs,

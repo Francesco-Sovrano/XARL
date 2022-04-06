@@ -17,11 +17,6 @@ from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model
 # Register the models to use.
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
-# SELECT_ENV = "Taxi-v3"
-# SELECT_ENV = "ToyExample-V0"
-# SELECT_ENV = "CescoDrive-V1"
-# SELECT_ENV = "GraphDrive-Hard"
-# SELECT_ENV = "GridDrive-Hard"
 SELECT_ENV = "MAGraphDrive-Hard"
 
 CENTRALISED_TRAINING = True
@@ -60,8 +55,9 @@ CONFIG["env_config"] = {
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
-	"horizon": 256, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	"centralised_buffer": True, # for MARL
 	"model": { # this is for GraphDrive and GridDrive
 		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "adaptive_multihead_network",
@@ -124,7 +120,6 @@ CONFIG.update({
 	"cluster_overview_size": 1, # cluster_overview_size <= train_batch_size. If None, then cluster_overview_size is automatically set to train_batch_size. -- When building a single train batch, do not sample a new cluster before x batches are sampled from it. The closer cluster_overview_size is to train_batch_size, the faster is the batch sampling procedure.
 	"collect_cluster_metrics": False, # Whether to collect metrics about the experience clusters. It consumes more resources.
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
-	"centralised_buffer": True, # for MARL
 	# 'batch_mode': 'complete_episodes',
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks

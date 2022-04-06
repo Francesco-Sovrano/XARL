@@ -11,8 +11,9 @@ import copy
 class RoadCulture(Culture):
 	starting_argument_id = 0
 
-	def __init__(self, np_random=None):
+	def __init__(self, np_random=None, seed=None):
 		self.np_random = np.random if np_random is None else np_random
+		self.seed = seed
 		super().__init__()
 
 	def initialise_random_agent(self, agent: RoadAgent):
@@ -66,13 +67,13 @@ class RoadCulture(Culture):
 		return (min_speed, max_speed)
 
 class EasyRoadCulture(RoadCulture):
-	def __init__(self, road_options=None, agent_options=None, np_random=None):
+	def __init__(self, road_options=None, agent_options=None, np_random=None, seed=None):
 		if road_options is None: road_options = {}
 		if agent_options is None: agent_options = {}
 		self.road_options = road_options
 		self.agent_options = agent_options
 		self.ids = {}
-		super().__init__(np_random)
+		super().__init__(np_random, seed)
 		self.name = "Easy Road Culture"
 		# Properties of the culture with their default values go in self.properties.
 		self.properties = {"Motorway": False,
@@ -157,13 +158,13 @@ class EasyRoadCulture(RoadCulture):
 #######################
 
 class MediumRoadCulture(RoadCulture):
-	def __init__(self, road_options=None, agent_options=None, np_random=None):
+	def __init__(self, road_options=None, agent_options=None, np_random=None, seed=None):
 		if road_options is None: road_options = {}
 		if agent_options is None: agent_options = {}
 		self.road_options = road_options
 		self.agent_options = agent_options
 		self.ids = {}
-		super().__init__(np_random)
+		super().__init__(np_random, seed)
 		self.name = "Medium Road Culture"
 		# Properties of the culture with their default values go in self.properties.
 		self.properties = {"Motorway": False,
@@ -344,13 +345,13 @@ class MediumRoadCulture(RoadCulture):
 #####################
 
 class HardRoadCulture(RoadCulture):
-	def __init__(self, road_options=None, agent_options=None, np_random=None):
+	def __init__(self, road_options=None, agent_options=None, np_random=None, seed=None):
 		if road_options is None: road_options = {}
 		if agent_options is None: agent_options = {}
 		self.road_options = road_options
 		self.agent_options = agent_options
 		self.ids = {}
-		super().__init__(np_random)
+		super().__init__(np_random, seed)
 		self.name = "Hard Road Culture"
 		# Properties of the culture with their default values go in self.properties.
 		self.properties = {"Motorway": False,

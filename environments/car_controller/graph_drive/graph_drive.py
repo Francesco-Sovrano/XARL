@@ -86,6 +86,7 @@ class GraphDrive(gym.Env):
 
 	def seed(self, seed=None):
 		logger.warning(f"Setting random seed to: {seed}")
+		self.seed = seed
 		self.np_random, _ = seeding.np_random(seed)
 		return [seed]
 
@@ -193,6 +194,7 @@ class GraphDrive(gym.Env):
 	
 	def reset(self):
 		self.culture.np_random = self.np_random
+		self.culture.seed = self.seed
 		# print(0, self.np_random.random())
 		self.is_over = False
 		self._step = 0

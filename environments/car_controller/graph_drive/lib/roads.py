@@ -180,7 +180,7 @@ class RoadNetwork:
 			"radius": self.min_junction_distance, # "Nodes will not be placed within this distance of each other."
 			"double": 0, # "Probability of an edge being doubled."
 			"hair": 0, # "Adjustment factor to favour dead-end nodes.  Ranges from 0.00 (least hairy) to 1.00 (most hairy).  Some dead-ends may exist even with a low hair factor."
-			"seed": self.road_culture.np_random.get_state()[1][0], # "Seed for the random number generator."
+			"seed": self.road_culture.seed, # "Seed for the random number generator."
 			"debug_trimode": 'conform', # ['pyhull', 'triangle', 'conform'], "Triangulation mode to generate the initial triangular graph.  Default is conform.")
 			"debug_tris": None, # "If a filename is specified here, the initial triangular graph will be saved as a graph for inspection."
 			"debug_span": None, # "If a filename is specified here, the spanning tree will be saved as a graph for inspection."

@@ -9,24 +9,20 @@ from ray.tune.registry import get_trainable_cls, _global_registry, ENV_CREATOR
 import time
 from xarl.utils.workflow import train
 
-from xarl.agents.xaddpg import XADDPGTrainer, XADDPG_DEFAULT_CONFIG
+from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
-from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG as TFAdaptiveMultiHeadNet
+from xarl.models.sac import TFAdaptiveMultiHeadNet
 from ray.rllib.models import ModelCatalog
 from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
 # Register the models to use.
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
-# SELECT_ENV = "Taxi-v3"
-# SELECT_ENV = "ToyExample-V0"
-# SELECT_ENV = "GridDrive-Hard"
-# SELECT_ENV = "SpecialBreakoutNoFrameskip-v4"
-SELECT_ENV = "MAGraphDrive-Hard"
 
+SELECT_ENV = "MAGraphDrive-Hard"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 5
 
-CONFIG = XADDPG_DEFAULT_CONFIG.copy()
+CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'n_agents': NUM_AGENTS,
 	'agent_collision_radius': 0.25,
@@ -66,24 +62,25 @@ CONFIG.update({
 		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "adaptive_multihead_network"
 	},
+	"normalize_actions": False,
 
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
-	"rollout_fragment_length": 1, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
+	###########################
+	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
 	"train_batch_size": 2**8, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
-	# "batch_mode": "truncate_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
+	# "batch_mode": "complete_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	###########################
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
 	'buffer_size': 2**14, # Size of the experience buffer. Default 50000
 	"prioritized_replay_alpha": 0.6,
-	"prioritized_replay_beta": 0.4, # The smaller, the stronger is over-sampling
+	"prioritized_replay_beta": 0.4, # The smaller this is, the stronger is over-sampling
 	"prioritized_replay_eps": 1e-6,
 	"learning_starts": 2**14, # How many steps of the model to sample before learning starts.
 	###########################
-	# "tau": 1e-4, # The smaller tau, the lower the value over-estimation, the higher the bias
-	# "grad_clip": 40, # This prevents giant gradients and so improves robustness
-	# "l2_reg": 1e-6, # This mitigates over-fitting
+	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
+	"tau": 1e-4,
 	##################################
 	"buffer_options": {
 		'priority_id': 'td_errors', # Which batch column to use for prioritisation. Default is inherited by DQN and it is 'td_errors'. One of the following: rewards, prev_rewards, td_errors.
@@ -169,4 +166,4 @@ CONFIG.update({
 ray.shutdown()
 ray.init(ignore_reinit_error=True, include_dashboard=False)
 
-train(XADDPGTrainer, CONFIG, SELECT_ENV, test_every_n_step=1e7, stop_training_after_n_step=4e7)
+train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7, stop_training_after_n_step=4e7)
