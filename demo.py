@@ -89,14 +89,15 @@ NUM_AGENTS = int(float(sys.argv[6]))
 if len(sys.argv) > 7:
 	print('Updating options..')
 	OPTIONS = json.loads(' '.join(sys.argv[7:]))
-	print('New options:', CONFIG)
+	print('Old options:', CONFIG)
+	print('New options:', json.dumps(OPTIONS, indent=4))
 	CONFIG.update(OPTIONS)
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 
 # Setup MARL training strategy: centralised or decentralised
 env = _global_registry.get(ENV_CREATOR, ENVIRONMENT)(CONFIG["env_config"])
 if isinstance(env,MultiAgentEnv):
-	print('Is MultiAgentEnv')
+	print('Is MultiAgentEnv', env)
 	obs_space = env.observation_space
 	act_space = env.action_space
 	def gen_policy():

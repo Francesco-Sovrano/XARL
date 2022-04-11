@@ -55,8 +55,8 @@ CONFIG["env_config"] = {
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
-	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	"horizon": 2**8, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	"no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"centralised_buffer": True, # for MARL
 	"model": { # this is for GraphDrive and GridDrive
 		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
@@ -102,9 +102,9 @@ CONFIG.update({
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
 	"clustering_scheme": [ # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
-		'Who',
+		# 'Who',
 		'How_Well',
-		'Why',
+		# 'Why',
 		# 'Where',
 		# 'What',
 		# 'How_Many'
@@ -156,7 +156,7 @@ CONFIG.update({
 		#   multi-agent actions are passed/how many multi-agent observations
 		#   have been returned in the previous step).
 		# agent_steps: Count each individual agent step as one step.
-		"count_steps_by": "agent_steps",
+		# "count_steps_by": "agent_steps",
 	},
 })
 

@@ -42,39 +42,41 @@ class GraphDriveAgent:
 		self.obs_car_features = len(self.culture.agent_properties) - 1  # Number of binary CAR features in Hard Culture (excluded speed)
 		# Spaces
 		self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)  # steering angle and speed
+		state_dict = {
+			"road_view": gym.spaces.Box( # Closest road to the agent (the one it's driving on), sorted by relative position
+				low= -1,
+				high= 1,
+				shape= (
+					2 + 2 + self.obs_road_features + 1, # road properties: road.start.pos + road.end.pos + road.af_features + road.is_new_road
+				),
+				dtype=np.float32
+			),
+			"junction_view": gym.spaces.Box( # Roads directly connected to the closest road to the agent (the one it's driving on), sorted by relative position
+				low= -1,
+				high= 1,
+				shape= ( # closest junctions view
+					2, # junctions attached to the current road
+					self.env_config['max_roads_per_junction'], # maximum number of roads per junction
+					2 + 2 + self.obs_road_features + 1,  # road properties: road.start.pos + road.end.pos + road.af_features + road.is_new_road
+				),
+				dtype=np.float32
+			),
+			"agent_features": gym.spaces.Box( # Agent features
+				low= -1,
+				high= 1,
+				shape= (self.agent_state_size + self.obs_car_features,),
+				dtype=np.float32
+			),
+		}
+		if self.n_of_other_agents > 0:
+			state_dict["neighbourhood_view"] = gym.spaces.Box( # Agent features
+				low= -1,
+				high= 1,
+				shape= (self.n_of_other_agents, 2 + self.agent_state_size + self.obs_car_features), # for each other possible agent give position + heading vector + features with no access to state
+				dtype=np.float32
+			)
 		self.observation_space = gym.spaces.Dict({
-			"fc": gym.spaces.Dict({
-				"road_view": gym.spaces.Box( # Closest road to the agent (the one it's driving on), sorted by relative position
-					low= -1,
-					high= 1,
-					shape= (
-						2 + 2 + self.obs_road_features + 1, # road properties: road.start.pos + road.end.pos + road.af_features + road.is_new_road
-					),
-					dtype=np.float32
-				),
-				"junction_view": gym.spaces.Box( # Roads directly connected to the closest road to the agent (the one it's driving on), sorted by relative position
-					low= -1,
-					high= 1,
-					shape= ( # closest junctions view
-						2, # junctions attached to the current road
-						self.env_config['max_roads_per_junction'], # maximum number of roads per junction
-						2 + 2 + self.obs_road_features + 1,  # road properties: road.start.pos + road.end.pos + road.af_features + road.is_new_road
-					),
-					dtype=np.float32
-				),
-				"agent_features": gym.spaces.Box( # Agent features
-					low= -1,
-					high= 1,
-					shape= (self.agent_state_size + self.obs_car_features,),
-					dtype=np.float32
-				),
-				"neighbourhood_view": gym.spaces.Box( # Agent features
-					low= -1,
-					high= 1,
-					shape= (self.n_of_other_agents, 2 + self.agent_state_size + self.obs_car_features), # for each other possible agent give position + heading vector + features with no access to state
-					dtype=np.float32
-				),
-			}),
+			"fc": gym.spaces.Dict(state_dict),
 		})
 
 	def initialise(self, car_point, agent_id, road_network, other_agent_list):
@@ -118,16 +120,18 @@ class GraphDriveAgent:
 		# print('road_view', road_view.shape, road_view.dtype)
 		# print('junction_view', junction_view.shape, junction_view.dtype)
 		# print('neighbourhood_view', neighbourhood_view.shape, neighbourhood_view.dtype)
+		state_dict = {
+			"road_view": road_view,
+			"junction_view": junction_view,
+			"agent_features": np.array([
+				*self.get_agent_state(),
+				*self.agent_id.binary_features(as_tuple=True), 
+			], dtype=np.float32)
+		}
+		if self.n_of_other_agents > 0:
+			state_dict["neighbourhood_view"] = neighbourhood_view
 		return {
-			"fc": {
-				"road_view": road_view,
-				"junction_view": junction_view,
-				"agent_features": np.array([
-					*self.get_agent_state(),
-					*self.agent_id.binary_features(as_tuple=True), 
-				], dtype=np.float32),
-				"neighbourhood_view": neighbourhood_view,
-			}
+			"fc": state_dict
 		}	
 
 	def get_agent_state(self):
@@ -924,10 +928,12 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 				self.road_network, 
 				self.agent_list[:uid]+self.agent_list[uid+1:]
 			)
-		return {
+		initial_state_dict = {
 			uid: agent.reset()
 			for uid,agent in enumerate(self.agent_list)
 		}
+		# print(initial_state_dict)
+		return initial_state_dict
 
 	def step(self, action_dict):
 		state_dict, reward_dict, terminal_dict, info_dict = {}, {}, {}, {}
@@ -936,7 +942,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 				continue
 			s, r, t, i = agent.step(action_dict[uid])
 			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = s, r, t, i
-		terminal_dict['__all__'] = all(terminal_dict)
+		terminal_dict['__all__'] = all(terminal_dict.values())
 		# print(action_dict, terminal_dict)
 		return state_dict, reward_dict, terminal_dict, info_dict
 			
@@ -1001,9 +1007,9 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		max_length = max(d-c, b-a)
 		ax.set_xlim([a,a+max_length])
 		ax.set_ylim([c,c+max_length])
-		# Build legend
-		handles = [car_handle, path1_handle, path2_handle, path3_handle, path4_handle, path5_handle]
-		ax.legend(handles=handles)
+		# # Build legend
+		# handles = [car_handle, path1_handle, path2_handle, path3_handle, path4_handle, path5_handle]
+		# ax.legend(handles=handles)
 		# Draw plot
 		# figure.suptitle(' '.join([
 		# 	# f'[Angle]{np.rad2deg(self.steering_angle):.2f}°', 

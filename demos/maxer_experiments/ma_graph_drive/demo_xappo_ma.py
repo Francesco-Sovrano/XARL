@@ -56,7 +56,7 @@ CONFIG["env_config"] = {
 }
 CONFIG.update({
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	"no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"centralised_buffer": True, # for MARL
 	"model": { # this is for GraphDrive and GridDrive
 		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
