@@ -96,7 +96,7 @@ if len(sys.argv) > 7:
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 
 # Setup MARL training strategy: centralised or decentralised
-env = _global_registry.get(ENV_CREATOR, SELECT_ENV)(CONFIG["env_config"])
+env = _global_registry.get(ENV_CREATOR, ENVIRONMENT)(CONFIG["env_config"])
 obs_space = env.observation_space
 act_space = env.action_space
 if not CENTRALISED_TRAINING:
