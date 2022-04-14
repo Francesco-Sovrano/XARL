@@ -8,24 +8,25 @@ import ray
 from ray.tune.registry import get_trainable_cls, _global_registry, ENV_CREATOR
 import time
 from xarl.utils.workflow import train
+from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
 from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
-from xarl.models.sac import TFAdaptiveMultiHeadNet
+# from xarl.models.sac import TFAdaptiveMultiHeadNet
 from ray.rllib.models import ModelCatalog
-from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+# from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
 # Register the models to use.
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
+# ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
 
-SELECT_ENV = "MAGraphDrive-Hard"
+SELECT_ENV = "MAGraphDrive-Easy"
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 5
+NUM_AGENTS = 1
 
 CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'n_agents': NUM_AGENTS,
-	'agent_collision_radius': 0.25,
+	'agent_collision_radius': None,
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
 	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
@@ -49,23 +50,21 @@ CONFIG["env_config"] = {
 	'max_steering_noise_degree': 0,
 	# multi-road related stuff
 	'max_dimension': 50,
-	'junction_number': 16,
+	'junction_number': 32,
 	'max_roads_per_junction': 4,
-	'junction_radius': 2,
+	'junction_radius': 1,
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
-	"horizon": 2**8, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"centralised_buffer": True, # for MARL
-	"model": { # this is for GraphDrive and GridDrive
-		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-		"custom_model": "adaptive_multihead_network"
-	},
+	# "model": { # this is for GraphDrive and GridDrive
+	# 	"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+	# 	"custom_model": "adaptive_multihead_network"
+	# },
 	"normalize_actions": False,
 
-	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
-	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
 	###########################
 	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
@@ -104,7 +103,7 @@ CONFIG.update({
 	"clustering_scheme": [ # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
 		# 'Who',
 		'How_Well',
-		# 'Why',
+		'Why',
 		# 'Where',
 		# 'What',
 		# 'How_Many'
@@ -133,32 +132,41 @@ CONFIG["callbacks"] = CustomEnvironmentCallbacks
 env = _global_registry.get(ENV_CREATOR, SELECT_ENV)(CONFIG["env_config"])
 obs_space = env.observation_space
 act_space = env.action_space
-def gen_policy():
-	return (None, obs_space, act_space, {})
-policy_graphs = {}
 if not CENTRALISED_TRAINING:
-	for i in range(NUM_AGENTS):
-		policy_graphs[f'agent-{i}'] = gen_policy()
-	def policy_mapping_fn(agent_id):
-			return f'agent-{agent_id}'
+	policy_graphs = {
+		f'agent-{i}': (None, obs_space, act_space, CONFIG) 
+		for i in range(NUM_AGENTS)
+	}
+	policy_mapping_fn = lambda agent_id: f'agent-{agent_id}'
 else:
-	policy_graphs[f'centralised_agent'] = gen_policy()
-	def policy_mapping_fn(agent_id):
-			return f'centralised_agent'
+	# policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
+	policy_graphs = {}
+	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
 
-CONFIG.update({
-	"multiagent": {
-		"policies": policy_graphs,
-		"policy_mapping_fn": policy_mapping_fn,
-		# Which metric to use as the "batch size" when building a
-		# MultiAgentBatch. The two supported values are:
-		# env_steps: Count each time the env is "stepped" (no matter how many
-		#   multi-agent actions are passed/how many multi-agent observations
-		#   have been returned in the previous step).
-		# agent_steps: Count each individual agent step as one step.
-		# "count_steps_by": "agent_steps",
-	},
+CONFIG["multiagent"].update({
+	"policies": policy_graphs,
+	"policy_mapping_fn": policy_mapping_fn,
+	# # Optional list of policies to train, or None for all policies.
+	# "policies_to_train": None,
+	# # Optional function that can be used to enhance the local agent
+	# # observations to include more state.
+	# # See rllib/evaluation/observation_function.py for more info.
+	# "observation_fn": None,
+	# # When replay_mode=lockstep, RLlib will replay all the agent
+	# # transitions at a particular timestep together in a batch. This allows
+	# # the policy to implement differentiable shared computations between
+	# # agents it controls at that timestep. When replay_mode=independent,
+	# # transitions are replayed independently per policy.
+	# "replay_mode": "independent",
+	# # Which metric to use as the "batch size" when building a
+	# # MultiAgentBatch. The two supported values are:
+	# # env_steps: Count each time the env is "stepped" (no matter how many
+	# #   multi-agent actions are passed/how many multi-agent observations
+	# #   have been returned in the previous step).
+	# # agent_steps: Count each individual agent step as one step.
+	# "count_steps_by": "env_steps",
 })
+print('Config:', CONFIG)
 
 ####################################################################################
 ####################################################################################
@@ -166,4 +174,4 @@ CONFIG.update({
 ray.shutdown()
 ray.init(ignore_reinit_error=True, include_dashboard=False)
 
-train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7, stop_training_after_n_step=4e7)
+train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7//10, stop_training_after_n_step=4e7)

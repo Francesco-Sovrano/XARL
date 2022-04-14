@@ -4,7 +4,8 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from environments import *
 
 env_config = {
-	'n_agents': 5,
+	'n_agents': 3,
+	'agent_collision_radius': None,
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
 	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
@@ -28,9 +29,9 @@ env_config = {
 	'max_steering_noise_degree': 0,
 	# multi-road related stuff
 	'max_dimension': 50,
-	'junction_number': 16,
+	'junction_number': 32,
 	'max_roads_per_junction': 4,
-	'junction_radius': 2,
+	'junction_radius': 1,
 	'max_normalised_speed': 120,
 }
 env = MultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": "Hard", **env_config})
@@ -53,14 +54,14 @@ def run_one_episode (env):
 			sum_reward += sum(reward_dict.values())
 			done = done_dict['__all__']
 			env.render()
-			time.sleep(0.25)
+			time.sleep(0.5)
 	else:
 		while not done:
 			action = env.action_space.sample()
 			state, reward, done, info = env.step(action)
 			sum_reward += reward
 			env.render()
-			time.sleep(0.25)
+			time.sleep(0.5)
 	return sum_reward
 
 sum_reward = run_one_episode(env)

@@ -79,7 +79,7 @@ class GraphDriveAgent:
 			"fc": gym.spaces.Dict(state_dict),
 		})
 
-	def initialise(self, car_point, agent_id, road_network, other_agent_list):
+	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
 		self.road_network = road_network
 		self.other_agent_list = other_agent_list
@@ -96,7 +96,6 @@ class GraphDriveAgent:
 		# self.speed = self.env_config['min_speed']+(self.env_config['max_speed']-self.env_config['min_speed'])*(70/120) # for testing
 		self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
 
-	def reset(self):
 		self.last_closest_road = None
 		self.goal_junction = None
 		self.current_road_speed_list = []
@@ -104,22 +103,18 @@ class GraphDriveAgent:
 		self.last_reward = 0
 		self.last_reward_type = 'move_forward'
 		self.last_action_mask = None
-		self.last_state = self.get_state(car_point=self.car_point, car_orientation=self.car_orientation)
-		# init log variables
-		self.cumulative_reward = 0
-		self.sum_speed = 0
-		return self.last_state
 
 	@property
 	def normalised_speed(self):
 		# return (self.speed-self.env_config['min_speed']*0.9)/(self.env_config['max_speed']-self.env_config['min_speed']*0.9) # in (0,1]
 		return self.speed/self.env_config['max_speed'] # in (0,1]
 
-	def get_state(self, car_point, car_orientation):
+	def get_state(self, car_point=None, car_orientation=None):
+		if car_point is None:
+			car_point=self.car_point
+		if car_orientation is None:
+			car_orientation=self.car_orientation
 		road_view, junction_view, neighbourhood_view = self.get_view(car_point, car_orientation)
-		# print('road_view', road_view.shape, road_view.dtype)
-		# print('junction_view', junction_view.shape, junction_view.dtype)
-		# print('neighbourhood_view', neighbourhood_view.shape, neighbourhood_view.dtype)
 		state_dict = {
 			"road_view": road_view,
 			"junction_view": junction_view,
@@ -147,6 +142,8 @@ class GraphDriveAgent:
 		return (np.clip(p[0]/self.env_config['map_size'][0],-1,1), np.clip(p[1]/self.env_config['map_size'][1],-1,1))
 
 	def colliding_with_other_agent(self, old_car_point, car_point):
+		if not self.env_config['agent_collision_radius']:
+			return False
 		for agent in self.other_agent_list:
 			if segment_collide_circle(segment=(old_car_point, car_point), circle=(agent.car_point,self.env_config['agent_collision_radius'])):
 				return True
@@ -189,7 +186,6 @@ class GraphDriveAgent:
 			]*(self.env_config['max_roads_per_junction']-len(j.roads_connected))
 			for j,_ in sorted_junction_rpos_list
 		], dtype=np.float32)
-		# print(junction_view.shape)
 		##### Get neighbourhood view
 		visible_road_set = set((
 			road.id
@@ -253,7 +249,7 @@ class GraphDriveAgent:
 	def get_step_seconds(self):
 		return self.np_random.exponential(scale=self.env_config['mean_seconds_per_step']) if self.env_config['random_seconds_per_step'] is True else self.env_config['mean_seconds_per_step']
 
-	def step(self, action_vector):
+	def start_step(self, action_vector):
 		# first of all, get the seconds passed from last step
 		self.seconds_per_step = self.get_step_seconds()
 		# compute new steering angle
@@ -294,32 +290,17 @@ class GraphDriveAgent:
 			self.goal_junction = RoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
 			self.current_road_speed_list = []
 		self.current_road_speed_list.append(self.speed)
+		return visiting_new_road, old_goal_junction, old_car_point
+
+	def end_step(self, visiting_new_road, old_goal_junction, old_car_point):
 		# compute perceived reward
 		reward, dead, reward_type = self.reward_fn(visiting_new_road, old_goal_junction, old_car_point)
 		# compute new state (after updating progress)
-		state = self.get_state(
-			car_point=self.car_point, 
-			car_orientation=self.car_orientation,
-		)
+		state = self.get_state()
 		# update last action/state/reward
-		self.last_state = state
 		self.last_reward = reward
 		self.last_reward_type = reward_type
-		# update cumulative reward
-		self.cumulative_reward += reward
-		self.sum_speed += self.speed
-		# update step
-		# self._step += 1
-		# out_of_time = self._step >= self.max_step
-		# terminal = dead or out_of_time
 		info_dict = {'explanation':{'why':reward_type}}
-		# if terminal: # populate statistics
-		# 	self.is_over = True
-		# 	info_dict["stats_dict"] = {
-		# 		"avg_speed": self.sum_speed/self._step,
-		# 		"out_of_time": 1 if out_of_time else 0,
-		# 		"visited_junctions": len(self.visited_junctions),
-		# 	}
 		return [state, reward, dead, info_dict]
 			
 	def get_info(self):
@@ -858,11 +839,11 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 	metadata = {'render.modes': ['human', 'rgb_array']}
 	
 	def seed(self, seed=None):
-		for a in self.agent_list:
-			seed = a.seed(seed)[0]
-		self.np_random, _ = seeding.np_random(seed)
-		self.seed = seed
-		return [seed]
+		for i,a in enumerate(self.agent_list):
+			seed = a.seed(seed+i)[0]
+		self.seed = seed-1
+		self.np_random, _ = seeding.np_random(self.seed)
+		return [self.seed]
 
 	def __init__(self, config=None):
 		self.env_config = config
@@ -909,8 +890,6 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 	def reset(self):
 		self.culture.np_random = self.np_random
 		self.culture.seed = self.seed
-		# print(0, self.np_random.random())
-		self.is_over = False
 		###########################
 		self.road_network = MultiAgentRoadNetwork(
 			self.culture, 
@@ -922,28 +901,29 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		self.road_network.set(self.env_config['junction_number'])
 		starting_point_list = self.road_network.get_random_starting_point_list(n=self.n_agents)
 		for uid,agent in enumerate(self.agent_list):
-			agent.initialise(
+			agent.reset(
 				starting_point_list[uid], 
 				self.road_network.agent_list[uid], 
 				self.road_network, 
 				self.agent_list[:uid]+self.agent_list[uid+1:]
 			)
+		# get_state is gonna use information about all agents, so initialize them first
 		initial_state_dict = {
-			uid: agent.reset()
+			uid: agent.get_state()
 			for uid,agent in enumerate(self.agent_list)
 		}
-		# print(initial_state_dict)
 		return initial_state_dict
 
 	def step(self, action_dict):
 		state_dict, reward_dict, terminal_dict, info_dict = {}, {}, {}, {}
-		for uid,agent in enumerate(self.agent_list):
-			if uid not in action_dict:
-				continue
-			s, r, t, i = agent.step(action_dict[uid])
-			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = s, r, t, i
+		step_info_dict = {
+			uid: self.agent_list[uid].start_step(action)
+			for uid,action in action_dict.items()
+		}
+		# end_step uses information about all agents, this requires all agents to act first and compute rewards and states after everybody acted
+		for uid,step_info in step_info_dict.items():
+			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step(*step_info)
 		terminal_dict['__all__'] = all(terminal_dict.values())
-		# print(action_dict, terminal_dict)
 		return state_dict, reward_dict, terminal_dict, info_dict
 			
 	def get_info(self):
@@ -977,22 +957,8 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		for road in self.road_network.roads:
 			road_pos = list(zip(*(road.start.pos, road.end.pos)))
 			road_colour = "Green" if road.colour is None else road.colour
-			# print("Drawing road {} {}".format(road[0], road[1]))
-			# if road.colour is None:
-			# 	min_speed = self.road_network.road_culture.get_minimum_speed(road, self.agent_id) # None if road is unfeasible
-			# 	can_move = min_speed is not None
-			# 	road.colour = "Green" if can_move else "Red"
-			# road_colour = road.colour
-			# if road_colour == "Green":
-			# 	self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
-			# 	correct_properties, _ = self.road_network.run_dialogue(road, self.agent_id, explanation_type="compact")
-			# 	if not correct_properties:
-			# 		road_colour = "Gold"
-			# line_style = '-.' if road.is_visited_by(self.agent_id) else ('--' if road==self.closest_road else '-')
-			line_style = '--'
+			line_style = '-'
 			path_handle, = ax.plot(road_pos[0], road_pos[1], color=colour_to_hex(road_colour), ls=line_style, lw=2, alpha=0.5, label="Road")
-			# ax.fill_between(road_pos[0], np.array(road_pos[1])+self.env_config['max_distance_to_path'], np.array(road_pos[1])-self.env_config['max_distance_to_path'], alpha=0.1, color=colour_to_hex(road_colour))
-			# ax.fill_between(road_pos[1], np.array(road_pos[0])+self.env_config['max_distance_to_path'], np.array(road_pos[0])-self.env_config['max_distance_to_path'], alpha=0.1, color=colour_to_hex(road_colour))
 
 		path1_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Green"), lw=2, label="OK")
 		path2_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Red"), lw=2, label="Unfeasible")

@@ -18,6 +18,6 @@ class MultiAgentRoadNetwork(RoadNetwork):
 		# print(self.junctions)
 		return [
 			j.pos
-			for j in self.road_culture.np_random.choice(self.junctions, n)
+			for j in self.road_culture.np_random.choice(self.junctions, size=n, replace=False)
 		]
 		

@@ -12,7 +12,7 @@ from ray.rllib.agents.dqn.dqn_tf_policy import DQNTFPolicy, compute_q_values as 
 from ray.rllib.utils.tf_ops import explained_variance as tf_explained_variance
 from ray.rllib.utils.torch_ops import explained_variance as torch_explained_variance
 from ray.rllib.execution.rollout_ops import ParallelRollouts, ConcatBatches
-from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch, DEFAULT_POLICY_ID
+from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch
 from ray.rllib.policy.view_requirement import ViewRequirement
 from ray.rllib.execution.train_ops import TrainOneStep, UpdateTargetNetwork, TrainTFMultiGPU
 from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS

@@ -9,6 +9,7 @@ from ray.tune.registry import get_trainable_cls, _global_registry, ENV_CREATOR
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from xarl.models.head_generator.primal_adaptive_model_wrapper import get_tf_heads_model as get_tf_heads_model_primal, get_heads_input as get_heads_input_primal
 from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
 from environments import *
 
@@ -95,36 +96,43 @@ if len(sys.argv) > 7:
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 
 # Setup MARL training strategy: centralised or decentralised
-env = _global_registry.get(ENV_CREATOR, ENVIRONMENT)(CONFIG["env_config"])
-if isinstance(env,MultiAgentEnv):
-	print('Is MultiAgentEnv', env)
-	obs_space = env.observation_space
-	act_space = env.action_space
-	def gen_policy():
-		return (None, obs_space, act_space, {})
+env = _global_registry.get(ENV_CREATOR, SELECT_ENV)(CONFIG["env_config"])
+obs_space = env.observation_space
+act_space = env.action_space
+if not CENTRALISED_TRAINING:
+	policy_graphs = {
+		f'agent-{i}': (None, obs_space, act_space, CONFIG) 
+		for i in range(NUM_AGENTS)
+	}
+	policy_mapping_fn = lambda agent_id: f'agent-{agent_id}'
+else:
+	# policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
 	policy_graphs = {}
-	if not CENTRALISED_TRAINING:
-		for i in range(NUM_AGENTS):
-			policy_graphs[f'agent-{i}'] = gen_policy()
-		def policy_mapping_fn(agent_id):
-				return f'agent-{agent_id}'
-	else:
-		policy_graphs['centralised_agent'] = gen_policy()
-		def policy_mapping_fn(agent_id):
-				return 'centralised_agent'
-	if not "multiagent" in CONFIG:
-		CONFIG["multiagent"] = {}	
-	CONFIG["multiagent"].update({
-		"policies": policy_graphs,
-		"policy_mapping_fn": policy_mapping_fn,
-		# Which metric to use as the "batch size" when building a
-		# MultiAgentBatch. The two supported values are:
-		# env_steps: Count each time the env is "stepped" (no matter how many
-		#   multi-agent actions are passed/how many multi-agent observations
-		#   have been returned in the previous step).
-		# agent_steps: Count each individual agent step as one step.
-		# "count_steps_by": "env_steps",
-	})
+	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
+
+CONFIG["multiagent"].update({
+	"policies": policy_graphs,
+	"policy_mapping_fn": policy_mapping_fn,
+	# # Optional list of policies to train, or None for all policies.
+	# "policies_to_train": None,
+	# # Optional function that can be used to enhance the local agent
+	# # observations to include more state.
+	# # See rllib/evaluation/observation_function.py for more info.
+	# "observation_fn": None,
+	# # When replay_mode=lockstep, RLlib will replay all the agent
+	# # transitions at a particular timestep together in a batch. This allows
+	# # the policy to implement differentiable shared computations between
+	# # agents it controls at that timestep. When replay_mode=independent,
+	# # transitions are replayed independently per policy.
+	# "replay_mode": "independent",
+	# # Which metric to use as the "batch size" when building a
+	# # MultiAgentBatch. The two supported values are:
+	# # env_steps: Count each time the env is "stepped" (no matter how many
+	# #   multi-agent actions are passed/how many multi-agent observations
+	# #   have been returned in the previous step).
+	# # agent_steps: Count each individual agent step as one step.
+	# "count_steps_by": "env_steps",
+})
 print('Config:', CONFIG)
 
 ####################################################################################

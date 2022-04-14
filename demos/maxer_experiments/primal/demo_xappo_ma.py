@@ -8,6 +8,7 @@ import ray
 from ray.tune.registry import get_trainable_cls, _global_registry, ENV_CREATOR
 import time
 from xarl.utils.workflow import train
+from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
 from xarl.agents.xappo import XAPPOTrainer, XAPPO_DEFAULT_CONFIG
 from environments import *
@@ -44,10 +45,10 @@ CONFIG["env_config"] = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatl
 CONFIG.update({
 	"horizon": 256, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
-	"model": { # this is for GraphDrive and GridDrive
-		"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-		"custom_model": "adaptive_multihead_network",
-	},
+	# "model": { # this is for GraphDrive and GridDrive
+	# 	"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+	# 	"custom_model": "adaptive_multihead_network",
+	# },
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
@@ -121,32 +122,41 @@ CONFIG["callbacks"] = CustomEnvironmentCallbacks
 env = _global_registry.get(ENV_CREATOR, SELECT_ENV)(CONFIG["env_config"])
 obs_space = env.observation_space
 act_space = env.action_space
-def gen_policy():
-	return (None, obs_space, act_space, {})
-policy_graphs = {}
 if not CENTRALISED_TRAINING:
-	for i in range(NUM_AGENTS):
-		policy_graphs[f'agent-{i}'] = gen_policy()
-	def policy_mapping_fn(agent_id):
-			return f'agent-{agent_id}'
+	policy_graphs = {
+		f'agent-{i}': (None, obs_space, act_space, CONFIG) 
+		for i in range(NUM_AGENTS)
+	}
+	policy_mapping_fn = lambda agent_id: f'agent-{agent_id}'
 else:
-	policy_graphs['centralised_agent'] = gen_policy()
-	def policy_mapping_fn(agent_id):
-			return 'centralised_agent'
+	# policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
+	policy_graphs = {}
+	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
 
-CONFIG.update({
-	"multiagent": {
-		"policies": policy_graphs,
-		"policy_mapping_fn": policy_mapping_fn,
-		# Which metric to use as the "batch size" when building a
-		# MultiAgentBatch. The two supported values are:
-		# env_steps: Count each time the env is "stepped" (no matter how many
-		#   multi-agent actions are passed/how many multi-agent observations
-		#   have been returned in the previous step).
-		# agent_steps: Count each individual agent step as one step.
-		# "count_steps_by": "env_steps",
-	},
+CONFIG["multiagent"].update({
+	"policies": policy_graphs,
+	"policy_mapping_fn": policy_mapping_fn,
+	# # Optional list of policies to train, or None for all policies.
+	# "policies_to_train": None,
+	# # Optional function that can be used to enhance the local agent
+	# # observations to include more state.
+	# # See rllib/evaluation/observation_function.py for more info.
+	# "observation_fn": None,
+	# # When replay_mode=lockstep, RLlib will replay all the agent
+	# # transitions at a particular timestep together in a batch. This allows
+	# # the policy to implement differentiable shared computations between
+	# # agents it controls at that timestep. When replay_mode=independent,
+	# # transitions are replayed independently per policy.
+	# "replay_mode": "independent",
+	# # Which metric to use as the "batch size" when building a
+	# # MultiAgentBatch. The two supported values are:
+	# # env_steps: Count each time the env is "stepped" (no matter how many
+	# #   multi-agent actions are passed/how many multi-agent observations
+	# #   have been returned in the previous step).
+	# # agent_steps: Count each individual agent step as one step.
+	# "count_steps_by": "env_steps",
 })
+print('Config:', CONFIG)
 
 ####################################################################################
 ####################################################################################
