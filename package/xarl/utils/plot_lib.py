@@ -314,7 +314,7 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 		obj[k] = val_dict[k] 
 
 	if "multiagent" in val_dict["config"] and "policies" in val_dict["config"]["multiagent"]:
-		agent_names = list(val_dict["config"]["multiagent"]["policies"].keys()) if val_dict["config"]["multiagent"]["policies"] else "default_policy"
+		agent_names = list(val_dict["config"]["multiagent"]["policies"].keys()) if val_dict["config"]["multiagent"]["policies"] else ["default_policy"]
 		for agent_id in agent_names:
 			for k in ["policy_reward_mean","policy_reward_max","policy_reward_min"]:
 				obj[f'{agent_id}_{k}'] = val_dict[k].get(agent_id,0)
