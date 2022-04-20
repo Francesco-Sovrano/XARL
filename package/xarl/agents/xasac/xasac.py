@@ -37,13 +37,13 @@ XASACTorchPolicy = SACTorchPolicy.with_updates(
 	loss_fn=torch_xasac_actor_critic_loss,
 )
 
-########################
-# XADDPG's Execution Plan
-########################
-
-XASACTrainer = SACTrainer.with_updates(
-	name="XASAC", 
-	default_config=XASAC_DEFAULT_CONFIG,
-	execution_plan=xadqn_execution_plan,
-	get_policy_class=lambda config: XASACTorchPolicy if config["framework"] == "torch" else XASACTFPolicy,
-)
+class XASACTrainer(SACTrainer):
+	def get_default_config(cls):
+		return XASAC_DEFAULT_CONFIG
+		
+	@staticmethod
+	def execution_plan(workers, config, **kwargs):
+		return xadqn_execution_plan(workers, config, **kwargs)
+		
+	def get_default_policy_class(self, config):
+		return XASACTorchPolicy if config["framework"] == "torch" else XASACTFPolicy

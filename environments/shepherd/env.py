@@ -17,6 +17,7 @@ class ShepherdEnv(MultiAgentEnv):
         self.save_frames = False
         self.game = ShepherdGame(self.num_dogs, self.num_sheep, render=self.render, save_frames=self.save_frames, dog_sense_radius=self.dog_sense_radius, map_sparsity=self.map_sparsity)
         self.observer = ShepherdObserver(self.game)
+        self._agent_ids = set(range(self.num_dogs))
 
     def reset(self):
         self.game = ShepherdGame(self.num_dogs, self.num_sheep, render=self.render, save_frames=self.save_frames, dog_sense_radius=self.dog_sense_radius, map_sparsity=self.map_sparsity)

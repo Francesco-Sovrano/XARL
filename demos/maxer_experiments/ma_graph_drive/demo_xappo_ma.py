@@ -18,7 +18,7 @@ from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model
 # Register the models to use.
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
-SELECT_ENV = "MAGraphDrive-Hard"
+SELECT_ENV = "MAGraphDrive-Easy"
 
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 5
@@ -142,8 +142,8 @@ if not CENTRALISED_TRAINING:
 	}
 	policy_mapping_fn = lambda agent_id: f'agent-{agent_id}'
 else:
-	# policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
-	policy_graphs = {}
+	policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
+	# policy_graphs = {}
 	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
 
 CONFIG["multiagent"].update({
@@ -167,7 +167,7 @@ CONFIG["multiagent"].update({
 	# #   multi-agent actions are passed/how many multi-agent observations
 	# #   have been returned in the previous step).
 	# # agent_steps: Count each individual agent step as one step.
-	# "count_steps_by": "env_steps",
+	"count_steps_by": "agent_steps",
 })
 print('Config:', CONFIG)
 

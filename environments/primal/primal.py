@@ -55,14 +55,14 @@ class Primal(MultiAgentEnv):
 			wall_components = config.get('wall_components',(3, 8)),
 			obstacle_density = config.get('obstacle_density',(0.5, 0.7)),
 		)
-		self.num_agents = config.get('num_agents',None)
+		self.num_agents = config.get('num_agents',1)
 		self.IsDiagonal = config.get('IsDiagonal',False)
 		self.frozen_steps = config.get('frozen_steps',0)
 		self.isOneShot = config.get('isOneShot',False)
 		self.time_limit = config.get('time_limit',5)
 		
 		self._env = Primal2Env(observer=self.observer, map_generator=self.map_generator, num_agents=self.num_agents, IsDiagonal=self.IsDiagonal, frozen_steps=self.frozen_steps, isOneShot=self.isOneShot)
-		self._agent_ids = list(range(1, self.num_agents + 1))
+		self._agent_ids = set(range(1, self.num_agents + 1))
 	
 	def reset(self):
 		self._env._reset()

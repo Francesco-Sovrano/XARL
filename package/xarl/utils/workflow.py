@@ -178,36 +178,36 @@ def train(trainer_class, config, environment_class, test_every_n_step=None, stop
 			print(f'obs_space of agent with ID {i}:')
 			print(model.obs_space)
 			print('#'*10)
-		if hasattr(model, 'base_model'):
-			print('#'*10)
-			print(f'base_model of agent with ID {i}:')
-			print(model.base_model.summary())
-			print('#'*10)
-		if hasattr(model, 'q_value_head'):
-			print('#'*10)
-			print(f'q_value_head of agent with ID {i}:')
-			print(model.q_value_head.summary())
-			print('#'*10)
-		if hasattr(model, 'heads_model'):
-			print('#'*10)
-			print(f'heads_model of agent with ID {i}:')
-			print(model.heads_model.summary())
-			print('#'*10)
-		if hasattr(model, 'action_model'):
-			print('#'*10)
-			print(f'action_model of agent with ID {i}:')
-			print(model.action_model.summary())
-			print('#'*10)
-		if hasattr(model, 'q_net'):
-			print('#'*10)
-			print(f'q_net of agent with ID {i}:')
-			print(model.q_net.summary())
-			print('#'*10)
-		if hasattr(model, 'twin_q_net'):
-			print('#'*10)
-			print(f'twin_q_net of agent with ID {i}:')
-			print(model.twin_q_net.summary())
-			print('#'*10)
+		# if hasattr(model, 'base_model'):
+		# 	print('#'*10)
+		# 	print(f'base_model of agent with ID {i}:')
+		# 	print(model.base_model.summary())
+		# 	print('#'*10)
+		# if hasattr(model, 'q_value_head'):
+		# 	print('#'*10)
+		# 	print(f'q_value_head of agent with ID {i}:')
+		# 	print(model.q_value_head.summary())
+		# 	print('#'*10)
+		# if hasattr(model, 'heads_model'):
+		# 	print('#'*10)
+		# 	print(f'heads_model of agent with ID {i}:')
+		# 	print(model.heads_model.summary())
+		# 	print('#'*10)
+		# if hasattr(model, 'action_model'):
+		# 	print('#'*10)
+		# 	print(f'action_model of agent with ID {i}:')
+		# 	print(model.action_model.summary())
+		# 	print('#'*10)
+		# if hasattr(model, 'q_net'):
+		# 	print('#'*10)
+		# 	print(f'q_net of agent with ID {i}:')
+		# 	print(model.q_net.summary())
+		# 	print('#'*10)
+		# if hasattr(model, 'twin_q_net'):
+		# 	print('#'*10)
+		# 	print(f'twin_q_net of agent with ID {i}:')
+		# 	print(model.twin_q_net.summary())
+		# 	print('#'*10)
 	# Start training
 	n = 0
 	sample_steps = 0

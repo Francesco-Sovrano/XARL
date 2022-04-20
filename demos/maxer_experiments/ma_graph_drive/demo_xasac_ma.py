@@ -12,11 +12,12 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
 from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
-# from xarl.models.sac import TFAdaptiveMultiHeadNet
-from ray.rllib.models import ModelCatalog
-# from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+
 # Register the models to use.
-# ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
+from xarl.models.sac import TFAdaptiveMultiHeadNet
+from ray.rllib.models import ModelCatalog
+from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
 
 SELECT_ENV = "MAGraphDrive-Easy"
@@ -59,11 +60,11 @@ CONFIG.update({
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"centralised_buffer": True, # for MARL
-	# "model": { # this is for GraphDrive and GridDrive
-	# 	"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-	# 	"custom_model": "adaptive_multihead_network"
-	# },
-	"normalize_actions": False,
+	"model": { # this is for GraphDrive and GridDrive
+		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+		"custom_model": "adaptive_multihead_network"
+	},
+	# "normalize_actions": False,
 
 	"seed": 42, # This makes experiments reproducible.
 	###########################
@@ -164,7 +165,7 @@ CONFIG["multiagent"].update({
 	# #   multi-agent actions are passed/how many multi-agent observations
 	# #   have been returned in the previous step).
 	# # agent_steps: Count each individual agent step as one step.
-	# "count_steps_by": "env_steps",
+	"count_steps_by": "agent_steps",
 })
 print('Config:', CONFIG)
 

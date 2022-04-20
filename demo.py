@@ -106,10 +106,9 @@ if not CENTRALISED_TRAINING:
 	}
 	policy_mapping_fn = lambda agent_id: f'agent-{agent_id}'
 else:
-	# policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
-	policy_graphs = {}
+	policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
+	# policy_graphs = {}
 	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
-
 CONFIG["multiagent"].update({
 	"policies": policy_graphs,
 	"policy_mapping_fn": policy_mapping_fn,
@@ -131,7 +130,7 @@ CONFIG["multiagent"].update({
 	# #   multi-agent actions are passed/how many multi-agent observations
 	# #   have been returned in the previous step).
 	# # agent_steps: Count each individual agent step as one step.
-	# "count_steps_by": "env_steps",
+	"count_steps_by": "agent_steps",
 })
 print('Config:', CONFIG)
 

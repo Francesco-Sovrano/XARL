@@ -8,11 +8,10 @@ https://docs.ray.io/en/master/rllib-algorithms.html#deep-q-networks-dqn-rainbow-
 from more_itertools import unique_everseen
 from ray.rllib.agents.dqn.dqn import calculate_rr_weights, DQNTrainer, Concurrently, StandardMetricsReporting, LEARNER_STATS_KEY, DEFAULT_CONFIG as DQN_DEFAULT_CONFIG
 from ray.rllib.agents.dqn.dqn_torch_policy import DQNTorchPolicy, compute_q_values as torch_compute_q_values, torch, F, FLOAT_MIN
-from ray.rllib.agents.dqn.dqn_tf_policy import DQNTFPolicy, compute_q_values as tf_compute_q_values, tf, _adjust_nstep
-from ray.rllib.utils.tf_ops import explained_variance as tf_explained_variance
-from ray.rllib.utils.torch_ops import explained_variance as torch_explained_variance
+from ray.rllib.agents.dqn.dqn_tf_policy import DQNTFPolicy, compute_q_values as tf_compute_q_values, tf
+from ray.rllib.evaluation.postprocessing import adjust_nstep
 from ray.rllib.execution.rollout_ops import ParallelRollouts, ConcatBatches
-from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch
+from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.view_requirement import ViewRequirement
 from ray.rllib.execution.train_ops import TrainOneStep, UpdateTargetNetwork, TrainTFMultiGPU
 from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
@@ -85,7 +84,7 @@ XADQN_DEFAULT_CONFIG = DQNTrainer.merge_trainer_configs(
 def xa_postprocess_nstep_and_prio(policy, batch, other_agent=None, episode=None):
 	# N-step Q adjustments.
 	if policy.config["n_step"] > 1:
-		_adjust_nstep(policy.config["n_step"], policy.config["gamma"], batch[SampleBatch.CUR_OBS], batch[SampleBatch.ACTIONS], batch[SampleBatch.REWARDS], batch[SampleBatch.NEXT_OBS], batch[SampleBatch.DONES])
+		adjust_nstep(policy.config["n_step"], policy.config["gamma"], batch[SampleBatch.CUR_OBS], batch[SampleBatch.ACTIONS], batch[SampleBatch.REWARDS], batch[SampleBatch.NEXT_OBS], batch[SampleBatch.DONES])
 	if PRIO_WEIGHTS not in batch:
 		batch[PRIO_WEIGHTS] = np.ones_like(batch[SampleBatch.REWARDS])
 	if policy.config["buffer_options"]["priority_id"] == "td_errors":
@@ -105,7 +104,7 @@ XADQNTorchPolicy = DQNTorchPolicy.with_updates(
 # XADQN's Execution Plan
 ########################
 
-def xadqn_execution_plan(workers, config, multiagent=False):
+def xadqn_execution_plan(workers, config, **kwargs): 
 	random.seed(config["seed"])
 	np.random.seed(config["seed"])
 	replay_batch_size = config["train_batch_size"]
@@ -182,14 +181,14 @@ def xadqn_execution_plan(workers, config, multiagent=False):
 			sgd_minibatch_size=config["train_batch_size"],
 			num_sgd_iter=1,
 			num_gpus=config["num_gpus"],
-			shuffle_sequences=True,
+			# shuffle_sequences=True,
 			_fake_gpus=config["_fake_gpus"],
-			framework=config.get("framework"))
+			# framework=config.get("framework"),
+		)
 	concat_batch_dict = {
-		'min_batch_size': replay_batch_size
+		'min_batch_size': replay_batch_size,
+		'count_steps_by': config["multiagent"]["count_steps_by"]
 	}
-	if multiagent:
-		concat_batch_dict['count_steps_by'] = config["multiagent"]["count_steps_by"]
 	replay_op = Replay(
 			local_buffer=local_replay_buffer, 
 			replay_batch_size=replay_batch_size, 
@@ -211,9 +210,13 @@ def xadqn_execution_plan(workers, config, multiagent=False):
 		standard_metrics_reporting = standard_metrics_reporting.for_each(lambda x: add_buffer_metrics(x,local_replay_buffer))
 	return standard_metrics_reporting
 
-XADQNTrainer = DQNTrainer.with_updates(
-	name="XADQN", 
-	default_config=XADQN_DEFAULT_CONFIG,
-	execution_plan=xadqn_execution_plan,
-	get_policy_class=lambda config: XADQNTorchPolicy if config["framework"] == "torch" else XADQNTFPolicy,
-)
+class XADQNTrainer(DQNTrainer):
+	def get_default_config(cls):
+		return XADQN_DEFAULT_CONFIG
+		
+	@staticmethod
+	def execution_plan(workers, config, **kwargs):
+		return xadqn_execution_plan(workers, config, **kwargs)
+		
+	def get_default_policy_class(self, config):
+		return XADQNTorchPolicy if config["framework"] == "torch" else XADQNTFPolicy

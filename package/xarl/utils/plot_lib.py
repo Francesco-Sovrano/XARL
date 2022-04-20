@@ -15,6 +15,7 @@ import matplotlib.colors as mcolors
 from scipy.interpolate import interp1d
 from seaborn import heatmap as seaborn_heatmap  # Heatmap
 
+import pandas as pd
 import numpy as np
 import json
 import numbers
@@ -46,7 +47,7 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 		# Get statistics keys
 		if log["length"] < 2:
 			continue
-		(step, obj) = log["line_example"]
+		(_, obj) = log["line_example"]
 		log_keys = list(obj.keys()) # statistics keys sorted by name
 		for key in log_keys:
 			if key not in key_ids:
@@ -275,98 +276,78 @@ def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_
 	assert len(url_list)==len(name_list), f"url_list (len {len(url_list)}) and name_list (len {len(name_list)}) must have same lenght"
 	logs = []
 	for url,name in zip(url_list,name_list):
-		length, line_example = get_length_and_line_example(url)
+		df = pd.read_csv(url)
+		line_example = df.head()
+		length = len(df)
 		if max_length:
 			length = max_length
 		print(f"{name} has length {length}")
 		logs.append({
 			'name': name, 
-			'data_iter': parse(url, max_i=length, statistics_list=statistics_list, step_type=step_type), 
+			'data_iter': list(parse(df, max_i=length, statistics_list=statistics_list, step_type=step_type)), 
 			'length':length, 
-			'line_example': parse_line(line_example, statistics_list=statistics_list, step_type=step_type)
+			'line_example': parse_line(df.tail(1), statistics_list=statistics_list, step_type=step_type)
 		})
 	line_plot(logs, figure_file, max_plot_size, show_deviation, base_list, base_shared_name, average_non_baselines, buckets_average)
-		
-def get_length_and_line_example(file):
-	try:
-		with open(file, 'r') as lines_generator:
-			tot = 1
-			line_example = next(lines_generator)
-			for line in lines_generator:
-				tot += 1
-				if len(line) > len(line_example):
-					line_example = line
-			return tot, line_example
-	except:
-		return 0, None
 
 def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
-	val_dict = json.loads(line)
-	step = val_dict["info"][step_type] # "num_steps_sampled", "num_steps_trained", "num_agent_steps_sampled"
+	key_list = line.columns.tolist()
+	get_keys = lambda k: list(map(lambda x: x[len(k):], filter(lambda x: x.startswith(k), key_list)))
+	get_element = lambda df, key: df[key].tolist()[0] if key in df else None
+	arrayfy = lambda x: np.array(x[1:-1].split(', '), dtype=np.float32)
+
+	step = get_element(line,f"info/{step_type}") # "num_steps_sampled", "num_steps_trained", "num_agent_steps_sampled"
 	# obj = {
-	# 	"median cum. reward": np.median(val_dict["hist_stats"]["episode_reward"]),
-	# 	"mean visited roads": val_dict['custom_metrics'].get('visited_junctions_mean',val_dict['custom_metrics'].get('visited_cells_mean',0))
+	# 	"median cum. reward": np.median(line["hist_stats"]["episode_reward"]),
+	# 	"mean visited roads": line['custom_metrics'].get('visited_junctions_mean',line['custom_metrics'].get('visited_cells_mean',0))
 	# }
+	# print(get_element(line,"hist_stats/episode_reward"))
+	
 	obj = {
-		"episode_reward_median": np.median(val_dict["hist_stats"]["episode_reward"]),
+		"episode_reward_median": np.median(arrayfy(get_element(line,"hist_stats/episode_reward"))),
 	}
 	for k in ["episode_reward_mean","episode_reward_max","episode_reward_min","episode_len_mean","episodes_total"]:
-		obj[k] = val_dict[k] 
-
-	if "multiagent" in val_dict["config"] and "policies" in val_dict["config"]["multiagent"]:
-		agent_names = list(val_dict["config"]["multiagent"]["policies"].keys()) if val_dict["config"]["multiagent"]["policies"] else ["default_policy"]
+		obj[k] = get_element(line,k)
+	
+	agent_names = get_keys('policy_reward_mean/')
+	if agent_names:
 		for agent_id in agent_names:
 			for k in ["policy_reward_mean","policy_reward_max","policy_reward_min"]:
-				obj[f'{agent_id}_{k}'] = val_dict[k].get(agent_id,0)
-			obj[f"{agent_id}_policy_reward_median"] = np.median(np.median(val_dict["hist_stats"].get(f"policy_{agent_id}_reward",[0]), axis=-1))
+				obj[f'{agent_id}_{k}'] = get_element(line,f"{k}/{agent_id}")
+			obj[f"{agent_id}_policy_reward_median"] = np.median(np.median(arrayfy(get_element(line,f"hist_stats/policy_{agent_id}_reward")), axis=-1))
 	else:
 		agent_names = ["default_policy"]
 
 	get_label = (lambda i,x: f"{i}_{x}") if len(agent_names) > 1 else (lambda i,x: x)
 	for agent_id in agent_names:
-		default_learner = val_dict["info"]["learner"].get(agent_id, {})
+		default_learner_keys = get_keys(f"info/learner/{agent_id}")
 		obj.update({
-			get_label(agent_id,k): v 
-			for k,v in default_learner.items()
-			if isinstance(v, numbers.Number)
+			get_label(agent_id,k): get_element(line,f"info/learner/{agent_id}/{k}")
+			for k in default_learner_keys
+			if isinstance(get_element(line,f"info/learner/{agent_id}/{k}"), numbers.Number)
 		})
-		if 'buffer' not in val_dict:
-			continue
-		default_buffer = val_dict["buffer"].get(agent_id, {})
-		if 'cluster_capacity' in default_buffer:
-			obj.update({
-				f'capacity_{get_label(agent_id,k)}':v 
-				for k,v in default_buffer['cluster_capacity'].items()
-				if isinstance(v, numbers.Number)
-			})
-		if 'cluster_priority' in default_buffer:
-			obj.update({
-				f'priority_{get_label(agent_id,k)}':v 
-				for k,v in default_buffer['cluster_priority'].items()
-				if isinstance(v, numbers.Number)
-			})
-	if "custom_metrics" in val_dict:
+		buffer_keys = get_keys(f"buffer/{agent_id}/")
 		obj.update({
-			f'env_{k}':v 
-			for k,v in val_dict['custom_metrics'].items()
-			if isinstance(v, numbers.Number)
+			k: get_element(line,k)
+			for k in buffer_keys
+			if isinstance(get_element(line,k), numbers.Number)
 		})
+	obj.update({
+		k: get_element(line,k)
+		for k in get_keys("custom_metrics/")
+		if isinstance(get_element(line,k), numbers.Number)
+	})
 	if statistics_list:
 		statistics_list = set(statistics_list)
 		obj = dict(filter(lambda x: x[0] in statistics_list, obj.items()))
 	return (step, obj)
 	
-def parse(log_fname, max_i=None, statistics_list=None, step_type='num_steps_sampled'):
-	with open(log_fname, 'r') as logfile:
-		for i, line in enumerate(logfile):
-			if max_i and i > max_i:
-				return
-			try:
-				yield parse_line(line, i=i, statistics_list=statistics_list, step_type=step_type)
-			except Exception as e:
-				print("exc %s on line %s" % (repr(e), i+1))
-				print("skipping line")
-				continue
+def parse(df, max_i=None, statistics_list=None, step_type='num_steps_sampled'):
+	for i in range(len(df)):
+		if max_i and i > max_i:
+			return
+		yield parse_line(df.iloc[[i]], i=i, statistics_list=statistics_list, step_type=step_type)
+		
 	
 def heatmap(heatmap, figure_file):
 	# fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, sharey=False, sharex=False, figsize=(10,10)) # this method causes memory leaks

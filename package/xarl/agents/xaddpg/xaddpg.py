@@ -41,20 +41,24 @@ XADDPGTorchPolicy = DDPGTorchPolicy.with_updates(
 	loss_fn=torch_xaddpg_actor_critic_loss,
 )
 
-########################
-# XADDPG's Execution Plan
-########################
+class XADDPGTrainer(DDPGTrainer):
+	def get_default_config(cls):
+		return XADDPG_DEFAULT_CONFIG
+		
+	@staticmethod
+	def execution_plan(workers, config, **kwargs):
+		return xadqn_execution_plan(workers, config, **kwargs)
+		
+	def get_default_policy_class(self, config):
+		return XADDPGTorchPolicy if config["framework"] == "torch" else XADDPGTFPolicy
 
-XADDPGTrainer = DDPGTrainer.with_updates(
-	name="XADDPG", 
-	default_config=XADDPG_DEFAULT_CONFIG,
-	execution_plan=xadqn_execution_plan,
-	get_policy_class=lambda config: XADDPGTorchPolicy if config["framework"] == "torch" else XADDPGTFPolicy,
-)
-
-XATD3Trainer = TD3Trainer.with_updates(
-    name="XATD3",
-    default_config=XATD3_DEFAULT_CONFIG,
-    execution_plan=xadqn_execution_plan,
-	get_policy_class=lambda config: XADDPGTorchPolicy if config["framework"] == "torch" else XADDPGTFPolicy,
-)
+class XATD3Trainer(TD3Trainer):
+	def get_default_config(cls):
+		return XATD3_DEFAULT_CONFIG
+		
+	@staticmethod
+	def execution_plan(workers, config, **kwargs):
+		return xadqn_execution_plan(workers, config, **kwargs)
+		
+	def get_default_policy_class(self, config):
+		return XADDPGTorchPolicy if config["framework"] == "torch" else XADDPGTFPolicy

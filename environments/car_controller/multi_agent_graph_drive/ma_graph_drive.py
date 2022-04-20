@@ -839,15 +839,15 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 	metadata = {'render.modes': ['human', 'rgb_array']}
 	
 	def seed(self, seed=None):
-		for i,a in enumerate(self.agent_list):
+		for i,a in enumerate(self.agents):
 			seed = a.seed(seed+i)[0]
-		self.seed = seed-1
-		self.np_random, _ = seeding.np_random(self.seed)
-		return [self.seed]
+		self._seed = seed-1
+		self.np_random, _ = seeding.np_random(self._seed)
+		return [self._seed]
 
 	def __init__(self, config=None):
 		self.env_config = config
-		self.n_agents = config.get('n_agents',1)
+		self.num_agents = config.get('num_agents',1)
 		self.viewer = None
 
 		self.env_config['max_steering_angle'] = np.deg2rad(self.env_config['max_steering_degree'])
@@ -880,56 +880,58 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 			}
 		)
 
-		self.agent_list = [
-			GraphDriveAgent(self.n_agents-1, self.culture, self.env_config)
-			for _ in range(self.n_agents)
+		self.agents = [
+			GraphDriveAgent(self.num_agents-1, self.culture, self.env_config)
+			for _ in range(self.num_agents)
 		]
-		self.action_space = self.agent_list[0].action_space
-		self.observation_space = self.agent_list[0].observation_space
+		self.action_space = self.agents[0].action_space
+		self.observation_space = self.agents[0].observation_space
+		self._agent_ids = set(range(self.num_agents))
+		self.seed(config.get('seed',42))
 
 	def reset(self):
 		self.culture.np_random = self.np_random
-		self.culture.seed = self.seed
+		self.culture.seed = self._seed
 		###########################
 		self.road_network = MultiAgentRoadNetwork(
 			self.culture, 
 			map_size=self.env_config['map_size'], 
 			min_junction_distance=self.env_config['min_junction_distance'],
 			max_roads_per_junction=self.env_config['max_roads_per_junction'],
-			number_of_agents=self.n_agents,
+			number_of_agents=self.num_agents,
 		)
 		self.road_network.set(self.env_config['junction_number'])
-		starting_point_list = self.road_network.get_random_starting_point_list(n=self.n_agents)
-		for uid,agent in enumerate(self.agent_list):
+		starting_point_list = self.road_network.get_random_starting_point_list(n=self.num_agents)
+		for uid,agent in enumerate(self.agents):
 			agent.reset(
 				starting_point_list[uid], 
 				self.road_network.agent_list[uid], 
 				self.road_network, 
-				self.agent_list[:uid]+self.agent_list[uid+1:]
+				self.agents[:uid]+self.agents[uid+1:]
 			)
 		# get_state is gonna use information about all agents, so initialize them first
 		initial_state_dict = {
 			uid: agent.get_state()
-			for uid,agent in enumerate(self.agent_list)
+			for uid,agent in enumerate(self.agents)
 		}
 		return initial_state_dict
 
 	def step(self, action_dict):
 		state_dict, reward_dict, terminal_dict, info_dict = {}, {}, {}, {}
 		step_info_dict = {
-			uid: self.agent_list[uid].start_step(action)
+			uid: self.agents[uid].start_step(action)
 			for uid,action in action_dict.items()
 		}
 		# end_step uses information about all agents, this requires all agents to act first and compute rewards and states after everybody acted
 		for uid,step_info in step_info_dict.items():
-			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step(*step_info)
+			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agents[uid].end_step(*step_info)
 		terminal_dict['__all__'] = all(terminal_dict.values())
 		return state_dict, reward_dict, terminal_dict, info_dict
 			
 	def get_info(self):
 		return json.dumps({
 			uid: agent.get_info()
-			for uid,agent in enumerate(self.agent_list)
+			for uid,agent in enumerate(self.agents)
 		}, indent=4)
 		
 	def get_screen(self): # RGB array
@@ -946,7 +948,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 			ax.add_collection(patch_collection)
 
 		# [Car]
-		for uid,agent in enumerate(self.agent_list):
+		for uid,agent in enumerate(self.agents):
 			car_x, car_y = agent.car_point
 			car_handle = ax.scatter(car_x, car_y, marker='o', color='g', label='Car')
 			# [Heading Vector]

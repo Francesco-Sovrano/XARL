@@ -9,16 +9,22 @@ https://docs.ray.io/en/master/rllib-algorithms.html#asynchronous-proximal-policy
 from more_itertools import unique_everseen
 
 from ray.rllib.agents.impala.impala import *
+from ray.rllib.execution.common import (
+    STEPS_TRAINED_COUNTER,
+    STEPS_TRAINED_THIS_ITER_COUNTER,
+    _get_global_vars,
+    _get_shared_metrics,
+)
 from ray.rllib.agents.ppo.appo import *
 from ray.rllib.agents.ppo.appo_tf_policy import *
 from ray.rllib.agents.ppo.ppo_tf_policy import vf_preds_fetches
 from ray.rllib.agents.ppo.appo_torch_policy import AsyncPPOTorchPolicy
 # from ray.rllib.evaluation.postprocessing import discount_cumsum
-from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch, DEFAULT_POLICY_ID
+from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.evaluation.postprocessing import compute_advantages
 from ray.rllib.policy.view_requirement import ViewRequirement
 
-from xarl.experience_buffers.replay_ops import MixInReplay, get_clustered_replay_buffer, assign_types, get_update_replayed_batch_fn, xa_make_learner_thread, add_buffer_metrics
+from xarl.experience_buffers.replay_ops import MixInReplay, get_clustered_replay_buffer, assign_types, get_update_replayed_batch_fn, add_buffer_metrics
 from xarl.utils.misc import accumulate
 from xarl.agents.xappo.xappo_tf_loss import xappo_surrogate_loss as tf_xappo_surrogate_loss
 from xarl.agents.xappo.xappo_torch_loss import xappo_surrogate_loss as torch_xappo_surrogate_loss
@@ -272,7 +278,7 @@ def xappo_get_policy_class(config):
 # XAPPO's Execution Plan
 ########################
 
-def xappo_execution_plan(workers, config):
+def xappo_execution_plan(workers, config, **kwargs):
 	random.seed(config["seed"])
 	np.random.seed(config["seed"])
 	local_replay_buffer, clustering_scheme = get_clustered_replay_buffer(config)
@@ -315,7 +321,6 @@ def xappo_execution_plan(workers, config):
 		)
 
 	# Start the learner thread.
-	# learner_thread = xa_make_learner_thread(local_worker, config)
 	learner_thread = make_learner_thread(local_worker, config)
 	learner_thread.start()
 
@@ -329,6 +334,16 @@ def xappo_execution_plan(workers, config):
 	def increase_train_steps(x):
 		local_replay_buffer.increase_train_steps()
 		return x
+
+	def record_steps_trained(item):
+		count, fetches = item
+		metrics = _get_shared_metrics()
+		# Manually update the steps trained counter since the learner
+		# thread is executing outside the pipeline.
+		metrics.counters[STEPS_TRAINED_THIS_ITER_COUNTER] = count
+		metrics.counters[STEPS_TRAINED_COUNTER] += count
+		return item
+
 	dequeue_op = Dequeue(learner_thread.outqueue, check=learner_thread.is_alive) \
 		.for_each(increase_train_steps) \
 		.for_each(record_steps_trained)
@@ -347,10 +362,13 @@ def xappo_execution_plan(workers, config):
 		standard_metrics_reporting = standard_metrics_reporting.for_each(lambda x: add_buffer_metrics(x,local_replay_buffer))
 	return standard_metrics_reporting
 
-XAPPOTrainer = APPOTrainer.with_updates(
-	name="XAPPO", 
-	default_config=XAPPO_DEFAULT_CONFIG,
-	default_policy=XAPPOTFPolicy,
-	get_policy_class=xappo_get_policy_class,
-	execution_plan=xappo_execution_plan,
-)
+class XAPPOTrainer(APPOTrainer):
+	def get_default_config(cls):
+		return XAPPO_DEFAULT_CONFIG
+		
+	@staticmethod
+	def execution_plan(workers, config, **kwargs):
+		return xappo_execution_plan(workers, config, **kwargs)
+		
+	def get_default_policy_class(self, config):
+		return xappo_get_policy_class(config)
