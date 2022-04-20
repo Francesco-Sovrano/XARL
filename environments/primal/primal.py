@@ -31,18 +31,6 @@ class Primal(MultiAgentEnv):
 			for k,(state,vector) in obs_dict.items()
 		}
 
-	@property
-	def observation_space(self) -> gym.spaces.Space:
-		return gym.spaces.Dict({
-			'map': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
-			'goal': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
-		})
-
-	@property
-	def action_space(self):
-		return gym.spaces.Discrete(9 if self.IsDiagonal else 5)
-
-
 	def __init__(self, config):
 		super().__init__()
 		self.observation_size = config.get('observation_size',3)
@@ -63,6 +51,12 @@ class Primal(MultiAgentEnv):
 		
 		self._env = Primal2Env(observer=self.observer, map_generator=self.map_generator, num_agents=self.num_agents, IsDiagonal=self.IsDiagonal, frozen_steps=self.frozen_steps, isOneShot=self.isOneShot)
 		self._agent_ids = set(range(1, self.num_agents + 1))
+
+		self.observation_space = gym.spaces.Dict({
+			'map': gym.spaces.Box(low=-255, high=255, shape=(11, self.observation_size, self.observation_size), dtype=np.float32),
+			'goal': gym.spaces.Box(low=-255, high=255, shape=(3,), dtype=np.float32),
+		})
+		self.action_space = gym.spaces.Discrete(9 if self.IsDiagonal else 5)
 	
 	def reset(self):
 		self._env._reset()
@@ -94,20 +88,21 @@ class Primal(MultiAgentEnv):
 	# Executes an action by an agent
 	def step(self, action_dict):
 		# print(list(action_dict.keys()), list(self.last_obs.keys()))
+		living_agents = list(action_dict.keys())
 		valid_action_dict = {
-			k: action_dict.get(k,0) in self._env.listValidActions(k, self.last_obs[k])
-			for k in self._agent_ids
+			k: action_dict[k] in self._env.listValidActions(k, self.last_obs[k])
+			for k in living_agents
 		}
 		# print(action_dict[1])
 		astar_pos_dict = {
 			# i: self._env.expert_until_first_goal(agent_ids=[i], time_limit=self.time_limit)[0][0]
 			i: None
-			for i in self._agent_ids
+			for i in living_agents
 		}
-		path_list = self._env.expert_until_first_goal(agent_ids=self._agent_ids, time_limit=self.time_limit)
+		path_list = self._env.expert_until_first_goal(agent_ids=living_agents, time_limit=self.time_limit)
 		mstar_pos_dict = {
-			i: path_list[e][0] if path_list and len(path_list) == len(self._agent_ids) else None
-			for e,i in enumerate(self._agent_ids)
+			k: path_list[k][0] if path_list and len(path_list) == len(self._agent_ids) else None
+			for k in living_agents
 		}
 
 		_obs,rew = self._env.step_all(action_dict)
@@ -117,13 +112,13 @@ class Primal(MultiAgentEnv):
 		done = {
 			# k: False
 			k: (not valid_action_dict[k]) or self._env.isStandingOnGoal[k]
-			for k in obs.keys()
+			for k in living_agents
 		}
 
 		positions = self._env.getPositions()
 		rew = {
 			k: self.get_reward(self._env.isStandingOnGoal[k], valid_action_dict[k])
-			for k in self._agent_ids
+			for k in living_agents
 		}
 		# throughput = sum((1 if self._env.isStandingOnGoal[k] else 0 for k in self._agent_ids))
 		info = {
@@ -140,7 +135,7 @@ class Primal(MultiAgentEnv):
 				# 	"throughput": throughput
 				# }
 			}
-			for k in self._agent_ids
+			for k in living_agents
 		}
 		
 		# print(info)

@@ -33,6 +33,8 @@ class GraphDriveAgent:
 		return 5 # normalised steering angle + normalised speed
 
 	def __init__(self, n_of_other_agents, culture, env_config):
+		super().__init__()
+		
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
 		self.reward_fn = eval(f'self.{self.env_config["reward_fn"]}')
