@@ -292,7 +292,7 @@ def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_
 
 def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 	key_list = line.columns.tolist()
-	get_keys = lambda k: list(map(lambda x: x[len(k):], filter(lambda x: x.startswith(k), key_list)))
+	get_keys = lambda k: list(map(lambda x: x[len(k):].strip('/'), filter(lambda x: x.startswith(k), key_list)))
 	get_element = lambda df, key: df[key].tolist()[0] if key in df else None
 	arrayfy = lambda x: np.array(x[1:-1].split(', '), dtype=np.float32)
 
@@ -320,26 +320,25 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 
 	get_label = (lambda i,x: f"{i}_{x}") if len(agent_names) > 1 else (lambda i,x: x)
 	for agent_id in agent_names:
-		default_learner_keys = get_keys(f"info/learner/{agent_id}")
 		obj.update({
-			get_label(agent_id,k): get_element(line,f"info/learner/{agent_id}/{k}")
-			for k in default_learner_keys
+			f"info/learner/{agent_id}/{k}": get_element(line,f"info/learner/{agent_id}/{k}")
+			for k in get_keys(f"info/learner/{agent_id}")
 			if isinstance(get_element(line,f"info/learner/{agent_id}/{k}"), numbers.Number)
 		})
-		buffer_keys = get_keys(f"buffer/{agent_id}/")
 		obj.update({
-			k: get_element(line,k)
-			for k in buffer_keys
+			f"buffer/{agent_id}/{k}": get_element(line,f"buffer/{agent_id}/{k}")
+			for k in get_keys(f"buffer/{agent_id}/")
 			if isinstance(get_element(line,k), numbers.Number)
 		})
 	obj.update({
-		k: get_element(line,k)
+		k: get_element(line,f"custom_metrics/{k}")
 		for k in get_keys("custom_metrics/")
 		if isinstance(get_element(line,k), numbers.Number)
 	})
 	if statistics_list:
 		statistics_list = set(statistics_list)
 		obj = dict(filter(lambda x: x[0] in statistics_list, obj.items()))
+	
 	return (step, obj)
 	
 def parse(df, max_i=None, statistics_list=None, step_type='num_steps_sampled'):
