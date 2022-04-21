@@ -22,11 +22,13 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 
 SELECT_ENV = "MAGraphDrive-Easy"
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 1
+NUM_AGENTS = 5
 
 CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
-	'n_agents': NUM_AGENTS,
+	'num_agents': NUM_AGENTS,
+	'max_visit_per_junction': 2,
+	'mean_blockage': 0.1,
 	'agent_collision_radius': None,
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
 	'mean_seconds_per_step': 0.25, # in average, a step every n seconds

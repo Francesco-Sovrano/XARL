@@ -21,16 +21,15 @@ from environments.car_controller.grid_drive.lib.road_cultures import *
 import logging
 logger = logging.getLogger(__name__)
 
+def get_normalized_visit_count(j, max_visit_per_junction):
+	return np.clip(j.visit_count, 0, max_visit_per_junction)/max_visit_per_junction
+
 class GraphDriveAgent:
 
 	def seed(self, seed=None):
 		logger.warning(f"Setting random seed to: {seed}")
 		self.np_random, _ = seeding.np_random(seed)
 		return [seed]
-
-	@property
-	def agent_state_size(self):
-		return 5 # normalised steering angle + normalised speed
 
 	def __init__(self, n_of_other_agents, culture, env_config):
 		super().__init__()
@@ -45,36 +44,42 @@ class GraphDriveAgent:
 		# Spaces
 		self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)  # steering angle and speed
 		state_dict = {
-			"road_view": gym.spaces.Box( # Closest road to the agent (the one it's driving on), sorted by relative position
+			"junctions_view": gym.spaces.Box( # Closest road to the agent (the one it's driving on), sorted by relative position
 				low= -1,
 				high= 1,
 				shape= (
-					2 + 2 + self.obs_road_features + 1, # road properties: road.start.pos + road.end.pos + road.af_features + road.is_new_road
+					self.env_config['junction_number'],
+					2 + 1, # junction.pos + junction.normalized_visit_count
 				),
 				dtype=np.float32
 			),
-			"junction_view": gym.spaces.Box( # Roads directly connected to the closest road to the agent (the one it's driving on), sorted by relative position
+			"roads_view": gym.spaces.Box( # Roads directly connected to the closest road to the agent (the one it's driving on), sorted by relative position
 				low= -1,
 				high= 1,
 				shape= ( # closest junctions view
-					2, # junctions attached to the current road
+					self.env_config['junction_number'], # number of junctions
 					self.env_config['max_roads_per_junction'], # maximum number of roads per junction
-					2 + 2 + self.obs_road_features + 1,  # road properties: road.start.pos + road.end.pos + road.af_features + road.is_new_road
+					2 + 2 + self.obs_road_features,  # road properties: road.start.pos + road.end.pos + road.af_features
 				),
 				dtype=np.float32
 			),
 			"agent_features": gym.spaces.Box( # Agent features
 				low= -1,
 				high= 1,
-				shape= (self.agent_state_size + self.obs_car_features,),
+				shape= (
+					self.agent_state_size + self.obs_car_features,
+				),
 				dtype=np.float32
 			),
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["neighbourhood_view"] = gym.spaces.Box( # Agent features
+			state_dict["agents_view"] = gym.spaces.Box( # Agent features
 				low= -1,
 				high= 1,
-				shape= (self.n_of_other_agents, 2 + self.agent_state_size + self.obs_car_features), # for each other possible agent give position + heading vector + features with no access to state
+				shape= (
+					self.n_of_other_agents, 
+					2 + self.agent_state_size + self.obs_car_features + 1
+				), # for each other possible agent give position + heading vector + features with no access to state + is_dead
 				dtype=np.float32
 			)
 		self.observation_space = gym.spaces.Dict({
@@ -86,12 +91,12 @@ class GraphDriveAgent:
 		self.road_network = road_network
 		self.other_agent_list = other_agent_list
 		self.seconds_per_step = self.get_step_seconds()
+		self.slowed_down = self.is_blocked()
 		# car position
 		self.car_point = car_point
 		self.car_orientation = (2*self.np_random.random()-1)*np.pi # in [-pi,pi]
 		self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point)
 		self.closest_junction = RoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
-		self.visited_junctions = [self.closest_junction]
 		# steering angle & speed
 		self.steering_angle = 0
 		self.speed = self.env_config['min_speed'] #+ (self.env_config['max_speed']-self.env_config['min_speed'])*self.np_random.random() # in [min_speed,max_speed]
@@ -99,12 +104,14 @@ class GraphDriveAgent:
 		self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
 
 		self.last_closest_road = None
+		self.last_closest_junction = None
 		self.goal_junction = None
 		self.current_road_speed_list = []
 		# init concat variables
 		self.last_reward = 0
 		self.last_reward_type = 'move_forward'
 		self.last_action_mask = None
+		self.is_dead = False
 
 	@property
 	def normalised_speed(self):
@@ -116,20 +123,24 @@ class GraphDriveAgent:
 			car_point=self.car_point
 		if car_orientation is None:
 			car_orientation=self.car_orientation
-		road_view, junction_view, neighbourhood_view = self.get_view(car_point, car_orientation)
+		junctions_view, roads_view, agents_view = self.get_view(car_point, car_orientation)
 		state_dict = {
-			"road_view": road_view,
-			"junction_view": junction_view,
+			"junctions_view": junctions_view,
+			"roads_view": roads_view,
 			"agent_features": np.array([
 				*self.get_agent_state(),
 				*self.agent_id.binary_features(as_tuple=True), 
 			], dtype=np.float32)
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["neighbourhood_view"] = neighbourhood_view
+			state_dict["agents_view"] = agents_view
 		return {
 			"fc": state_dict
-		}	
+		}
+
+	@property
+	def agent_state_size(self):
+		return 5 # normalised steering angle + normalised speed	
 
 	def get_agent_state(self):
 		return (
@@ -137,7 +148,7 @@ class GraphDriveAgent:
 			self.speed/self.env_config['max_speed'], # normalised speed
 			min(1, self.distance_to_closest_road/self.env_config['max_distance_to_path']),
 			self.is_in_junction(self.car_point),
-			len(self.visited_junctions)/self.env_config['junction_number'],
+			1 if self.slowed_down else 0
 		)
 
 	def normalize_point(self, p):
@@ -151,67 +162,56 @@ class GraphDriveAgent:
 				return True
 		return False
 
+	def get_normalized_visit_count(self, j):
+		return get_normalized_visit_count(j, self.env_config['max_visit_per_junction'])
+
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		source_x, source_y = source_point
 		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
-		j1, j2 = self.closest_junction_list
-		# Get road view
-		road_points = ( # 2x2
-			j1.pos,
-			j2.pos,
-		)
-		relative_road_points = tuple(map(shift_rotate_normalise_point, road_points))
-		road_view = sum(sorted(relative_road_points),()) + self.closest_road.binary_features(as_tuple=True) + (1 if self.closest_road.is_visited_by(self.agent_id) else 0,)
-		road_view = np.array(road_view, dtype=np.float32)
-		# Get junction view
-		sorted_junction_rpos_list = sorted(zip((j1,j2),relative_road_points),key=lambda x:x[1])
-		junction_view = np.array([ # 2 x self.env_config['max_roads_per_junction'] x (1+1)
-			sorted([
+		road_network_junctions = filter(lambda j: j.roads_connected, self.road_network.junctions)
+		road_network_junctions = map(lambda j: (shift_rotate_normalise_point(j.pos),j), road_network_junctions)
+		sorted_junctions = sorted(road_network_junctions, key=lambda x: x[0])
+		# Get junctions view
+		junctions_view = np.full(self.observation_space['fc']["junctions_view"].shape, -1, dtype=np.float32)
+		junctions_view[:len(sorted_junctions)] = [
+			(*j_pos, self.get_normalized_visit_count(j))
+			for j_pos, j in sorted_junctions
+		]
+		# Get roads view
+		roads_view = np.full(self.observation_space['fc']["roads_view"].shape, -1, dtype=np.float32)
+		for i,(_,j) in enumerate(sorted_junctions):
+			roads_view[i,:len(j.roads_connected)] = sorted(
 				(
-					*shift_rotate_normalise_point(road.start.pos),
-					*shift_rotate_normalise_point(road.end.pos),
-					*road.binary_features(as_tuple=True), # in [0,1]
-					1 if road.is_visited_by(self.agent_id) else 0, # whether road has been previously visited
-				) if euclidean_distance(road.start.pos,j.pos) < euclidean_distance(road.end.pos,j.pos) else (
-					*shift_rotate_normalise_point(road.end.pos),
-					*shift_rotate_normalise_point(road.start.pos),
-					*road.binary_features(as_tuple=True), # in [0,1]
-					1 if road.is_visited_by(self.agent_id) else 0, # whether road has been previously visited
-				)
-				for road in j.roads_connected
-			], key=lambda x:(x[0:4])) + [ # placeholders for unavailable roads
-				(
-					-1,-1,-1,-1,
-					*[-1]*self.obs_road_features,
-					-1,
-				)
-			]*(self.env_config['max_roads_per_junction']-len(j.roads_connected))
-			for j,_ in sorted_junction_rpos_list
-		], dtype=np.float32)
+					(
+						*shift_rotate_normalise_point(road.start.pos),
+						*shift_rotate_normalise_point(road.end.pos),
+						*road.binary_features(as_tuple=True), # in [0,1]
+						# 1 if road.is_visited_by(self.agent_id) else 0, # whether road has been previously visited
+					) if euclidean_distance(road.start.pos,j.pos) < euclidean_distance(road.end.pos,j.pos) else (
+						*shift_rotate_normalise_point(road.end.pos),
+						*shift_rotate_normalise_point(road.start.pos),
+						*road.binary_features(as_tuple=True), # in [0,1]
+						# 1 if road.is_visited_by(self.agent_id) else 0, # whether road has been previously visited
+					)
+					for road in j.roads_connected
+				), 
+				key=lambda x:(x[0:4])
+			)
 		##### Get neighbourhood view
-		visible_road_set = set((
-			road.id
-			for j,_ in sorted_junction_rpos_list
-			for road in j.roads_connected
-		))
-		visible_agent_list = sorted((
-			agent
-			for agent in self.other_agent_list
-			if agent.closest_road.id in visible_road_set
-		), key=lambda x: x.car_point)
-		neighbourhood_view = np.array(
-			[
-				(*self.normalize_point(agent.car_point), *agent.get_agent_state(), *agent.agent_id.binary_features(as_tuple=True))
-				for agent in visible_agent_list
-			] + [ # placeholders for unavailable roads
-				(
-					-1,-1,
-					*[-1]*self.agent_state_size,
-					*[-1]*self.obs_car_features,
-				)
-			]*(self.n_of_other_agents-len(visible_agent_list))
-		, dtype=np.float32)
-		return road_view, junction_view, neighbourhood_view
+		if self.other_agent_list:
+			sorted_agents = sorted((
+				(shift_rotate_normalise_point(agent.car_point), agent.get_agent_state(), agent.agent_id.binary_features(as_tuple=True), agent.is_dead)
+				for agent in self.other_agent_list
+			), key=lambda x: x[0])
+			agents_view = np.array(
+				[
+					(*agent_point, *agent_state, *agent_features, 1 if agent_is_dead else 0)
+					for agent_point, agent_state, agent_features, agent_is_dead in sorted_agents
+				]
+			, dtype=np.float32)
+		else:
+			agents_view = None
+		return junctions_view, roads_view, agents_view
 
 	def move(self, point, orientation, steering_angle, speed, add_noise=False):
 		# https://towardsdatascience.com/how-self-driving-cars-steer-c8e4b5b55d7f?gi=90391432aad7
@@ -251,6 +251,11 @@ class GraphDriveAgent:
 	def get_step_seconds(self):
 		return self.np_random.exponential(scale=self.env_config['mean_seconds_per_step']) if self.env_config['random_seconds_per_step'] is True else self.env_config['mean_seconds_per_step']
 
+	def is_blocked(self):
+		if not self.env_config['mean_blockage']:
+			return False
+		return self.np_random.choice(a=[False,True], p=[1-self.env_config['mean_blockage'],self.env_config['mean_blockage']])
+
 	def start_step(self, action_vector):
 		# first of all, get the seconds passed from last step
 		self.seconds_per_step = self.get_step_seconds()
@@ -265,11 +270,12 @@ class GraphDriveAgent:
 		old_car_point = self.car_point
 		old_goal_junction = self.goal_junction
 		visiting_new_road = False
+		visiting_new_junction = False
 		self.car_point, self.car_orientation = self.move(
 			point=self.car_point, 
 			orientation=self.car_orientation, 
 			steering_angle=self.steering_angle, 
-			speed=self.speed, 
+			speed=self.speed/2 if self.slowed_down else self.speed, 
 			add_noise=True
 		)
 		if self.goal_junction is None:
@@ -278,11 +284,11 @@ class GraphDriveAgent:
 			self.distance_to_closest_road = point_to_line_dist(self.car_point, self.closest_road.edge)
 		self.closest_junction = RoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
-		self.acquired_junction = False
 		if self.is_in_junction(self.car_point):
-			if self.closest_junction not in self.visited_junctions:
-				self.visited_junctions.append(self.closest_junction)
-				self.acquired_junction = True
+			if self.closest_junction != self.last_closest_junction:
+				visiting_new_junction = True
+				self.closest_junction.visit()
+				self.last_closest_junction = self.closest_junction
 			self.goal_junction = None
 			if self.last_closest_road is not None: # if closest_road is not the first visited road
 				self.last_closest_road.is_visited_by(self.agent_id, True) # set the old road as visited
@@ -292,32 +298,31 @@ class GraphDriveAgent:
 			self.goal_junction = RoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
 			self.current_road_speed_list = []
 		self.current_road_speed_list.append(self.speed)
-		return visiting_new_road, old_goal_junction, old_car_point
+		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point
 
-	def end_step(self, visiting_new_road, old_goal_junction, old_car_point):
+	def end_step(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point):
 		# compute perceived reward
-		reward, dead, reward_type = self.reward_fn(visiting_new_road, old_goal_junction, old_car_point)
+		reward, dead, reward_type = self.reward_fn(visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point)
+		self.slowed_down = self.is_blocked()
 		# compute new state (after updating progress)
 		state = self.get_state()
 		# update last action/state/reward
 		self.last_reward = reward
 		self.last_reward_type = reward_type
 		info_dict = {'explanation':{'why':reward_type}}
+		self.is_dead = dead
 		return [state, reward, dead, info_dict]
 			
 	def get_info(self):
 		return f"speed={self.speed}, steering_angle={self.steering_angle}, orientation={self.car_orientation}"
 
-	def frequent_reward_default(self, visiting_new_road, old_goal_junction, old_car_point): # BAD
+	def frequent_reward_default(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point): # BAD
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
 			return (1 if is_positive else -1, is_terminal, label)
 		def step_reward(is_positive, is_terminal, label):
-			# reward = np.mean(self.current_road_speed_list)
-			# reward = self.speed
 			reward = self.normalised_speed # in (0,1]
-			# reward *= len(self.visited_junctions)
 			return (reward if is_positive else -reward, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
@@ -329,313 +334,17 @@ class GraphDriveAgent:
 		is_in_junction = self.is_in_junction(self.car_point)
 		#######################################
 		# "Is in junction" rule
-		if is_in_junction:
-			return null_reward(is_terminal=False, label='is_in_junction')
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-		#######################################
-		# "Visit new roads" rule
-		if self.closest_road.is_visited_by(self.agent_id): # visiting a previously seen reward gives no bonus
-			return null_reward(is_terminal=False, label='not_visiting_new_roads')
-		# #######################################
-		# # "Explore new roads" rule
-		# if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
-		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
-		#######################################
-		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label='moving_forward')
-				
-	def frequent_reward_explanation_engineering_v1(self, visiting_new_road, old_goal_junction, old_car_point): # GOOD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = np.mean(self.current_road_speed_list)
-			# reward = self.speed
-			reward = self.normalised_speed # in (0,1]
-			# reward *= len(self.visited_junctions)
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
-		#######################################
-		# "Is in junction" rule
-		if is_in_junction:
-			return null_reward(is_terminal=False, label='is_in_junction')
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-		#######################################
-		# "Visit new roads" rule
-		if self.closest_road.is_visited_by(self.agent_id): # visiting a previously seen reward gives no bonus
-			return null_reward(is_terminal=False, label='not_visiting_new_roads')
-		# #######################################
-		# # "Explore new roads" rule
-		# if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
-		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
-		#######################################
-		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('moving_forward', explanation_list))
-
-	def frequent_reward_explanation_engineering_v2(self, visiting_new_road, old_goal_junction, old_car_point): # GOOD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = np.mean(self.current_road_speed_list)
-			# reward = self.speed
-			reward = self.normalised_speed # in (0,1]
-			# reward *= len(self.visited_junctions)
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
-		#######################################
-		# "Is in junction" rule
-		if is_in_junction:
-			return null_reward(is_terminal=False, label='is_in_junction')
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-		#######################################
-		# "Visit new roads" rule
-		if self.closest_road.is_visited_by(self.agent_id): # visiting a previously seen reward gives no bonus
-			return null_reward(is_terminal=False, label=explanation_list_with_label('not_visiting_new_roads', explanation_list))
-		# #######################################
-		# # "Explore new roads" rule
-		# if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
-		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
-		#######################################
-		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('moving_forward', explanation_list))
-
-	def frequent_reward_explanation_engineering_v3(self, visiting_new_road, old_goal_junction, old_car_point): # BAD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = np.mean(self.current_road_speed_list)
-			# reward = self.speed
-			reward = self.normalised_speed # in (0,1]
-			# reward *= len(self.visited_junctions)
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
-		#######################################
-		# "Is in junction" rule
-		if is_in_junction:
-			return null_reward(is_terminal=False, label='is_in_junction')
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return step_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-		#######################################
-		# "Visit new roads" rule
-		if self.closest_road.is_visited_by(self.agent_id): # visiting a previously seen reward gives no bonus
-			return null_reward(is_terminal=False, label='not_visiting_new_roads')
-		# #######################################
-		# # "Explore new roads" rule
-		# if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
-		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
-		#######################################
-		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label='moving_forward')
-
-	def frequent_reward_step_multiplied_by_junctions(self, visiting_new_road, old_goal_junction, old_car_point): # BAD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = np.mean(self.current_road_speed_list)
-			# reward = self.speed
-			reward = self.normalised_speed # in (0,1]
-			reward *= len(self.visited_junctions)
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
-		#######################################
-		# "Is in junction" rule
-		if is_in_junction:
-			return null_reward(is_terminal=False, label='is_in_junction')
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-		#######################################
-		# "Visit new roads" rule
-		if self.closest_road.is_visited_by(self.agent_id): # visiting a previously seen reward gives no bonus
-			return null_reward(is_terminal=False, label='not_visiting_new_roads')
-		# #######################################
-		# # "Explore new roads" rule
-		# if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
-		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
-		#######################################
-		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label='moving_forward')
-
-	def frequent_reward_full_step(self, visiting_new_road, old_goal_junction, old_car_point): # BAD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = np.mean(self.current_road_speed_list)
-			# reward = self.speed
-			reward = self.normalised_speed # in (0,1]
-			# reward *= len(self.visited_junctions)
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
-		#######################################
-		# "Is in junction" rule
-		if is_in_junction:
-			return null_reward(is_terminal=False, label='is_in_junction')
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return step_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return step_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return step_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-		#######################################
-		# "Visit new roads" rule
-		if self.closest_road.is_visited_by(self.agent_id): # visiting a previously seen reward gives no bonus
-			return null_reward(is_terminal=False, label='not_visiting_new_roads')
-		# #######################################
-		# # "Explore new roads" rule
-		# if visiting_new_road: # visiting a new road for the first time is equivalent to get a bonus reward
-		# 	return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('exploring_a_new_road'))
-		#######################################
-		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label='moving_forward')
-
-	def sparse_reward_default(self, visiting_new_road, old_goal_junction, old_car_point): # BAD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = (np.mean(self.current_road_speed_list) - self.env_config['min_speed']*0.9)/(self.env_config['max_speed']-self.env_config['min_speed']*0.9) # in (0,1]
-			reward = len(self.visited_junctions)-1
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
 		if is_in_junction:
 			#######################################
 			# "Is in new junction" rule
-			if self.acquired_junction:  # If agent acquired a brand new junction.
+			if visiting_new_junction and self.get_normalized_visit_count(self.closest_junction) < 1:  # If agent acquired a brand new junction and that is important.
 				# return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('is_in_new_junction', self.last_explanation_list))
-				return unitary_reward(is_positive=True, is_terminal=False, label='is_in_new_junction')
+				return unitary_reward(is_positive=True, is_terminal=False, label='has_visited_an_important_junction')
 			#######################################
 			# "Is in old junction" rule
-			return null_reward(is_terminal=False, label='is_in_old_junction')
+			return null_reward(is_terminal=False, label='is_in_junction')
 		#######################################
-		# "No u-turning outside junctions" rule
+		# "No U-Turning outside junction" rule
 		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
 		if space_traveled_towards_goal <= 0:
 			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
@@ -648,21 +357,20 @@ class GraphDriveAgent:
 		# Assign normalised speed to agent properties before running dialogues.
 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation',explanation_list))
+			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+		#######################################
+		# "Move towards important junction" rule
+		if self.get_normalized_visit_count(self.goal_junction) < 1:
+			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_important_junction')
 		#######################################
 		# "Move forward" rule
-		self.last_explanation_list = explanation_list
 		return null_reward(is_terminal=False, label='moving_forward')
 
-	def sparse_reward_explanation_engineering_v1(self, visiting_new_road, old_goal_junction, old_car_point): # GOOD
+	def sparse_reward_default(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point): # BAD
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
 			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = (np.mean(self.current_road_speed_list) - self.env_config['min_speed']*0.9)/(self.env_config['max_speed']-self.env_config['min_speed']*0.9) # in (0,1]
-			reward = len(self.visited_junctions)-1
-			return (reward if is_positive else -reward, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
 		#######################################
@@ -671,17 +379,19 @@ class GraphDriveAgent:
 			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
 
 		is_in_junction = self.is_in_junction(self.car_point)
+		#######################################
+		# "Is in junction" rule
 		if is_in_junction:
 			#######################################
 			# "Is in new junction" rule
-			if self.acquired_junction:  # If agent acquired a brand new junction.
+			if visiting_new_junction and self.get_normalized_visit_count(self.closest_junction) < 1:  # If agent acquired a brand new junction and that is important.
 				# return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('is_in_new_junction', self.last_explanation_list))
-				return unitary_reward(is_positive=True, is_terminal=False, label='is_in_new_junction')
+				return unitary_reward(is_positive=True, is_terminal=False, label='has_visited_an_important_junction')
 			#######################################
 			# "Is in old junction" rule
-			return null_reward(is_terminal=False, label='is_in_old_junction')
+			return null_reward(is_terminal=False, label='is_in_junction')
 		#######################################
-		# "No u-turning outside junctions" rule
+		# "No U-Turning outside junction" rule
 		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
 		if space_traveled_towards_goal <= 0:
 			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
@@ -694,154 +404,16 @@ class GraphDriveAgent:
 		# Assign normalised speed to agent properties before running dialogues.
 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation',explanation_list))
+			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 		#######################################
 		# "Move forward" rule
-		self.last_explanation_list = explanation_list
-		return null_reward(is_terminal=False, label=explanation_list_with_label('moving_forward',explanation_list))
-
-	def sparse_reward_explanation_engineering_v2(self, visiting_new_road, old_goal_junction, old_car_point): # GOOD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = (np.mean(self.current_road_speed_list) - self.env_config['min_speed']*0.9)/(self.env_config['max_speed']-self.env_config['min_speed']*0.9) # in (0,1]
-			reward = len(self.visited_junctions)-1
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
-		if is_in_junction:
-			#######################################
-			# "Is in new junction" rule
-			if self.acquired_junction:  # If agent acquired a brand new junction.
-				# return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('is_in_new_junction', self.last_explanation_list))
-				return unitary_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('is_in_new_junction',self.last_explanation_list))
-			#######################################
-			# "Is in old junction" rule
-			return null_reward(is_terminal=False, label='is_in_old_junction')
-		#######################################
-		# "No u-turning outside junctions" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation',explanation_list))
-		#######################################
-		# "Move forward" rule
-		self.last_explanation_list = explanation_list
-		return null_reward(is_terminal=False, label=explanation_list_with_label('moving_forward',explanation_list))
-
-	def sparse_reward_explanation_engineering_v3(self, visiting_new_road, old_goal_junction, old_car_point): # BAD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = (np.mean(self.current_road_speed_list) - self.env_config['min_speed']*0.9)/(self.env_config['max_speed']-self.env_config['min_speed']*0.9) # in (0,1]
-			reward = len(self.visited_junctions)-1
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
-		if is_in_junction:
-			#######################################
-			# "Is in new junction" rule
-			if self.acquired_junction:  # If agent acquired a brand new junction.
-				# return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('is_in_new_junction', self.last_explanation_list))
-				return unitary_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('is_in_new_junction',self.last_explanation_list))
-			#######################################
-			# "Is in old junction" rule
-			return null_reward(is_terminal=False, label='is_in_old_junction')
-		#######################################
-		# "No u-turning outside junctions" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation',explanation_list))
-		#######################################
-		# "Move forward" rule
-		self.last_explanation_list = explanation_list
-		return null_reward(is_terminal=False, label='moving_forward')
-
-	def sparse_reward_step_multiplied_by_junctions(self, visiting_new_road, old_goal_junction, old_car_point): # BAD
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def step_reward(is_positive, is_terminal, label):
-			# reward = (np.mean(self.current_road_speed_list) - self.env_config['min_speed']*0.9)/(self.env_config['max_speed']-self.env_config['min_speed']*0.9) # in (0,1]
-			reward = len(self.visited_junctions)-1
-			return (reward if is_positive else -reward, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
-
-		is_in_junction = self.is_in_junction(self.car_point)
-		if is_in_junction:
-			#######################################
-			# "Is in new junction" rule
-			if self.acquired_junction:  # If agent acquired a brand new junction.
-				return step_reward(is_positive=True, is_terminal=False, label='is_in_new_junction')
-			#######################################
-			# "Is in old junction" rule
-			return null_reward(is_terminal=False, label='is_in_old_junction')
-		#######################################
-		# "No u-turning outside junctions" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		# Assign normalised speed to agent properties before running dialogues.
-		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-		if not following_regulation:
-			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation',explanation_list))
-		#######################################
-		# "Move forward" rule
-		self.last_explanation_list = explanation_list
 		return null_reward(is_terminal=False, label='moving_forward')
 
 class MultiAgentGraphDrive(MultiAgentEnv):
 	metadata = {'render.modes': ['human', 'rgb_array']}
 	
 	def seed(self, seed=None):
-		for i,a in enumerate(self.agents):
+		for i,a in enumerate(self.agent_list):
 			seed = a.seed(seed+i)[0]
 		self._seed = seed-1
 		self.np_random, _ = seeding.np_random(self._seed)
@@ -882,12 +454,12 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 			}
 		)
 
-		self.agents = [
+		self.agent_list = [
 			GraphDriveAgent(self.num_agents-1, self.culture, self.env_config)
 			for _ in range(self.num_agents)
 		]
-		self.action_space = self.agents[0].action_space
-		self.observation_space = self.agents[0].observation_space
+		self.action_space = self.agent_list[0].action_space
+		self.observation_space = self.agent_list[0].observation_space
 		self._agent_ids = set(range(self.num_agents))
 		self.seed(config.get('seed',42))
 
@@ -904,36 +476,36 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		)
 		self.road_network.set(self.env_config['junction_number'])
 		starting_point_list = self.road_network.get_random_starting_point_list(n=self.num_agents)
-		for uid,agent in enumerate(self.agents):
+		for uid,agent in enumerate(self.agent_list):
 			agent.reset(
 				starting_point_list[uid], 
 				self.road_network.agent_list[uid], 
 				self.road_network, 
-				self.agents[:uid]+self.agents[uid+1:]
+				self.agent_list[:uid]+self.agent_list[uid+1:]
 			)
 		# get_state is gonna use information about all agents, so initialize them first
 		initial_state_dict = {
 			uid: agent.get_state()
-			for uid,agent in enumerate(self.agents)
+			for uid,agent in enumerate(self.agent_list)
 		}
 		return initial_state_dict
 
 	def step(self, action_dict):
 		state_dict, reward_dict, terminal_dict, info_dict = {}, {}, {}, {}
 		step_info_dict = {
-			uid: self.agents[uid].start_step(action)
+			uid: self.agent_list[uid].start_step(action)
 			for uid,action in action_dict.items()
 		}
 		# end_step uses information about all agents, this requires all agents to act first and compute rewards and states after everybody acted
 		for uid,step_info in step_info_dict.items():
-			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agents[uid].end_step(*step_info)
+			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step(*step_info)
 		terminal_dict['__all__'] = all(terminal_dict.values())
 		return state_dict, reward_dict, terminal_dict, info_dict
 			
 	def get_info(self):
 		return json.dumps({
 			uid: agent.get_info()
-			for uid,agent in enumerate(self.agents)
+			for uid,agent in enumerate(self.agent_list)
 		}, indent=4)
 		
 	def get_screen(self): # RGB array
@@ -945,14 +517,23 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		
 		# [Junctions]
 		if len(self.road_network.junctions) > 0:
-			junctions = [Circle(junction.pos, self.env_config['junction_radius'], color='y', alpha=0.25) for junction in self.road_network.junctions]
+			junctions = [
+				Circle(
+					junction.pos, 
+					self.env_config['junction_radius'], 
+					color='y' if get_normalized_visit_count(junction, self.env_config['max_visit_per_junction']) < 1 else 'r', 
+					alpha=0.25,
+					# label=f"{get_normalized_visit_count(junction, self.env_config['max_visit_per_junction']):.2f}"
+				)
+				for junction in self.road_network.junctions
+			]
 			patch_collection = PatchCollection(junctions, match_original=True)
 			ax.add_collection(patch_collection)
 
 		# [Car]
-		for uid,agent in enumerate(self.agents):
+		for uid,agent in enumerate(self.agent_list):
 			car_x, car_y = agent.car_point
-			car_handle = ax.scatter(car_x, car_y, marker='o', color='g', label='Car')
+			car_handle = ax.scatter(car_x, car_y, marker='o', color='g' if not agent.slowed_down else 'r', label='Car')
 			# [Heading Vector]
 			dir_x, dir_y = get_heading_vector(angle=agent.car_orientation, space=self.env_config['max_dimension']/16)
 			heading_vector_handle, = ax.plot([car_x, car_x+dir_x],[car_y, car_y+dir_y], color='g', alpha=0.5, label='Heading Vector')
@@ -964,11 +545,11 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 			line_style = '-'
 			path_handle, = ax.plot(road_pos[0], road_pos[1], color=colour_to_hex(road_colour), ls=line_style, lw=2, alpha=0.5, label="Road")
 
-		path1_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Green"), lw=2, label="OK")
-		path2_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Red"), lw=2, label="Unfeasible")
-		path3_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Gold"), lw=2, label="Wrong Speed")
-		path4_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Black"), ls='--', lw=2, label="Closest Road")
-		path5_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Black"), ls='-.', lw=2, label="Old Road")
+		# path1_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Green"), lw=2, label="OK")
+		# path2_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Red"), lw=2, label="Unfeasible")
+		# path3_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Gold"), lw=2, label="Wrong Speed")
+		# path4_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Black"), ls='--', lw=2, label="Closest Road")
+		# path5_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Black"), ls='-.', lw=2, label="Old Road")
 		# junction_handle = ax.scatter(0, 0, marker='o', color='y', label='Junction')
 
 		# Adjust ax limits in order to get the same scale factor on both x and y

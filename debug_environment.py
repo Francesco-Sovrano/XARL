@@ -4,7 +4,9 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from environments import *
 
 env_config = {
-	'n_agents': 3,
+	'num_agents': 5,
+	'max_visit_per_junction': 2,
+	'mean_blockage': 0.1,
 	'agent_collision_radius': None,
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
 	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
@@ -21,7 +23,7 @@ env_config = {
 	'max_deceleration': 7, # m/s^2
 	'max_steering_degree': 45,
 	# max_step = 2**9
-	'max_distance_to_path': 1, # meters
+	'max_distance_to_path': 0.5, # meters
 	# min_speed_lower_limit = 0.7 # m/s # used together with max_speed to get the random speed upper limit
 	# max_speed_noise = 0.25 # m/s
 	# max_steering_noise_degree = 2
