@@ -101,8 +101,12 @@ def get_orientation_of_a_relative_to_b(a, b):
 		result = two_pi-phi
 	else:
 		result = phi
-
 	return result*sign
+
+def get_slope_radians(a,b):
+	x1,y1=a
+	x2,y2=b
+	return np.arctan2(y2 - y1, x2 - x1)
 
 def point_to_line_dist(point, line):
 	"""Calculate the distance between a point and a line segment.

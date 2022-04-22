@@ -21,6 +21,8 @@ from environments.car_controller.grid_drive.lib.road_cultures import *
 import logging
 logger = logging.getLogger(__name__)
 
+# import time
+
 def get_normalized_visit_count(j, max_visit_per_junction):
 	return np.clip(j.visit_count, 0, max_visit_per_junction)/max_visit_per_junction
 
@@ -57,9 +59,9 @@ class GraphDriveAgent:
 				low= -1,
 				high= 1,
 				shape= ( # closest junctions view
-					self.env_config['junction_number'], # number of junctions
-					self.env_config['max_roads_per_junction'], # maximum number of roads per junction
-					2 + 2 + self.obs_road_features,  # road properties: road.start.pos + road.end.pos + road.af_features
+					self.env_config['junction_number'],
+					self.env_config['max_roads_per_junction'],
+					1 + self.obs_road_features,  # road properties: road.normalised_slope + road.af_features
 				),
 				dtype=np.float32
 			),
@@ -165,13 +167,15 @@ class GraphDriveAgent:
 	def get_normalized_visit_count(self, j):
 		return get_normalized_visit_count(j, self.env_config['max_visit_per_junction'])
 
+	
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
+		# s = time.time()
 		source_x, source_y = source_point
 		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
+		# Get junctions view
 		road_network_junctions = filter(lambda j: j.roads_connected, self.road_network.junctions)
 		road_network_junctions = map(lambda j: (shift_rotate_normalise_point(j.pos),j), road_network_junctions)
 		sorted_junctions = sorted(road_network_junctions, key=lambda x: x[0])
-		# Get junctions view
 		junctions_view = np.full(self.observation_space['fc']["junctions_view"].shape, -1, dtype=np.float32)
 		junctions_view[:len(sorted_junctions)] = [
 			(*j_pos, self.get_normalized_visit_count(j))
@@ -180,23 +184,13 @@ class GraphDriveAgent:
 		# Get roads view
 		roads_view = np.full(self.observation_space['fc']["roads_view"].shape, -1, dtype=np.float32)
 		for i,(_,j) in enumerate(sorted_junctions):
-			roads_view[i,:len(j.roads_connected)] = sorted(
+			roads_view[i,:len(j.roads_connected)] = sorted((
 				(
-					(
-						*shift_rotate_normalise_point(road.start.pos),
-						*shift_rotate_normalise_point(road.end.pos),
-						*road.binary_features(as_tuple=True), # in [0,1]
-						# 1 if road.is_visited_by(self.agent_id) else 0, # whether road has been previously visited
-					) if euclidean_distance(road.start.pos,j.pos) < euclidean_distance(road.end.pos,j.pos) else (
-						*shift_rotate_normalise_point(road.end.pos),
-						*shift_rotate_normalise_point(road.start.pos),
-						*road.binary_features(as_tuple=True), # in [0,1]
-						# 1 if road.is_visited_by(self.agent_id) else 0, # whether road has been previously visited
-					)
-					for road in j.roads_connected
-				), 
-				key=lambda x:(x[0:4])
-			)
+					road.normalised_slope, # in [0,1]
+					*road.binary_features(as_tuple=True), # in [0,1]
+				)
+				for road in j.roads_connected
+			), key=lambda x:x[0])
 		##### Get neighbourhood view
 		if self.other_agent_list:
 			sorted_agents = sorted((
@@ -211,6 +205,7 @@ class GraphDriveAgent:
 			, dtype=np.float32)
 		else:
 			agents_view = None
+		# print('seconds',time.time()-s)
 		return junctions_view, roads_view, agents_view
 
 	def move(self, point, orientation, steering_angle, speed, add_noise=False):
