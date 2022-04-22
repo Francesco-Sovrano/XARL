@@ -10,7 +10,6 @@ class Junction:
 	def __init__(self, pos):
 		self.pos = pos
 		self.roads_connected = []
-		self.visit_count = 0
 
 	def __eq__(self, other):
 		if not isinstance(other,Junction):
@@ -24,12 +23,6 @@ class Junction:
 		if road not in self.roads_connected:
 			self.roads_connected.append(road)
 		return True
-
-	def is_visited(self):
-		return self.visit_count > 0
-
-	def visit(self):
-		self.visit_count += 1
 
 class Road(RoadCell):
 	def __init__(self, start: Junction, end: Junction, connect=False):

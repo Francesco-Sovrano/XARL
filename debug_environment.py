@@ -1,15 +1,33 @@
 import gym
 import time
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
+import xarl.utils.plot_lib as plt
+import sys
+import os
 from environments import *
 
+OUTPUT_DIR = './demo_episode'
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 env_config = {
-	'num_agents': 5,
-	'max_visit_per_junction': 2,
-	'mean_blockage': 0.1,
+	'num_agents': 32,
+	'max_food_per_target': 10,
+	'blockage_probability': 0.3,
+	'min_blockage_ratio': 0.1,
+	'max_blockage_ratio': 0.75,
 	'agent_collision_radius': None,
+	'target_junctions_number': 4,
+	'source_junctions_number': 4,
+	################################
+	'max_dimension': 32,
+	'junctions_number': 32,
+	'max_roads_per_junction': 4,
+	'junction_radius': 1,
+	'max_distance_to_path': .5, # meters
+	################################
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
 	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
+	################################
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
 	'wheelbase': 0.35, # meters # https://en.wikipedia.org/wiki/Wheelbase
 	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
@@ -22,48 +40,83 @@ env_config = {
 	# a normal car has max_deceleration 7.1 m/s^2 (http://www.batesville.k12.in.us/Physics/PhyNet/Mechanics/Kinematics/BrakingDistData.html)
 	'max_deceleration': 7, # m/s^2
 	'max_steering_degree': 45,
-	# max_step = 2**9
-	'max_distance_to_path': 0.5, # meters
 	# min_speed_lower_limit = 0.7 # m/s # used together with max_speed to get the random speed upper limit
 	# max_speed_noise = 0.25 # m/s
 	# max_steering_noise_degree = 2
 	'max_speed_noise': 0, # m/s
 	'max_steering_noise_degree': 0,
-	# multi-road related stuff
-	'max_dimension': 50,
-	'junction_number': 32,
-	'max_roads_per_junction': 4,
-	'junction_radius': 1,
 	'max_normalised_speed': 120,
 }
 env = MultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": "Hard", **env_config})
 # env = CescoDriveV0()
 multiagent = isinstance(env, MultiAgentEnv)
+render_modes = env.metadata['render.modes']
 
-def run_one_episode (env):
+def print_screen(screens_directory, step):
+	filename = os.path.join(screens_directory, f'frame{step}.jpg')
+	if 'rgb_array' in render_modes:
+		plt.rgb_array_image(
+			env.render(mode='rgb_array'), 
+			filename
+		)
+	elif 'ansi' in render_modes:
+		plt.ascii_image(
+			env.render(mode='ansi'), 
+			filename
+		)
+	elif 'ascii' in render_modes:
+		plt.ascii_image(
+			env.render(mode='ascii'), 
+			filename
+		)
+	elif 'human' in render_modes:
+		old_stdout = sys.stdout
+		sys.stdout = StringIO()
+		env.render(mode='human')
+		with closing(sys.stdout):
+			plt.ascii_image(
+				sys.stdout.getvalue(), 
+				filename
+			)
+		sys.stdout = old_stdout
+	else:
+		raise Exception(f"No compatible render mode (rgb_array,ansi,ascii,human) in {render_modes}.")
+	return filename
+
+def run_one_episode(env):
 	env.seed(38)
 	state = env.reset()
+	step = 0
 	sum_reward = 0
-	done = False
+	file_list = [print_screen(OUTPUT_DIR, step)]
 	if multiagent:
-		agent_id_list = list(state.keys())
-		while not done:
+		done_dict = {i: False for i in state.keys()}
+		done_dict['__all__'] = False
+		while not done_dict['__all__']:
+			step += 1
 			action_dict = {
 				i: env.action_space.sample()
-				for i in agent_id_list
+				for i in state.keys()
+				if not done_dict.get(i,True)
 			}
 			state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
+			state = state_dict
 			sum_reward += sum(reward_dict.values())
-			done = done_dict['__all__']
+			file_list.append(print_screen(OUTPUT_DIR, step))
 			env.render()
-			time.sleep(0.5)
+			# time.sleep(0.25)
 	else:
+		done = False
 		while not done:
+			step += 1
 			action = env.action_space.sample()
 			state, reward, done, info = env.step(action)
 			sum_reward += reward
+			file_list.append(print_screen(OUTPUT_DIR, step))
 			env.render()
-			time.sleep(0.5)
+			# time.sleep(0.25)
+	gif_filename = os.path.join(OUTPUT_DIR, 'episode.gif')
+	plt.make_gif(file_list=file_list, gif_path=gif_filename)
 	return sum_reward
 
 sum_reward = run_one_episode(env)

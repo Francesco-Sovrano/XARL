@@ -89,14 +89,15 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 		log_list = []
 		sum_reward = 0
 		step = 0
-		done = False
 		
 		if multiagent:
 			policy_mapping_fn = config["multiagent"]["policy_mapping_fn"]
 			state_dict = env.reset()
+			done_dict = {i: False for i in state_dict.keys()}
+			done_dict['__all__'] = False
 			# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
 			file_list = [print_screen(screens_directory, step)]
-			while not done:
+			while not done_dict['__all__']:
 				step += 1
 				# action = env.action_space.sample()
 				action_dict = {
@@ -105,7 +106,6 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 				}
 				# print('action_dict', action_dict)
 				state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
-				done = done_dict['__all__']
 				# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
 				sum_reward += sum(reward_dict.values())
 				file_list.append(print_screen(screens_directory, step))
@@ -119,6 +119,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 					f'\n\n',
 				]))
 		else:
+			done = False
 			state = np.squeeze(env.reset())
 			file_list = [print_screen(screens_directory, step)]
 			while not done:

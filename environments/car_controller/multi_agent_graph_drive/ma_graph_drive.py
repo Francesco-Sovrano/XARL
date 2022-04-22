@@ -23,8 +23,10 @@ logger = logging.getLogger(__name__)
 
 # import time
 
-def get_normalized_visit_count(j, max_visit_per_junction):
-	return np.clip(j.visit_count, 0, max_visit_per_junction)/max_visit_per_junction
+get_normalized_food_count = lambda j, max_food_per_target: np.clip(j.food_deliveries, 0, max_food_per_target)/max_food_per_target
+is_source_junction = lambda j: j.is_source
+is_target_junction = lambda j, max_food_per_target: j.is_target and get_normalized_food_count(j, max_food_per_target) < 1
+is_relevant_junction = lambda j, max_food_per_target: is_source_junction(j) or is_target_junction(j, max_food_per_target)
 
 class GraphDriveAgent:
 
@@ -50,8 +52,8 @@ class GraphDriveAgent:
 				low= -1,
 				high= 1,
 				shape= (
-					self.env_config['junction_number'],
-					2 + 1, # junction.pos + junction.normalized_visit_count
+					self.env_config['junctions_number'],
+					2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
 				),
 				dtype=np.float32
 			),
@@ -59,7 +61,7 @@ class GraphDriveAgent:
 				low= -1,
 				high= 1,
 				shape= ( # closest junctions view
-					self.env_config['junction_number'],
+					self.env_config['junctions_number'],
 					self.env_config['max_roads_per_junction'],
 					1 + self.obs_road_features,  # road properties: road.normalised_slope + road.af_features
 				),
@@ -93,7 +95,7 @@ class GraphDriveAgent:
 		self.road_network = road_network
 		self.other_agent_list = other_agent_list
 		self.seconds_per_step = self.get_step_seconds()
-		self.slowed_down = self.is_blocked()
+		self.slowdown_factor = self.get_slowdown_factor()
 		# car position
 		self.car_point = car_point
 		self.car_orientation = (2*self.np_random.random()-1)*np.pi # in [-pi,pi]
@@ -114,6 +116,7 @@ class GraphDriveAgent:
 		self.last_reward_type = 'move_forward'
 		self.last_action_mask = None
 		self.is_dead = False
+		self.has_food = True
 
 	@property
 	def normalised_speed(self):
@@ -142,7 +145,7 @@ class GraphDriveAgent:
 
 	@property
 	def agent_state_size(self):
-		return 5 # normalised steering angle + normalised speed	
+		return 6 # normalised steering angle + normalised speed	+ has food
 
 	def get_agent_state(self):
 		return (
@@ -150,7 +153,8 @@ class GraphDriveAgent:
 			self.speed/self.env_config['max_speed'], # normalised speed
 			min(1, self.distance_to_closest_road/self.env_config['max_distance_to_path']),
 			self.is_in_junction(self.car_point),
-			1 if self.slowed_down else 0
+			self.slowdown_factor,
+			self.has_food,
 		)
 
 	def normalize_point(self, p):
@@ -164,10 +168,6 @@ class GraphDriveAgent:
 				return True
 		return False
 
-	def get_normalized_visit_count(self, j):
-		return get_normalized_visit_count(j, self.env_config['max_visit_per_junction'])
-
-	
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
 		source_x, source_y = source_point
@@ -178,7 +178,7 @@ class GraphDriveAgent:
 		sorted_junctions = sorted(road_network_junctions, key=lambda x: x[0])
 		junctions_view = np.full(self.observation_space['fc']["junctions_view"].shape, -1, dtype=np.float32)
 		junctions_view[:len(sorted_junctions)] = [
-			(*j_pos, self.get_normalized_visit_count(j))
+			(*j_pos, j.is_source, j.is_target, get_normalized_food_count(j,self.env_config['max_food_per_target']) if j.is_target else -1)
 			for j_pos, j in sorted_junctions
 		]
 		# Get roads view
@@ -194,7 +194,12 @@ class GraphDriveAgent:
 		##### Get neighbourhood view
 		if self.other_agent_list:
 			sorted_agents = sorted((
-				(shift_rotate_normalise_point(agent.car_point), agent.get_agent_state(), agent.agent_id.binary_features(as_tuple=True), agent.is_dead)
+				(
+					shift_rotate_normalise_point(agent.car_point), 
+					agent.get_agent_state(), 
+					agent.agent_id.binary_features(as_tuple=True), 
+					agent.is_dead
+				)
 				for agent in self.other_agent_list
 			), key=lambda x: x[0])
 			agents_view = np.array(
@@ -246,10 +251,12 @@ class GraphDriveAgent:
 	def get_step_seconds(self):
 		return self.np_random.exponential(scale=self.env_config['mean_seconds_per_step']) if self.env_config['random_seconds_per_step'] is True else self.env_config['mean_seconds_per_step']
 
-	def is_blocked(self):
-		if not self.env_config['mean_blockage']:
-			return False
-		return self.np_random.choice(a=[False,True], p=[1-self.env_config['mean_blockage'],self.env_config['mean_blockage']])
+	def get_slowdown_factor(self):
+		if not self.env_config['blockage_probability']:
+			return 0
+		if not self.np_random.choice(a=[False,True], p=[1-self.env_config['blockage_probability'],self.env_config['blockage_probability']]):
+			return 0
+		return self.np_random.uniform(self.env_config['min_blockage_ratio'], self.env_config['max_blockage_ratio'])
 
 	def start_step(self, action_vector):
 		# first of all, get the seconds passed from last step
@@ -266,11 +273,13 @@ class GraphDriveAgent:
 		old_goal_junction = self.goal_junction
 		visiting_new_road = False
 		visiting_new_junction = False
+		has_just_taken_food = False
+		has_just_delivered_food = False
 		self.car_point, self.car_orientation = self.move(
 			point=self.car_point, 
 			orientation=self.car_orientation, 
 			steering_angle=self.steering_angle, 
-			speed=self.speed/2 if self.slowed_down else self.speed, 
+			speed=self.speed*(1-self.slowdown_factor),
 			add_noise=True
 		)
 		if self.goal_junction is None:
@@ -280,25 +289,36 @@ class GraphDriveAgent:
 		self.closest_junction = RoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
 		if self.is_in_junction(self.car_point):
-			if self.closest_junction != self.last_closest_junction:
-				visiting_new_junction = True
-				self.closest_junction.visit()
-				self.last_closest_junction = self.closest_junction
-			self.goal_junction = None
 			if self.last_closest_road is not None: # if closest_road is not the first visited road
 				self.last_closest_road.is_visited_by(self.agent_id, True) # set the old road as visited
+			if self.closest_junction != self.last_closest_junction:
+				visiting_new_junction = True
+				#########
+				self.goal_junction = None
+				self.last_closest_road = None
+				self.last_closest_junction = self.closest_junction
+				#########
+				if self.closest_junction.is_source and not self.has_food:
+					has_just_taken_food = True
+					self.has_food = True
+				elif self.closest_junction.is_target and self.has_food:
+					has_just_delivered_food = True
+					self.closest_junction.food_deliveries += 1
+					self.has_food = False
 		elif self.last_closest_road != self.closest_road: # not in junction and visiting a new road
 			visiting_new_road = True
+			#########
+			self.last_closest_junction = None
 			self.last_closest_road = self.closest_road # keep track of the current road
 			self.goal_junction = RoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
 			self.current_road_speed_list = []
 		self.current_road_speed_list.append(self.speed)
-		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point
+		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food
 
-	def end_step(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point):
+	def end_step(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
 		# compute perceived reward
-		reward, dead, reward_type = self.reward_fn(visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point)
-		self.slowed_down = self.is_blocked()
+		reward, dead, reward_type = self.reward_fn(visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food)
+		self.slowdown_factor = self.get_slowdown_factor()
 		# compute new state (after updating progress)
 		state = self.get_state()
 		# update last action/state/reward
@@ -311,7 +331,7 @@ class GraphDriveAgent:
 	def get_info(self):
 		return f"speed={self.speed}, steering_angle={self.steering_angle}, orientation={self.car_orientation}"
 
-	def frequent_reward_default(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point): # BAD
+	def frequent_reward_default(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
@@ -324,44 +344,57 @@ class GraphDriveAgent:
 		#######################################
 		# "Is colliding" rule
 		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
+			return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
 
-		is_in_junction = self.is_in_junction(self.car_point)
+		#######################################
+		# "Has delivered food to target" rule
+		if has_just_delivered_food:
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+
+		#######################################
+		# "Has taken food from source" rule
+		if has_just_taken_food:
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+
 		#######################################
 		# "Is in junction" rule
-		if is_in_junction:
-			#######################################
-			# "Is in new junction" rule
-			if visiting_new_junction and self.get_normalized_visit_count(self.closest_junction) < 1:  # If agent acquired a brand new junction and that is important.
-				# return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('is_in_new_junction', self.last_explanation_list))
-				return unitary_reward(is_positive=True, is_terminal=False, label='has_visited_an_important_junction')
-			#######################################
-			# "Is in old junction" rule
+		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
+		assert self.goal_junction
+
 		#######################################
 		# "No U-Turning outside junction" rule
 		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
+		if space_traveled_towards_goal < 0:
 			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+
 		#######################################
 		# "Stay on the road" rule
 		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
 			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
+
 		#######################################
 		# "Follow regulation" rule. # Run dialogue against culture.
 		# Assign normalised speed to agent properties before running dialogues.
 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 		if not following_regulation:
 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+		
 		#######################################
-		# "Move towards important junction" rule
-		if self.get_normalized_visit_count(self.goal_junction) < 1:
-			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_important_junction')
+		# "Move towards target with food" rule
+		if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
+			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
+
+		#######################################
+		# "Move towards source without food" rule
+		if is_source_junction(self.goal_junction) and not self.has_food:
+			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_source_without_food')
+		
 		#######################################
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')
 
-	def sparse_reward_default(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point): # BAD
+	def sparse_reward_default(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
@@ -371,35 +404,42 @@ class GraphDriveAgent:
 		#######################################
 		# "Is colliding" rule
 		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='is_colliding_other_agent')
+			return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
 
-		is_in_junction = self.is_in_junction(self.car_point)
+		#######################################
+		# "Has delivered food to target" rule
+		if has_just_delivered_food:
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+
+		#######################################
+		# "Has taken food from source" rule
+		if has_just_taken_food:
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+
 		#######################################
 		# "Is in junction" rule
-		if is_in_junction:
-			#######################################
-			# "Is in new junction" rule
-			if visiting_new_junction and self.get_normalized_visit_count(self.closest_junction) < 1:  # If agent acquired a brand new junction and that is important.
-				# return step_reward(is_positive=True, is_terminal=False, label=explanation_list_with_label('is_in_new_junction', self.last_explanation_list))
-				return unitary_reward(is_positive=True, is_terminal=False, label='has_visited_an_important_junction')
-			#######################################
-			# "Is in old junction" rule
+		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
+		assert self.goal_junction
+
 		#######################################
 		# "No U-Turning outside junction" rule
 		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal <= 0:
+		if space_traveled_towards_goal < 0:
 			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+
 		#######################################
 		# "Stay on the road" rule
 		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
 			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
+
 		#######################################
 		# "Follow regulation" rule. # Run dialogue against culture.
 		# Assign normalised speed to agent properties before running dialogues.
 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 		if not following_regulation:
 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+		
 		#######################################
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')
@@ -468,8 +508,10 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 			min_junction_distance=self.env_config['min_junction_distance'],
 			max_roads_per_junction=self.env_config['max_roads_per_junction'],
 			number_of_agents=self.num_agents,
+			junctions_number=self.env_config['junctions_number'],
+			target_junctions_number=self.env_config['target_junctions_number'],
+			source_junctions_number=self.env_config['source_junctions_number'],
 		)
-		self.road_network.set(self.env_config['junction_number'])
 		starting_point_list = self.road_network.get_random_starting_point_list(n=self.num_agents)
 		for uid,agent in enumerate(self.agent_list):
 			agent.reset(
@@ -509,43 +551,67 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		figure = Figure(figsize=(5,5), tight_layout=True)
 		canvas = FigureCanvas(figure)
 		ax = figure.add_subplot(111) # nrows=1, ncols=1, index=1
+
+		car1_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Green"), lw=2, label="Food Bot")
+		car2_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Red"), lw=2, label="Slow Food Bot")
+		car3_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Gold"), lw=2, label="Slow Bot")
+		junction1_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=0.5, label='Target Node')
+		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=0.5, label='Source Node')
 		
 		# [Junctions]
 		if len(self.road_network.junctions) > 0:
+			def get_junction_color(j):
+				if is_target_junction(j, self.env_config['max_food_per_target']):
+					return 'red'
+				if is_source_junction(j):
+					return 'green'
+				return 'black'
+				
 			junctions = [
 				Circle(
 					junction.pos, 
 					self.env_config['junction_radius'], 
-					color='y' if get_normalized_visit_count(junction, self.env_config['max_visit_per_junction']) < 1 else 'r', 
+					color=get_junction_color(junction), 
 					alpha=0.25,
-					# label=f"{get_normalized_visit_count(junction, self.env_config['max_visit_per_junction']):.2f}"
+					label='Target Node' if junction.is_target else ('Source Node' if junction.is_source else 'Normal Node')
 				)
 				for junction in self.road_network.junctions
 			]
 			patch_collection = PatchCollection(junctions, match_original=True)
 			ax.add_collection(patch_collection)
+			for junction in self.road_network.target_junctions:
+				ax.annotate(
+					junction.food_deliveries, 
+					junction.pos, 
+					color='black', 
+					weight='bold', 
+					fontsize=10, 
+					ha='center', 
+					va='center'
+				)
 
 		# [Car]
+		def get_car_color(agent):
+			if agent.has_food and agent.slowdown_factor:
+				return 'red'
+			elif agent.has_food:
+				return 'green'
+			elif agent.slowdown_factor:
+				return colour_to_hex("Gold")
+			return 'black'
 		for uid,agent in enumerate(self.agent_list):
 			car_x, car_y = agent.car_point
-			car_handle = ax.scatter(car_x, car_y, marker='o', color='g' if not agent.slowed_down else 'r', label='Car')
+			color = get_car_color(agent)
+			car_handle = ax.scatter(car_x, car_y, marker='o', color=color, label='Car')
 			# [Heading Vector]
 			dir_x, dir_y = get_heading_vector(angle=agent.car_orientation, space=self.env_config['max_dimension']/16)
-			heading_vector_handle, = ax.plot([car_x, car_x+dir_x],[car_y, car_y+dir_y], color='g', alpha=0.5, label='Heading Vector')
+			heading_vector_handle = ax.plot([car_x, car_x+dir_x],[car_y, car_y+dir_y], color=color, alpha=0.5, label='Heading Vector')
 
 		# [Roads]
 		for road in self.road_network.roads:
 			road_pos = list(zip(*(road.start.pos, road.end.pos)))
-			road_colour = "Green" if road.colour is None else road.colour
 			line_style = '-'
-			path_handle, = ax.plot(road_pos[0], road_pos[1], color=colour_to_hex(road_colour), ls=line_style, lw=2, alpha=0.5, label="Road")
-
-		# path1_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Green"), lw=2, label="OK")
-		# path2_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Red"), lw=2, label="Unfeasible")
-		# path3_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Gold"), lw=2, label="Wrong Speed")
-		# path4_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Black"), ls='--', lw=2, label="Closest Road")
-		# path5_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Black"), ls='-.', lw=2, label="Old Road")
-		# junction_handle = ax.scatter(0, 0, marker='o', color='y', label='Junction')
+			path_handle = ax.plot(road_pos[0], road_pos[1], color='black', ls=line_style, lw=2, alpha=0.5, label="Road")
 
 		# Adjust ax limits in order to get the same scale factor on both x and y
 		a,b = ax.get_xlim()
@@ -553,10 +619,10 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		max_length = max(d-c, b-a)
 		ax.set_xlim([a,a+max_length])
 		ax.set_ylim([c,c+max_length])
-		# # Build legend
-		# handles = [car_handle, path1_handle, path2_handle, path3_handle, path4_handle, path5_handle]
-		# ax.legend(handles=handles)
-		# Draw plot
+		# Build legend
+		handles = [car1_handle, car2_handle, car3_handle, junction1_handle, junction2_handle]
+		ax.legend(handles=handles)
+		# # Draw plot
 		# figure.suptitle(' '.join([
 		# 	# f'[Angle]{np.rad2deg(self.steering_angle):.2f}°', 
 		# 	# f'[Orient.]{np.rad2deg(self.car_orientation):.2f}°', 

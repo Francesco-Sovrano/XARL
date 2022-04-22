@@ -21,16 +21,28 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 
 SELECT_ENV = "MAGraphDrive-Hard"
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 5
+NUM_AGENTS = 32
 
 CONFIG = XATD3_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
-	'max_visit_per_junction': 2,
-	'mean_blockage': 0.1,
-	'agent_collision_radius': 0.25,
+	'max_food_per_target': 10,
+	'blockage_probability': 0.3,
+	'min_blockage_ratio': 0.1,
+	'max_blockage_ratio': 0.75,
+	'agent_collision_radius': None,
+	'target_junctions_number': 4,
+	'source_junctions_number': 4,
+	################################
+	'max_dimension': 32,
+	'junctions_number': 32,
+	'max_roads_per_junction': 4,
+	'junction_radius': 1,
+	'max_distance_to_path': .5, # meters
+	################################
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
 	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
+	################################
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
 	'wheelbase': 0.35, # meters # https://en.wikipedia.org/wiki/Wheelbase
 	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
@@ -43,18 +55,11 @@ CONFIG["env_config"] = {
 	# a normal car has max_deceleration 7.1 m/s^2 (http://www.batesville.k12.in.us/Physics/PhyNet/Mechanics/Kinematics/BrakingDistData.html)
 	'max_deceleration': 7, # m/s^2
 	'max_steering_degree': 45,
-	# max_step = 2**9
-	'max_distance_to_path': 0.5, # meters
 	# min_speed_lower_limit = 0.7 # m/s # used together with max_speed to get the random speed upper limit
 	# max_speed_noise = 0.25 # m/s
 	# max_steering_noise_degree = 2
 	'max_speed_noise': 0, # m/s
 	'max_steering_noise_degree': 0,
-	# multi-road related stuff
-	'max_dimension': 50,
-	'junction_number': 32,
-	'max_roads_per_junction': 4,
-	'junction_radius': 2,
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
@@ -74,11 +79,11 @@ CONFIG.update({
 	# "batch_mode": "truncate_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	###########################
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
-	'buffer_size': 2**14, # Size of the experience buffer. Default 50000
+	'buffer_size': 2**15, # Size of the experience buffer. Default 50000
 	"prioritized_replay_alpha": 0.6,
 	"prioritized_replay_beta": 0.4, # The smaller, the stronger is over-sampling
 	"prioritized_replay_eps": 1e-6,
-	"learning_starts": 2**14, # How many steps of the model to sample before learning starts.
+	"learning_starts": 2**15, # How many steps of the model to sample before learning starts.
 	###########################
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"tau": 1e-4,
@@ -88,7 +93,7 @@ CONFIG.update({
 		'priority_lower_limit': 0, # A value lower than the lowest possible priority. It depends on the priority_id. By default in DQN and DDPG it is td_error 0, while in PPO it is gain None.
 		'priority_aggregation_fn': 'np.mean', # A reduction that takes as input a list of numbers and returns a number representing a batch priority.
 		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
-		'global_size': 2**14, # Default 50000. Maximum number of batches stored in all clusters (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
+		'global_size': 2**15, # Default 50000. Maximum number of batches stored in all clusters (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
 		'prioritization_alpha': 0.6, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'prioritization_importance_beta': 0.4, # To what degree to use importance weights (0 - no corrections, 1 - full correction).
 		'prioritization_importance_eta': 1e-2, # Used only if priority_lower_limit is None. A value > 0 that enables eta-weighting, thus allowing for importance weighting with priorities lower than 0 if beta is > 0. Eta is used to avoid importance weights equal to 0 when the sampled batch is the one with the highest priority. The closer eta is to 0, the closer to 0 would be the importance weight of the highest-priority batch.

@@ -2,6 +2,7 @@
 *.rar
 *.git *
 
+demo_episode/
 Atari-ROM/
 out/
 tmp/

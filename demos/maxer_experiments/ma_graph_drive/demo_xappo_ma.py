@@ -21,16 +21,28 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 SELECT_ENV = "MAGraphDrive-Easy"
 
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 5
+NUM_AGENTS = 32
 
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
-	'max_visit_per_junction': 2,
-	'mean_blockage': 0.1,
-	'agent_collision_radius': 0.25,
+	'max_food_per_target': 10,
+	'blockage_probability': 0.3,
+	'min_blockage_ratio': 0.1,
+	'max_blockage_ratio': 0.75,
+	'agent_collision_radius': None,
+	'target_junctions_number': 4,
+	'source_junctions_number': 4,
+	################################
+	'max_dimension': 32,
+	'junctions_number': 32,
+	'max_roads_per_junction': 4,
+	'junction_radius': 1,
+	'max_distance_to_path': .5, # meters
+	################################
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
 	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
+	################################
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
 	'wheelbase': 0.35, # meters # https://en.wikipedia.org/wiki/Wheelbase
 	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
@@ -43,28 +55,21 @@ CONFIG["env_config"] = {
 	# a normal car has max_deceleration 7.1 m/s^2 (http://www.batesville.k12.in.us/Physics/PhyNet/Mechanics/Kinematics/BrakingDistData.html)
 	'max_deceleration': 7, # m/s^2
 	'max_steering_degree': 45,
-	# max_step = 2**9
-	'max_distance_to_path': 0.5, # meters
 	# min_speed_lower_limit = 0.7 # m/s # used together with max_speed to get the random speed upper limit
 	# max_speed_noise = 0.25 # m/s
 	# max_steering_noise_degree = 2
 	'max_speed_noise': 0, # m/s
 	'max_steering_noise_degree': 0,
-	# multi-road related stuff
-	'max_dimension': 50,
-	'junction_number': 32,
-	'max_roads_per_junction': 4,
-	'junction_radius': 2,
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"centralised_buffer": True, # for MARL
-	# "model": { # this is for GraphDrive and GridDrive
-	# 	"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-	# 	"custom_model": "adaptive_multihead_network",
-	# },
+	"model": { # this is for GraphDrive and GridDrive
+		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+		"custom_model": "adaptive_multihead_network",
+	},
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
@@ -169,7 +174,7 @@ CONFIG["multiagent"].update({
 	# #   multi-agent actions are passed/how many multi-agent observations
 	# #   have been returned in the previous step).
 	# # agent_steps: Count each individual agent step as one step.
-	"count_steps_by": "agent_steps",
+	# "count_steps_by": "agent_steps",
 })
 print('Config:', CONFIG)
 
