@@ -103,6 +103,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 				action_dict = {
 					k: agent.compute_action(v, policy_id=policy_mapping_fn(k), full_fetch=True, explore=False)[0]
 					for k,v in state_dict.items()
+					if not done_dict.get(k, True)
 				}
 				# print('action_dict', action_dict)
 				state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
