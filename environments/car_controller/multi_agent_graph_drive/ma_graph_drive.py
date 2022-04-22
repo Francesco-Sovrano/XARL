@@ -298,10 +298,10 @@ class GraphDriveAgent:
 				self.last_closest_road = None
 				self.last_closest_junction = self.closest_junction
 				#########
-				if self.closest_junction.is_source and not self.has_food:
+				if is_source_junction(self.closest_junction) and not self.has_food:
 					has_just_taken_food = True
 					self.has_food = True
-				elif self.closest_junction.is_target and self.has_food:
+				elif is_target_junction(self.closest_junction, self.env_config['max_food_per_target']) and self.has_food:
 					has_just_delivered_food = True
 					self.closest_junction.food_deliveries += 1
 					self.has_food = False
@@ -337,7 +337,7 @@ class GraphDriveAgent:
 		def unitary_reward(is_positive, is_terminal, label):
 			return (1 if is_positive else -1, is_terminal, label)
 		def step_reward(is_positive, is_terminal, label):
-			reward = self.normalised_speed # in (0,1]
+			reward = self.normalised_speed/2 # in (0,1/2]
 			return (reward if is_positive else -reward, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
@@ -381,18 +381,8 @@ class GraphDriveAgent:
 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 		
 		#######################################
-		# "Move towards target with food" rule
-		if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
-			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
-
-		#######################################
-		# "Move towards source without food" rule
-		if is_source_junction(self.goal_junction) and not self.has_food:
-			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_source_without_food')
-		
-		#######################################
 		# "Move forward" rule
-		return null_reward(is_terminal=False, label='moving_forward')
+		return step_reward(is_positive=True, is_terminal=False, label='moving_forward')
 
 	def sparse_reward_default(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
 		def null_reward(is_terminal, label):
@@ -573,7 +563,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 					self.env_config['junction_radius'], 
 					color=get_junction_color(junction), 
 					alpha=0.25,
-					label='Target Node' if junction.is_target else ('Source Node' if junction.is_source else 'Normal Node')
+					label='Target Node' if is_target_junction(junction, self.env_config['max_food_per_target']) else ('Source Node' if is_source_junction(junction) else 'Normal Node')
 				)
 				for junction in self.road_network.junctions
 			]
