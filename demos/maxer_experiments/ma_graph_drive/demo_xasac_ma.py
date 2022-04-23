@@ -66,7 +66,6 @@ CONFIG["env_config"] = {
 CONFIG.update({
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
-	"centralised_buffer": True, # for MARL
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "adaptive_multihead_network"
@@ -151,6 +150,7 @@ else:
 	policy_graphs = {}
 	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
 
+CONFIG["centralised_buffer"] = CENTRALISED_TRAINING
 CONFIG["multiagent"].update({
 	"policies": policy_graphs,
 	"policy_mapping_fn": policy_mapping_fn,

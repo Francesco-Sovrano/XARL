@@ -109,6 +109,8 @@ else:
 	policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
 	# policy_graphs = {}
 	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
+
+CONFIG["centralised_buffer"] = CENTRALISED_TRAINING
 CONFIG["multiagent"].update({
 	"policies": policy_graphs,
 	"policy_mapping_fn": policy_mapping_fn,

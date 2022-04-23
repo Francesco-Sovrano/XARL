@@ -21,15 +21,15 @@ ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMulti
 SELECT_ENV = "MAGraphDrive-Easy"
 
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 32
+NUM_AGENTS = 16
 
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'max_food_per_target': 10,
-	'blockage_probability': 0.3,
+	'blockage_probability': 0.15,
 	'min_blockage_ratio': 0.1,
-	'max_blockage_ratio': 0.75,
+	'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
 	'target_junctions_number': 4,
 	'source_junctions_number': 4,
@@ -65,7 +65,6 @@ CONFIG["env_config"] = {
 CONFIG.update({
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
-	"centralised_buffer": True, # for MARL
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "adaptive_multihead_network",
@@ -153,6 +152,7 @@ else:
 	# policy_graphs = {}
 	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
 
+CONFIG["centralised_buffer"] = CENTRALISED_TRAINING
 CONFIG["multiagent"].update({
 	"policies": policy_graphs,
 	"policy_mapping_fn": policy_mapping_fn,

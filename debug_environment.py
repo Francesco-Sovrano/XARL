@@ -6,8 +6,10 @@ import sys
 import os
 from environments import *
 
-OUTPUT_DIR = './demo_episode'
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+PLOT_EPISODE = False
+if PLOT_EPISODE:
+	OUTPUT_DIR = './demo_episode'
+	os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 env_config = {
 	'num_agents': 32,
@@ -88,7 +90,8 @@ def run_one_episode(env):
 	state = env.reset()
 	step = 0
 	sum_reward = 0
-	file_list = [print_screen(OUTPUT_DIR, step)]
+	if PLOT_EPISODE:
+		file_list = [print_screen(OUTPUT_DIR, step)]
 	if multiagent:
 		done_dict = {i: False for i in state.keys()}
 		done_dict['__all__'] = False
@@ -102,7 +105,8 @@ def run_one_episode(env):
 			state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
 			state = state_dict
 			sum_reward += sum(reward_dict.values())
-			file_list.append(print_screen(OUTPUT_DIR, step))
+			if PLOT_EPISODE:
+				file_list.append(print_screen(OUTPUT_DIR, step))
 			env.render()
 			# time.sleep(0.25)
 	else:
@@ -112,11 +116,13 @@ def run_one_episode(env):
 			action = env.action_space.sample()
 			state, reward, done, info = env.step(action)
 			sum_reward += reward
-			file_list.append(print_screen(OUTPUT_DIR, step))
+			if PLOT_EPISODE:
+				file_list.append(print_screen(OUTPUT_DIR, step))
 			env.render()
 			# time.sleep(0.25)
-	gif_filename = os.path.join(OUTPUT_DIR, 'episode.gif')
-	plt.make_gif(file_list=file_list, gif_path=gif_filename)
+	if PLOT_EPISODE:
+		gif_filename = os.path.join(OUTPUT_DIR, 'episode.gif')
+		plt.make_gif(file_list=file_list, gif_path=gif_filename)
 	return sum_reward
 
 sum_reward = run_one_episode(env)

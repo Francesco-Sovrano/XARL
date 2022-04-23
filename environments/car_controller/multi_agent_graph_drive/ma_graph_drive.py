@@ -542,21 +542,28 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		canvas = FigureCanvas(figure)
 		ax = figure.add_subplot(111) # nrows=1, ncols=1, index=1
 
-		car1_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Green"), lw=2, label="Food Bot")
-		car2_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Red"), lw=2, label="Slow Food Bot")
-		car3_handle, = ax.plot((0,0), (0,0), color=colour_to_hex("Gold"), lw=2, label="Slow Bot")
+		def get_car_color(a):
+			if a.is_dead:
+				return 'grey'
+			if a.slowdown_factor:
+				return 'red'
+			if a.has_food:
+				return 'green'
+			return colour_to_hex("Gold")
+		car1_handle, = ax.plot((0,0), (0,0), color='green', lw=2, label="Has Food")
+		car2_handle, = ax.plot((0,0), (0,0), color='red', lw=2, label="Is Slow")
+		car3_handle, = ax.plot((0,0), (0,0), color='grey', lw=2, label="Is Dead")
+		def get_junction_color(j):
+			if is_target_junction(j, self.env_config['max_food_per_target']):
+				return 'red'
+			if is_source_junction(j):
+				return 'green'
+			return 'grey'
 		junction1_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=0.5, label='Target Node')
 		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=0.5, label='Source Node')
 		
 		# [Junctions]
 		if len(self.road_network.junctions) > 0:
-			def get_junction_color(j):
-				if is_target_junction(j, self.env_config['max_food_per_target']):
-					return 'red'
-				if is_source_junction(j):
-					return 'green'
-				return 'black'
-				
 			junctions = [
 				Circle(
 					junction.pos, 
@@ -581,14 +588,6 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 				)
 
 		# [Car]
-		def get_car_color(agent):
-			if agent.has_food and agent.slowdown_factor:
-				return 'red'
-			elif agent.has_food:
-				return 'green'
-			elif agent.slowdown_factor:
-				return colour_to_hex("Gold")
-			return 'black'
 		for uid,agent in enumerate(self.agent_list):
 			car_x, car_y = agent.car_point
 			color = get_car_color(agent)

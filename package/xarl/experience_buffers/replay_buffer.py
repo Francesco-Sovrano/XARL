@@ -107,6 +107,7 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		centralised_buffer=True,
 		replay_integral_multi_agent_batches=False,
 	):
+		logger.warning(f'Building LocalReplayBuffer with centralised_buffer = {centralised_buffer}')
 		self.prioritized_replay = prioritized_replay
 		self.centralised_buffer = centralised_buffer
 		self.replay_integral_multi_agent_batches = replay_integral_multi_agent_batches
