@@ -287,7 +287,7 @@ def xappo_execution_plan(workers, config, **kwargs):
 	
 	def add_view_requirements(w):
 		for policy in w.policy_map.values():
-			policy.view_requirements[SampleBatch.T] = ViewRequirement(SampleBatch.T, shift=0)
+			# policy.view_requirements[SampleBatch.T] = ViewRequirement(SampleBatch.T, shift=0)
 			policy.view_requirements[SampleBatch.INFOS] = ViewRequirement(SampleBatch.INFOS, shift=0)
 			policy.view_requirements[SampleBatch.ACTION_LOGP] = ViewRequirement(SampleBatch.ACTION_LOGP, shift=0)
 			policy.view_requirements[SampleBatch.NEXT_OBS] = ViewRequirement(SampleBatch.OBS, shift=1)

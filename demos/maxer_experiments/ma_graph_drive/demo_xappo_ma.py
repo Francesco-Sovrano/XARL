@@ -18,7 +18,7 @@ from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model
 # Register the models to use.
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
-SELECT_ENV = "MAGraphDrive-Easy"
+SELECT_ENV = "MAGraphDrive"
 
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
@@ -33,6 +33,7 @@ CONFIG["env_config"] = {
 	'agent_collision_radius': None,
 	'target_junctions_number': 4,
 	'source_junctions_number': 4,
+	'max_steps_in_junction': 2**5,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,
@@ -73,9 +74,9 @@ CONFIG.update({
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
 	"rollout_fragment_length": 2**3, # Number of transitions per batch in the experience buffer. Default is 50 for APPO.
-	"train_batch_size": 2**7, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
-	"replay_proportion": 4, # Set a p>0 to enable experience replay. Saved samples will be replayed with a p:1 proportion to new data samples.
-	"replay_buffer_num_slots": 2**9, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).	
+	"train_batch_size": 2**8, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
+	"replay_proportion": 1, # Set a p>0 to enable experience replay. Saved samples will be replayed with a p:1 proportion to new data samples.
+	"replay_buffer_num_slots": 2**12, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).	
 	###################################
 	"gae_with_vtrace": False, # Useful when default "vtrace" is not active. Formula for computing the advantages: it combines GAE with V-Trace.
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
@@ -104,7 +105,7 @@ CONFIG.update({
 	},
 	"clustering_scheme": [ # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
 		'Who',
-		'How_Well',
+		#'How_Well', # Do not use How_Well with Why explanations on XAPPO: it would cause clusters fragmentation with very sparse reward functions.
 		'Why',
 		# 'Where',
 		# 'What',
@@ -174,7 +175,7 @@ CONFIG["multiagent"].update({
 	# #   multi-agent actions are passed/how many multi-agent observations
 	# #   have been returned in the previous step).
 	# # agent_steps: Count each individual agent step as one step.
-	# "count_steps_by": "agent_steps",
+	"count_steps_by": "agent_steps",
 })
 print('Config:', CONFIG)
 

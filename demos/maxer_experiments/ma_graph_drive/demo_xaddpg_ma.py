@@ -33,6 +33,7 @@ CONFIG["env_config"] = {
 	'agent_collision_radius': None,
 	'target_junctions_number': 4,
 	'source_junctions_number': 4,
+	'max_steps_in_junction': 10,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,

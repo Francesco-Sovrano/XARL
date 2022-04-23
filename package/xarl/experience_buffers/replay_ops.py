@@ -33,31 +33,43 @@ def assign_types(multi_batch, clustering_scheme, batch_fragment_length, with_epi
 	if not isinstance(multi_batch, MultiAgentBatch):
 		multi_batch = MultiAgentBatch({DEFAULT_POLICY_ID: multi_batch}, multi_batch.count)
 	
-	if not with_episode_type:
-		batch_list = multi_batch.timeslices(batch_fragment_length) if multi_batch.count > batch_fragment_length else [multi_batch]
-		for i,batch in enumerate(batch_list):
-			for pid,sub_batch in batch.policy_batches.items():
-				get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(sub_batch, training_step=training_step, episode_step=i, agent_id=pid)		
-		return batch_list
+	# if not with_episode_type:
+	# 	batch_list = multi_batch.timeslices(batch_fragment_length) if multi_batch.count > batch_fragment_length else [multi_batch]
+	# 	for i,batch in enumerate(batch_list):
+	# 		for pid,sub_batch in batch.policy_batches.items():
+	# 			get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(sub_batch, training_step=training_step, episode_step=i, agent_id=pid)		
+	# 	return batch_list
 
 	batch_dict = {}
-	for pid,b in multi_batch.policy_batches.items():
+	for pid,meta_batch in multi_batch.policy_batches.items():
 		batch_dict[pid] = []
-		for episode in b.split_by_episode():
-			sub_batch_list = episode.as_multi_agent().timeslices(batch_fragment_length) if episode.count > batch_fragment_length else [episode]
-			sub_batch_list = list(map(lambda x: x.policy_batches[DEFAULT_POLICY_ID], sub_batch_list))
-			episode_type = clustering_scheme.get_episode_type(sub_batch_list)
+		batch_list = meta_batch.split_by_episode() if with_episode_type else [meta_batch]
+		for batch in batch_list:
+			sub_batch_count = int(np.ceil(len(batch)/batch_fragment_length))
+			sub_batch_list = [
+				batch[i*batch_fragment_length : (i+1)*batch_fragment_length]
+				for i in range(sub_batch_count)
+			] if len(batch) > batch_fragment_length else [batch]
+			episode_type = clustering_scheme.get_episode_type(sub_batch_list) if with_episode_type else None
 			for i,sub_batch in enumerate(sub_batch_list):
-				get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(sub_batch, episode_type=episode_type, training_step=training_step, episode_step=i, agent_id=pid)
+				get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(
+					sub_batch, 
+					episode_type=episode_type, 
+					training_step=training_step, 
+					episode_step=i, 
+					agent_id=pid
+				)
 			batch_dict[pid] += sub_batch_list
-	batch_list = [
-		MultiAgentBatch({
-			pid: b
-			for pid,b in zip(batch_dict.keys(),b_list)
-		},b_list[0].count)
+	return [
+		MultiAgentBatch(
+			{
+				pid: b
+				for pid,b in zip(batch_dict.keys(),b_list)
+			},
+			b_list[0].count
+		)
 		for b_list in zip(*batch_dict.values())
 	]
-	return batch_list
 
 def get_update_replayed_batch_fn(local_replay_buffer, local_worker, postprocess_trajectory_fn):
 	def update_replayed_fn(samples):

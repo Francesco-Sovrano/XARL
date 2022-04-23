@@ -116,7 +116,7 @@ def xadqn_execution_plan(workers, config, **kwargs):
 
 	def add_view_requirements(w):
 		for policy in w.policy_map.values():
-			policy.view_requirements[SampleBatch.T] = ViewRequirement(SampleBatch.T, shift=0)
+			# policy.view_requirements[SampleBatch.T] = ViewRequirement(SampleBatch.T, shift=0)
 			policy.view_requirements[SampleBatch.INFOS] = ViewRequirement(SampleBatch.INFOS, shift=0)
 			if policy.config["buffer_options"]["priority_id"] == "td_errors":
 				policy.view_requirements["td_errors"] = ViewRequirement("td_errors", shift=0)

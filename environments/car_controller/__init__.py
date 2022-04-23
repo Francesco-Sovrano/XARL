@@ -40,3 +40,5 @@ culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
 	register_env(f"MAGraphDrive-{culture_level}", lambda config: MultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
 	register_env(f"MAGraphDrive-{culture_level}-Sparse", lambda config: MultiAgentGraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
+register_env(f"MAGraphDrive", lambda config: MultiAgentGraphDrive({"reward_fn": 'frequent_reward_no_culture', "culture_level": "Easy", **config}))
+register_env(f"MAGraphDrive-Sparse", lambda config: MultiAgentGraphDrive({"reward_fn": 'sparse_reward_no_culture', "culture_level": "Easy", **config}))

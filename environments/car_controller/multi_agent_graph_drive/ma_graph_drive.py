@@ -117,6 +117,7 @@ class GraphDriveAgent:
 		self.last_action_mask = None
 		self.is_dead = False
 		self.has_food = True
+		self.steps_in_junction = 0
 
 	@property
 	def normalised_speed(self):
@@ -145,7 +146,7 @@ class GraphDriveAgent:
 
 	@property
 	def agent_state_size(self):
-		return 6 # normalised steering angle + normalised speed	+ has food
+		return 8 # normalised steering angle + normalised speed	+ has food
 
 	def get_agent_state(self):
 		return (
@@ -155,6 +156,8 @@ class GraphDriveAgent:
 			self.is_in_junction(self.car_point),
 			self.slowdown_factor,
 			self.has_food,
+			self.is_dead,
+			min(1,self.steps_in_junction/(self.env_config['max_steps_in_junction']+1)),
 		)
 
 	def normalize_point(self, p):
@@ -289,6 +292,7 @@ class GraphDriveAgent:
 		self.closest_junction = RoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
 		if self.is_in_junction(self.car_point):
+			self.steps_in_junction += 1
 			if self.last_closest_road is not None: # if closest_road is not the first visited road
 				self.last_closest_road.is_visited_by(self.agent_id, True) # set the old road as visited
 			if self.closest_junction != self.last_closest_junction:
@@ -337,7 +341,7 @@ class GraphDriveAgent:
 		def unitary_reward(is_positive, is_terminal, label):
 			return (1 if is_positive else -1, is_terminal, label)
 		def step_reward(is_positive, is_terminal, label):
-			reward = self.normalised_speed/2 # in (0,1/2]
+			reward = self.normalised_speed # in (0,1/2]
 			return (reward if is_positive else -reward, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
@@ -359,6 +363,8 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
+			if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+				return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		assert self.goal_junction
 
@@ -379,10 +385,20 @@ class GraphDriveAgent:
 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 		if not following_regulation:
 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+
+		#######################################
+		# "Move towards source without food" rule
+		if is_source_junction(self.goal_junction) and not self.has_food:
+			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_source_without_food')
+
+		#######################################
+		# "Move towards target with food" rule
+		if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
+			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
 		
 		#######################################
 		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label='moving_forward')
+		return null_reward(is_terminal=False, label='moving_forward')
 
 	def sparse_reward_default(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
 		def null_reward(is_terminal, label):
@@ -430,6 +446,95 @@ class GraphDriveAgent:
 		if not following_regulation:
 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 		
+		#######################################
+		# "Move forward" rule
+		return null_reward(is_terminal=False, label='moving_forward')
+
+	def frequent_reward_no_culture(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
+		def null_reward(is_terminal, label):
+			return (0, is_terminal, label)
+		def unitary_reward(is_positive, is_terminal, label):
+			return (1 if is_positive else -1, is_terminal, label)
+		def step_reward(is_positive, is_terminal, label):
+			reward = self.normalised_speed # in (0,1/2]
+			return (reward if is_positive else -reward, is_terminal, label)
+
+		#######################################
+		# "Is colliding" rule
+		if self.colliding_with_other_agent(old_car_point, self.car_point):
+			return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
+
+		#######################################
+		# "Has delivered food to target" rule
+		if has_just_delivered_food:
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+
+		#######################################
+		# "Has taken food from source" rule
+		if has_just_taken_food:
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+
+		#######################################
+		# "Is in junction" rule
+		if self.is_in_junction(self.car_point):
+			if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+				return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+			return null_reward(is_terminal=False, label='is_in_junction')
+		assert self.goal_junction
+
+		#######################################
+		# "No U-Turning outside junction" rule
+		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
+		if space_traveled_towards_goal < 0:
+			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+
+		#######################################
+		# "Stay on the road" rule
+		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
+			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
+		
+		#######################################
+		# "Move forward" rule
+		return step_reward(is_positive=True, is_terminal=False, label='moving_forward')
+
+	def sparse_reward_no_culture(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
+		def null_reward(is_terminal, label):
+			return (0, is_terminal, label)
+		def unitary_reward(is_positive, is_terminal, label):
+			return (1 if is_positive else -1, is_terminal, label)
+
+		#######################################
+		# "Is colliding" rule
+		if self.colliding_with_other_agent(old_car_point, self.car_point):
+			return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
+
+		#######################################
+		# "Has delivered food to target" rule
+		if has_just_delivered_food:
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+
+		#######################################
+		# "Has taken food from source" rule
+		if has_just_taken_food:
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+
+		#######################################
+		# "Is in junction" rule
+		if self.is_in_junction(self.car_point):
+			return null_reward(is_terminal=False, label='is_in_junction')
+		#assert self.goal_junction
+
+		#######################################
+		# "No U-Turning outside junction" rule
+		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
+		if space_traveled_towards_goal < 0:
+			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+
+		#######################################
+		# "Stay on the road" rule
+		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
+			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
+
 		#######################################
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')

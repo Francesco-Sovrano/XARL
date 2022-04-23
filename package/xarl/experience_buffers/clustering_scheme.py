@@ -173,7 +173,9 @@ class ClusterManager:
 			for gen in self.cluster_label_generator_list
 		)
 			
-	def get_batch_type(self, batch, episode_type='episode:none', **args):
+	def get_batch_type(self, batch, episode_type=None, **args):
+		if not episode_type:
+			episode_type = 'episode:none'
 		cluster_type_list = [
 			gen.get_batch_type(batch, **args)
 			for gen in self.cluster_label_generator_list
