@@ -82,8 +82,8 @@ class GraphDriveAgent:
 				high= 1,
 				shape= (
 					self.n_of_other_agents, 
-					2 + self.agent_state_size + self.obs_car_features + 1
-				), # for each other possible agent give position + heading vector + features with no access to state + is_dead
+					2 + self.agent_state_size + self.obs_car_features
+				), # for each other possible agent give position + state + features
 				dtype=np.float32
 			)
 		self.observation_space = gym.spaces.Dict({
@@ -196,21 +196,26 @@ class GraphDriveAgent:
 			), key=lambda x:x[0])
 		##### Get neighbourhood view
 		if self.other_agent_list:
-			sorted_agents = sorted((
+			alive_agent = [x for x in self.other_agent_list if not x.is_dead]
+			sorted_alive_agents = sorted((
 				(
 					shift_rotate_normalise_point(agent.car_point), 
 					agent.get_agent_state(), 
 					agent.agent_id.binary_features(as_tuple=True), 
-					agent.is_dead
+					# agent.is_dead
 				)
-				for agent in self.other_agent_list
+				for agent in alive_agent
 			), key=lambda x: x[0])
-			agents_view = np.array(
-				[
-					(*agent_point, *agent_state, *agent_features, 1 if agent_is_dead else 0)
-					for agent_point, agent_state, agent_features, agent_is_dead in sorted_agents
-				]
-			, dtype=np.float32)
+			sorted_alive_agents = [
+				(*agent_point, *agent_state, *agent_features)
+				for agent_point, agent_state, agent_features in sorted_alive_agents
+			]
+			if len(sorted_alive_agents) < len(self.other_agent_list):
+				agents_view = np.full(self.observation_space['fc']["agents_view"].shape, -1, dtype=np.float32)
+				if sorted_alive_agents:
+					agents_view[:len(sorted_alive_agents)] = sorted_alive_agents
+			else:
+				agents_view = np.array(sorted_alive_agents, dtype=np.float32)
 		else:
 			agents_view = None
 		# print('seconds',time.time()-s)
