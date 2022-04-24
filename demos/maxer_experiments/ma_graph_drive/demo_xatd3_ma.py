@@ -19,21 +19,21 @@ from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
 
-SELECT_ENV = "MAGraphDrive-Hard"
+SELECT_ENV = "MAGraphDrive"
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 32
+NUM_AGENTS = 16
 
 CONFIG = XATD3_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'max_food_per_target': 10,
-	'blockage_probability': 0.3,
+	'blockage_probability': 0.15,
 	'min_blockage_ratio': 0.1,
-	'max_blockage_ratio': 0.75,
+	'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': 4,
-	'source_junctions_number': 4,
-	'max_steps_in_junction': 10,
+	'target_junctions_number': 3,
+	'source_junctions_number': 1,
+	'max_steps_in_junction': 2**5,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,

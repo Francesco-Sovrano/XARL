@@ -66,18 +66,22 @@ class What(InfoExplanation): # What: information about what is inside the observ
 
 class How_Many(InfoExplanation): # How Many: how many different agents are seen within an observation.
 	def __init__(self, **args):
-		super().__init__('how-many', **args)
+		super().__init__('how_many', **args)
+
+class How_Fair(InfoExplanation):
+	def __init__(self, **args):
+		super().__init__('how_fair', **args)
 
 #### Special Explanations
 class How_WellOnZero(none):
 	def get_episode_type(self, episode):
 		episode_extrinsic_reward = sum((np.sum(batch["rewards"]) for batch in episode))
 		# episode_extrinsic_reward = np.sum(episode[-1]["rewards"])
-		return 'episode:how:better_than_zero' if episode_extrinsic_reward > 0 else 'episode:how:worse_than_zero' # Best batches = batches that lead to positive extrinsic reward
+		return 'episode:how_well:better_than_zero' if episode_extrinsic_reward > 0 else 'episode:how_well:worse_than_zero' # Best batches = batches that lead to positive extrinsic reward
 
 	def get_batch_type(self, batch, **args):
 		batch_extrinsic_reward = np.sum(batch["rewards"])
-		batch_type = 'how:better_than_zero' if batch_extrinsic_reward > 0 else 'how:worse_than_zero'
+		batch_type = 'how_well:better_than_zero' if batch_extrinsic_reward > 0 else 'how_well:worse_than_zero'
 		return [(batch_type,)]
 
 class How_Well(none):
@@ -90,7 +94,7 @@ class How_Well(none):
 		episode_extrinsic_reward = sum((np.sum(batch["rewards"]) for batch in episode))
 		# episode_extrinsic_reward = np.sum(episode[-1]["rewards"])
 		self.episode_stats.push(episode_extrinsic_reward)
-		return 'episode:how:better_than_average' if episode_extrinsic_reward > self.episode_stats.mean else 'episode:how:worse_than_average'
+		return 'episode:how_well:better_than_average' if episode_extrinsic_reward > self.episode_stats.mean else 'episode:how_well:worse_than_average'
 
 	def get_H(self, batch):
 		batch_extrinsic_reward = np.sum(batch["rewards"])
@@ -98,7 +102,7 @@ class How_Well(none):
 		return 'better_than_average' if batch_extrinsic_reward > self.batch_stats.mean else 'worse_than_average'
 
 	def get_batch_type(self, batch, **args):
-		return [(f"how:{self.get_H(batch)}",)]
+		return [(f"how_well:{self.get_H(batch)}",)]
 
 class When_DuringEpisode(none): # When: information about the training step of a batch.
 	def __init__(self, **args):

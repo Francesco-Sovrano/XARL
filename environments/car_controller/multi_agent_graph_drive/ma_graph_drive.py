@@ -146,7 +146,7 @@ class GraphDriveAgent:
 
 	@property
 	def agent_state_size(self):
-		return 8 # normalised steering angle + normalised speed	+ has food
+		return 7 # normalised steering angle + normalised speed	+ has food
 
 	def get_agent_state(self):
 		return (
@@ -157,7 +157,7 @@ class GraphDriveAgent:
 			self.slowdown_factor,
 			self.has_food,
 			self.is_dead,
-			min(1,self.steps_in_junction/(self.env_config['max_steps_in_junction']+1)),
+			# min(1,self.steps_in_junction/(self.env_config['max_steps_in_junction']+1)),
 		)
 
 	def normalize_point(self, p):
@@ -292,7 +292,7 @@ class GraphDriveAgent:
 		self.closest_junction = RoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
 		if self.is_in_junction(self.car_point):
-			self.steps_in_junction += 1
+			# self.steps_in_junction += 1
 			if self.last_closest_road is not None: # if closest_road is not the first visited road
 				self.last_closest_road.is_visited_by(self.agent_id, True) # set the old road as visited
 			if self.closest_junction != self.last_closest_junction:
@@ -306,9 +306,9 @@ class GraphDriveAgent:
 					has_just_taken_food = True
 					self.has_food = True
 				elif is_target_junction(self.closest_junction, self.env_config['max_food_per_target']) and self.has_food:
-					has_just_delivered_food = True
-					self.closest_junction.food_deliveries += 1
+					self.road_network.deliver_food(self.closest_junction)
 					self.has_food = False
+					has_just_delivered_food = True
 		elif self.last_closest_road != self.closest_road: # not in junction and visiting a new road
 			visiting_new_road = True
 			#########
@@ -319,16 +319,29 @@ class GraphDriveAgent:
 		self.current_road_speed_list.append(self.speed)
 		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food
 
+	def get_fairness_score(self, reward_type):
+		if reward_type=='has_just_delivered_food_to_target': 
+			return 'fair' if self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries else 'unfair'
+		if reward_type=='moving_towards_target_with_food':
+			return 'fair' if self.goal_junction.food_deliveries == self.road_network.min_food_deliveries else 'unfair'
+		if reward_type=='moving_towards_source_without_food' and self.road_network.min_food_deliveries < self.env_config['max_food_per_target']:
+			return 'fair'
+		return 'unknown'
+
 	def end_step(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
 		# compute perceived reward
 		reward, dead, reward_type = self.reward_fn(visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food)
+		# reward /= self.n_of_other_agents+1
 		self.slowdown_factor = self.get_slowdown_factor()
 		# compute new state (after updating progress)
 		state = self.get_state()
 		# update last action/state/reward
 		self.last_reward = reward
 		self.last_reward_type = reward_type
-		info_dict = {'explanation':{'why':reward_type}}
+		info_dict = {'explanation':{
+			'why': reward_type,
+			'how_fair': self.get_fairness_score(reward_type)
+		}}
 		self.is_dead = dead
 		return [state, reward, dead, info_dict]
 			
@@ -363,8 +376,8 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
-			if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-				return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		assert self.goal_junction
 
@@ -425,6 +438,8 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
+			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		assert self.goal_junction
 
@@ -477,8 +492,8 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
-			if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-				return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		assert self.goal_junction
 
@@ -494,8 +509,18 @@ class GraphDriveAgent:
 			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
 		
 		#######################################
+		# "Move towards source without food" rule
+		if is_source_junction(self.goal_junction) and not self.has_food:
+			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_source_without_food')
+
+		#######################################
+		# "Move towards target with food" rule
+		if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
+			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
+		
+		#######################################
 		# "Move forward" rule
-		return step_reward(is_positive=True, is_terminal=False, label='moving_forward')
+		return null_reward(is_terminal=False, label='moving_forward')
 
 	def sparse_reward_no_culture(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
 		def null_reward(is_terminal, label):
@@ -521,6 +546,8 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
+			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		#assert self.goal_junction
 
