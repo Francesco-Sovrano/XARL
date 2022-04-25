@@ -86,11 +86,12 @@ class GraphDrive(gym.Env):
 
 	def seed(self, seed=None):
 		logger.warning(f"Setting random seed to: {seed}")
-		self.seed = seed
+		self._seed = seed
 		self.np_random, _ = seeding.np_random(seed)
 		return [seed]
 
 	def __init__(self, config=None):
+		self.seed(config.get('seed',42))
 		self.config = config
 		self.viewer = None
 		self.max_steering_angle = np.deg2rad(self.max_steering_degree)
@@ -194,7 +195,7 @@ class GraphDrive(gym.Env):
 	
 	def reset(self):
 		self.culture.np_random = self.np_random
-		self.culture.seed = self.seed
+		self.culture.seed = self._seed
 		# print(0, self.np_random.random())
 		self.is_over = False
 		self._step = 0

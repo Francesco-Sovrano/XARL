@@ -20,9 +20,9 @@ from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model
 ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
 
 
-SELECT_ENV = "MAGraphDrive-Easy"
+SELECT_ENV = "MAGraphDrive"
 CENTRALISED_TRAINING = True
-NUM_AGENTS = 32
+NUM_AGENTS = 16
 
 CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {

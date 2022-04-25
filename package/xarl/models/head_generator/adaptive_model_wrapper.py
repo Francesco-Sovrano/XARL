@@ -15,39 +15,53 @@ def get_space_iter(obs_original_space):
 		return obs_original_space
 	return [obs_original_space]
 
+def build_heads(_obs_space, _type, _layers_build_fn, _layers_aggregator_fn):
+	_heads = []
+	_all_inputs = []
+	for _key in filter(lambda x: x.startswith(_type), sorted(_obs_space.original_space.spaces.keys())):
+		_inputs = [
+			tf.keras.layers.Input(shape=_head.shape, name=f"{_key}_input{i}")
+			for i,_head in enumerate(get_space_iter(_obs_space.original_space[_key]))
+		]
+		_layers = _layers_build_fn(_key,_inputs)
+		if len(_layers) > 1:
+			_layers = [tf.keras.layers.Concatenate(axis=-1)(_layers)]
+		_heads.append(_layers_aggregator_fn(_key,_layers))
+		_all_inputs += _inputs
+	if len(_heads) > 1: 
+		_heads = [tf.keras.layers.Concatenate(axis=-1)(_heads)]
+	return _all_inputs,_heads
+
 def get_tf_heads_model(obs_space):
 	cnn_inputs = []
 	cnn_layers = []
 	fc_inputs = []
 	fc_layers = []
 	if hasattr(obs_space, 'original_space'):
-		if 'cnn' in obs_space.original_space.spaces:
-			cnn_inputs = [
-				tf.keras.layers.Input(shape=cnn_head.shape, name=f"cnn_input{i}")
-				for i,cnn_head in enumerate(get_space_iter(obs_space.original_space['cnn']))
-			]
-			cnn_layers = [
-				tf.keras.Sequential(name=f"cnn_layer{i}", layers=[
+		def fc_layers_aggregator_fn(_key,_layers):
+			_splitted_units = _key.split('_')
+			_units = int(_splitted_units[-1]) if len(_splitted_units) > 1 else 0
+			return tf.keras.layers.Dense(_units, activation='relu')(_layers[0]) if _units else _layers[0]
+
+		def cnn_layers_build_fn(_key,_inputs):
+			return [
+				tf.keras.Sequential(name=f"{_key}_layer{i}", layers=[
 					tf.keras.layers.Conv2D(name=f'CNN{i}_Conv1',  filters=32, kernel_size=8, strides=4, padding='SAME', activation=tf.nn.relu, kernel_initializer=tf_normc_initializer(1.0)),
 					tf.keras.layers.Conv2D(name=f'CNN{i}_Conv2',  filters=64, kernel_size=4, strides=2, padding='SAME', activation=tf.nn.relu, kernel_initializer=tf_normc_initializer(1.0)),
 					tf.keras.layers.Conv2D(name=f'CNN{i}_Conv3',  filters=64, kernel_size=4, strides=1, padding='SAME', activation=tf.nn.relu, kernel_initializer=tf_normc_initializer(1.0)),
 					tf.keras.layers.Flatten(),
 				])(layer)
-				for i,layer in enumerate(cnn_inputs)
+				for i,layer in enumerate(_inputs)
 			]
-			if len(cnn_layers) > 1:
-				cnn_layers = [tf.keras.layers.Concatenate(axis=-1)(cnn_layers)]
-		if 'fc' in obs_space.original_space.spaces:
-			fc_inputs = [
-				tf.keras.layers.Input(shape=fc_head.shape, name=f"fc_input{i}")
-				for i,fc_head in enumerate(get_space_iter(obs_space.original_space['fc']))
+
+		def fc_layers_build_fn(_key,_inputs):
+			return [
+				tf.keras.layers.Flatten(name=f'flatten{i}_{_key}')(layer)
+				for i,layer in enumerate(_inputs)
 			]
-			fc_layers = [
-				tf.keras.layers.Flatten()(layer)
-				for layer in fc_inputs
-			]
-			if len(fc_layers) > 1: 
-				fc_layers = [tf.keras.layers.Concatenate(axis=-1)(fc_layers)]
+
+		cnn_inputs,cnn_layers = build_heads(obs_space, 'cnn', cnn_layers_build_fn, fc_layers_aggregator_fn)
+		fc_inputs,fc_layers = build_heads(obs_space, 'fc', fc_layers_build_fn, fc_layers_aggregator_fn)
 
 	last_layer = fc_layers + cnn_layers
 	if last_layer:
@@ -64,8 +78,9 @@ def get_heads_input(input_dict):
 	obs = input_dict['obs']
 	if not isinstance(obs, dict):
 		return input_dict['obs_flat']
-	cnn_inputs = obs.get("cnn",[])
-	fc_inputs = obs.get("fc",[])
+	obs_items = sorted(obs.items(), key=lambda x:x[0])
+	cnn_inputs = [y for _,y in filter(lambda x: x[0].startswith("cnn"), obs.items())]
+	fc_inputs = [y for _,y in filter(lambda x: x[0].startswith("fc"), obs.items())]
 	if not isinstance(cnn_inputs,(dict,list)):
 		cnn_inputs = [cnn_inputs]
 	if not isinstance(fc_inputs,(dict,list)):

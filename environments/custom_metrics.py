@@ -13,7 +13,9 @@ from ray.rllib.policy import Policy
 
 class CustomEnvironmentCallbacks(DefaultCallbacks):
 	def on_episode_end(self, *, worker: RolloutWorker, base_env: BaseEnv, policies: Dict[str, Policy], episode: MultiAgentEpisode, env_index: int, **kwargs):
-		last_info = episode.last_info_for()
+		agent_id = max(episode.get_agents(), key=lambda x: len(episode._agent_reward_history[x]))
+		last_info = episode.last_info_for(agent_id)
+		# print(last_info, agent_id)
 		if isinstance(last_info,dict) and "stats_dict" in last_info:
 			for k,v in last_info["stats_dict"].items():
 				episode.custom_metrics[k] = v

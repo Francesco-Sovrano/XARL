@@ -31,19 +31,14 @@ class MultiAgentRoadNetwork(RoadNetwork):
 			j.is_source=True
 			self.source_junctions.append(j)
 		### Deliveries
-		self.food_deliveries_dict = {0:len(self.junctions)}
 		self.min_food_deliveries = 0
+		self.food_deliveries = 0
 
 	def deliver_food(self, j):
-		j_food_deliveries = j.food_deliveries
-		self.food_deliveries_dict[j_food_deliveries] -= 1
-		if not j_food_deliveries+1 in self.food_deliveries_dict:
-			self.food_deliveries_dict[j_food_deliveries+1] = 1
-		else:
-			self.food_deliveries_dict[j_food_deliveries+1] += 1
-		self.min_food_deliveries = min(self.food_deliveries_dict.items(), key=lambda x: x[-1])[0]
-
 		j.food_deliveries += 1
+		self.food_deliveries += 1
+		if j.food_deliveries-1 == self.min_food_deliveries and self.food_deliveries >= len(self.junctions):
+			self.min_food_deliveries = min(map(lambda x: x.food_deliveries, self.junctions))
 
 	def get_random_starting_point_list(self, n=1):
 		return [

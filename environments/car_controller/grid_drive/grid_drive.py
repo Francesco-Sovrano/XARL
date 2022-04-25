@@ -50,6 +50,7 @@ class GridDrive(gym.Env):
 		return [seed]
 	
 	def __init__(self, config=None):
+		self.seed(config.get('seed',42))
 		logger.warning(f'Setting environment with reward_fn <{config["reward_fn"]}> and culture_level <{config["culture_level"]}>')
 		self.reward_fn = eval(f'self.{config["reward_fn"]}')
 		self.culture = eval(f'{config["culture_level"]}RoadCulture')(road_options={

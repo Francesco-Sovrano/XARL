@@ -322,23 +322,23 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 	for agent_id in agent_names:
 		obj.update({
 			f"info/learner/{agent_id}/{k}": get_element(line,f"info/learner/{agent_id}/{k}")
-			for k in get_keys(f"info/learner/{agent_id}")
+			for k in get_keys(f"info/learner/{agent_id}/")
 			if isinstance(get_element(line,f"info/learner/{agent_id}/{k}"), numbers.Number)
 		})
 		obj.update({
 			f"buffer/{agent_id}/{k}": get_element(line,f"buffer/{agent_id}/{k}")
 			for k in get_keys(f"buffer/{agent_id}/")
-			if isinstance(get_element(line,k), numbers.Number)
+			if isinstance(get_element(line,f"buffer/{agent_id}/{k}"), numbers.Number)
 		})
 	obj.update({
-		k: get_element(line,f"custom_metrics/{k}")
+		f"custom_metrics/{k}": get_element(line,f"custom_metrics/{k}")
 		for k in get_keys("custom_metrics/")
-		if isinstance(get_element(line,k), numbers.Number)
+		if isinstance(get_element(line,f"custom_metrics/{k}"), numbers.Number)
 	})
+
 	if statistics_list:
 		statistics_list = set(statistics_list)
 		obj = dict(filter(lambda x: x[0] in statistics_list, obj.items()))
-	
 	return (step, obj)
 	
 def parse(df, max_i=None, statistics_list=None, step_type='num_steps_sampled'):
