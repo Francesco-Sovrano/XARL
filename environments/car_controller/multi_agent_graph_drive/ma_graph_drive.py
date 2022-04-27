@@ -31,7 +31,7 @@ is_relevant_junction = lambda j, max_food_per_target: is_source_junction(j) or i
 class GraphDriveAgent:
 
 	def seed(self, seed=None):
-		logger.warning(f"Setting random seed to: {seed}")
+		# logger.warning(f"Setting random seed to: {seed}")
 		self.np_random, _ = seeding.np_random(seed)
 		return [seed]
 
@@ -49,27 +49,30 @@ class GraphDriveAgent:
 		self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)  # steering angle and speed
 		state_dict = {
 			"fc1_32": gym.spaces.Dict({
-				"junctions_view": gym.spaces.Box( # Closest road to the agent (the one it's driving on), sorted by relative position
+				f"roads_view_{i}": gym.spaces.Box( # Junction properties and roads'
 					low= -1,
 					high= 1,
 					shape= (
-						self.env_config['junctions_number'],
-						2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
+						2 + 1 + 1 + 1 + # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
+						# (2 + self.obs_road_features)*self.env_config['max_roads_per_junction'], # (road.end_pos + road.af_features)*max_roads_per_junction
+						(1 + self.obs_road_features)*self.env_config['max_roads_per_junction'], # (road.normalised_slope + road.af_features)*max_roads_per_junction
 					),
 					dtype=np.float32
-				),
-				"roads_view": gym.spaces.Box( # Roads directly connected to the closest road to the agent (the one it's driving on), sorted by relative position
-					low= -1,
-					high= 1,
-					shape= ( # closest junctions view
-						self.env_config['junctions_number'],
-						self.env_config['max_roads_per_junction'],
-						1 + self.obs_road_features,  # road properties: road.normalised_slope + road.af_features
-					),
-					dtype=np.float32
-				),
+				)
+				for i in range(self.env_config['junctions_number'])
 			}),
-			"fc2_16": gym.spaces.Dict({
+			# "fc1_32": gym.spaces.Dict({
+			# 	"roads_view": gym.spaces.Box( # Junction properties and roads'
+			# 		low= -1,
+			# 		high= 1,
+			# 		shape= (
+			# 			self.env_config['junctions_number'],
+			# 			2 + 1 + 1 + 1 + (1 + self.obs_road_features)*self.env_config['max_roads_per_junction'], # (road.normalised_slope + road.af_features)*max_roads_per_junction
+			# 		),
+			# 		dtype=np.float32
+			# 	)
+			# }),
+			"fc2_32": gym.spaces.Dict({
 				"agent_features": gym.spaces.Box( # Agent features
 					low= -1,
 					high= 1,
@@ -81,18 +84,23 @@ class GraphDriveAgent:
 			}),
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["fc3_16"] = gym.spaces.Dict({
-				"agents_view": gym.spaces.Box( # Agent features
+			state_dict["fc3_32"] = gym.spaces.Dict({ # Agent features
+				f"agents_view_{i}": gym.spaces.Box( # permutation invariant
 					low= -1,
 					high= 1,
 					shape= (
-						self.n_of_other_agents, 
-						2 + self.agent_state_size + self.obs_car_features
+						2 + self.agent_state_size + self.obs_car_features,
 					), # for each other possible agent give position + state + features
 					dtype=np.float32
 				)
+				for i in range(self.n_of_other_agents)
 			})
 		self.observation_space = gym.spaces.Dict(state_dict)
+
+		self._empty_road = (-1,*[-1]*self.obs_road_features)
+		self._empty_junction_roads = np.full(self.observation_space['fc1_32']["roads_view_0"].shape, -1, dtype=np.float32)
+		# self._empty_junction_roads = np.full(self.observation_space['fc1_32']["roads_view"].shape[1:], -1, dtype=np.float32)
+		self._empty_agent = np.full(self.observation_space['fc3_32']["agents_view_0"].shape, -1, dtype=np.float32)
 
 	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
@@ -122,6 +130,7 @@ class GraphDriveAgent:
 		self.is_dead = False
 		self.has_food = True
 		self.steps_in_junction = 0
+		self.junction_roads_dict = {}
 
 	@property
 	def normalised_speed(self):
@@ -133,13 +142,16 @@ class GraphDriveAgent:
 			car_point=self.car_point
 		if car_orientation is None:
 			car_orientation=self.car_orientation
-		junctions_view, roads_view, agents_view = self.get_view(car_point, car_orientation)
+		roads_view_list, agents_view_list = self.get_view(car_point, car_orientation)
 		state_dict = {
 			"fc1_32": {
-				"junctions_view": junctions_view,
-				"roads_view": roads_view,
+				f"roads_view_{i}": x
+				for i,x in enumerate(roads_view_list)
 			},
-			"fc2_16": {
+			# "fc1_32": {
+			# 	"roads_view": np.array(roads_view_list, dtype=np.float32)
+			# },
+			"fc2_32": {
 				"agent_features": np.array([
 					*self.get_agent_state(),
 					*(self.agent_id.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), 
@@ -147,8 +159,9 @@ class GraphDriveAgent:
 			},
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["fc3_16"] = {
-				"agents_view": agents_view
+			state_dict["fc3_32"] = {
+				f"agents_view_{i}": x
+				for i,x in enumerate(agents_view_list)
 			}
 		return state_dict
 
@@ -179,29 +192,50 @@ class GraphDriveAgent:
 				return True
 		return False
 
+	def get_roads_feature_list(self, j, shift_rotate_normalise_point_fn):
+		roads_feature_list = self.junction_roads_dict.get(j.pos, None)
+		if roads_feature_list is None:
+			roads = (
+				(
+					road.normalised_slope, # in [0,1]
+					# *shift_rotate_normalise_point_fn(road.start.pos if j.pos!=road.start.pos else road.end.pos), # in [0,1]
+					*(road.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), # in [0,1]
+				)
+				for road in j.roads_connected
+			)
+			sorted_roads = sorted(roads, key=lambda x:x[0])
+			missing_roads = [self._empty_road]*(self.env_config['max_roads_per_junction']-len(j.roads_connected))
+			roads_feature_list = self.junction_roads_dict[j.pos] = [
+				feature 
+				for feature_list in sorted_roads+missing_roads
+				for feature in feature_list
+			]
+		return roads_feature_list
+
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
 		source_x, source_y = source_point
 		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
-		# Get junctions view
+
+		##### Get roads view
 		road_network_junctions = filter(lambda j: j.roads_connected, self.road_network.junctions)
-		road_network_junctions = map(lambda j: (shift_rotate_normalise_point(j.pos),j), road_network_junctions)
-		sorted_junctions = sorted(road_network_junctions, key=lambda x: x[0])
-		junctions_view = np.full(self.observation_space['fc1_32']["junctions_view"].shape, -1, dtype=np.float32)
-		junctions_view[:len(sorted_junctions)] = [
-			(*j_pos, j.is_source, j.is_target, get_normalized_food_count(j,self.env_config['max_food_per_target']) if j.is_target else -1)
-			for j_pos, j in sorted_junctions
+		road_network_junctions = map(lambda j: {'junction_pos':shift_rotate_normalise_point(j.pos), 'junction':j}, road_network_junctions)
+		sorted_junctions = sorted(road_network_junctions, key=lambda x: x['junction_pos'])
+
+		roads_view_list = [
+			np.array(
+				[
+					*sorted_junctions[i]['junction_pos'], 
+					sorted_junctions[i]['junction'].is_source, 
+					sorted_junctions[i]['junction'].is_target, 
+					get_normalized_food_count(sorted_junctions[i]['junction'],self.env_config['max_food_per_target']) if sorted_junctions[i]['junction'].is_target else -1,
+				]+self.get_roads_feature_list(sorted_junctions[i]['junction'], shift_rotate_normalise_point)
+			, dtype=np.float32) 
+			if i < len(sorted_junctions) else 
+			self._empty_junction_roads
+			for i in range(len(self.road_network.junctions))
 		]
-		# Get roads view
-		roads_view = np.full(self.observation_space['fc1_32']["roads_view"].shape, -1, dtype=np.float32)
-		for i,(_,j) in enumerate(sorted_junctions):
-			roads_view[i,:len(j.roads_connected)] = sorted((
-				(
-					road.normalised_slope, # in [0,1]
-					*(road.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), # in [0,1]
-				)
-				for road in j.roads_connected
-			), key=lambda x:x[0])
+
 		##### Get neighbourhood view
 		if self.other_agent_list:
 			alive_agent = [x for x in self.other_agent_list if not x.is_dead]
@@ -218,16 +252,17 @@ class GraphDriveAgent:
 				(*agent_point, *agent_state, *agent_features)
 				for agent_point, agent_state, agent_features in sorted_alive_agents
 			]
-			if len(sorted_alive_agents) < len(self.other_agent_list):
-				agents_view = np.full(self.observation_space['fc3_16']["agents_view"].shape, -1, dtype=np.float32)
-				if sorted_alive_agents:
-					agents_view[:len(sorted_alive_agents)] = sorted_alive_agents
-			else:
-				agents_view = np.array(sorted_alive_agents, dtype=np.float32)
+			agents_view_list = [
+				np.array(sorted_alive_agents[i], dtype=np.float32) 
+				if i < len(sorted_alive_agents) else 
+				self._empty_agent
+				for i in range(len(self.other_agent_list))
+			]
 		else:
 			agents_view = None
+
 		# print('seconds',time.time()-s)
-		return junctions_view, roads_view, agents_view
+		return roads_view_list, agents_view_list
 
 	def move(self, point, orientation, steering_angle, speed, add_noise=False):
 		# https://towardsdatascience.com/how-self-driving-cars-steer-c8e4b5b55d7f?gi=90391432aad7
@@ -332,13 +367,22 @@ class GraphDriveAgent:
 		self.current_road_speed_list.append(self.speed)
 		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food
 
-	def get_fairness_score(self, reward_type):
-		if reward_type=='has_just_delivered_food_to_target': 
-			return 'fair' if self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries else 'unfair'
-		if reward_type=='moving_towards_target_with_food':
-			return 'fair' if self.goal_junction.food_deliveries == self.road_network.min_food_deliveries else 'unfair'
-		if reward_type=='moving_towards_source_without_food' and self.road_network.min_food_deliveries < self.env_config['max_food_per_target']:
+	def get_fairness_score(self, has_just_delivered_food, has_just_taken_food):
+		#######
+		if has_just_delivered_food: 
+			just_delivered_to_worst_target = self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries
+			return 'fair' if just_delivered_to_worst_target else 'unfair'
+		moving_towards_target_with_food = self.goal_junction and is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food
+		if moving_towards_target_with_food:
+			delivering_to_worst_target = self.goal_junction.food_deliveries == self.road_network.min_food_deliveries
+			return 'fair' if delivering_to_worst_target else 'unfair'
+		#######
+		if has_just_taken_food: 
 			return 'fair'
+		moving_towards_source_without_food = self.goal_junction and is_source_junction(self.goal_junction) and not self.has_food
+		if moving_towards_source_without_food:
+			return 'fair'
+		#######
 		return 'unknown'
 
 	def end_step(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
@@ -353,7 +397,7 @@ class GraphDriveAgent:
 		self.last_reward_type = reward_type
 		info_dict = {'explanation':{
 			'why': reward_type,
-			'how_fair': self.get_fairness_score(reward_type)
+			'how_fair': self.get_fairness_score(has_just_delivered_food, has_just_taken_food)
 		}}
 		info_dict["stats_dict"] = {
 			"min_food_deliveries": self.road_network.min_food_deliveries,
@@ -375,6 +419,11 @@ class GraphDriveAgent:
 			reward = self.normalised_speed # in (0,1/2]
 			return (reward if is_positive else -reward, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
+
+		#######################################
+		# "Mission completed" rule
+		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
+			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Is colliding" rule
@@ -439,6 +488,11 @@ class GraphDriveAgent:
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
 		#######################################
+		# "Mission completed" rule
+		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
+			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
+
+		#######################################
 		# "Is colliding" rule
 		if self.colliding_with_other_agent(old_car_point, self.car_point):
 			return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
@@ -491,6 +545,11 @@ class GraphDriveAgent:
 		def step_reward(is_positive, is_terminal, label):
 			reward = self.normalised_speed # in (0,1/2]
 			return (reward if is_positive else -reward, is_terminal, label)
+
+		#######################################
+		# "Mission completed" rule
+		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
+			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Is colliding" rule
@@ -547,6 +606,11 @@ class GraphDriveAgent:
 			return (1 if is_positive else -1, is_terminal, label)
 
 		#######################################
+		# "Mission completed" rule
+		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
+			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
+
+		#######################################
 		# "Is colliding" rule
 		if self.colliding_with_other_agent(old_car_point, self.car_point):
 			return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
@@ -588,6 +652,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 	metadata = {'render.modes': ['human', 'rgb_array']}
 	
 	def seed(self, seed=None):
+		logger.warning(f"Setting random seed to: {seed}")
 		for i,a in enumerate(self.agent_list):
 			seed = a.seed(seed+i)[0]
 		self._seed = seed-1
@@ -636,7 +701,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		self.action_space = self.agent_list[0].action_space
 		self.observation_space = self.agent_list[0].observation_space
 		self._agent_ids = set(range(self.num_agents))
-		self.seed(config.get('seed',42))
+		self.seed(config.get('seed',21))
 
 	def reset(self):
 		self.culture.np_random = self.np_random

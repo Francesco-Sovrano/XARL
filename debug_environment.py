@@ -12,14 +12,15 @@ if PLOT_EPISODE:
 	os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 env_config = {
-	'num_agents': 32,
+	'num_agents': 16,
 	'max_food_per_target': 10,
-	'blockage_probability': 0.3,
+	'blockage_probability': 0.15,
 	'min_blockage_ratio': 0.1,
-	'max_blockage_ratio': 0.75,
+	'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': 4,
-	'source_junctions_number': 4,
+	'target_junctions_number': 3,
+	'source_junctions_number': 1,
+	'max_steps_in_junction': 2**5,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,

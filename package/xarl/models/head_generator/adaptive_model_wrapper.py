@@ -24,24 +24,50 @@ def build_heads(_obs_space, _type, _layers_build_fn, _layers_aggregator_fn):
 			for i,_head in enumerate(get_space_iter(_obs_space.original_space[_key]))
 		]
 		_layers = _layers_build_fn(_key,_inputs)
-		if len(_layers) > 1:
-			_layers = [tf.keras.layers.Concatenate(axis=-1)(_layers)]
 		_heads.append(_layers_aggregator_fn(_key,_layers))
 		_all_inputs += _inputs
-	if len(_heads) > 1: 
-		_heads = [tf.keras.layers.Concatenate(axis=-1)(_heads)]
 	return _all_inputs,_heads
 
 def get_tf_heads_model(obs_space):
 	cnn_inputs = []
-	cnn_layers = []
+	cnn_heads = []
 	fc_inputs = []
-	fc_layers = []
+	fc_heads = []
 	if hasattr(obs_space, 'original_space'):
-		def fc_layers_aggregator_fn(_key,_layers):
+		# def fc_layers_aggregator_fn(_key,_layers):
+		# 	if len(_layers) > 1:
+		# 		_layers = []
+		# 	_splitted_units = _key.split('_')
+		# 	_units = int(_splitted_units[-1]) if len(_splitted_units) > 1 else 0
+		# 	return tf.keras.layers.Dense(_units, activation='relu')(_layers[0]) if _units else _layers[0]
+		def fc_layers_aggregator_fn(_key,_layers): # Permutation invariant aggregator
+			assert _layers
+			assert _key
 			_splitted_units = _key.split('_')
 			_units = int(_splitted_units[-1]) if len(_splitted_units) > 1 else 0
-			return tf.keras.layers.Dense(_units, activation='relu')(_layers[0]) if _units else _layers[0]
+			if not _units:
+				return tf.keras.layers.Concatenate(axis=-1)(_layers)
+
+			#### FC net
+			if len(_layers) <= 1:
+				return tf.keras.layers.Dense(_units, activation='relu')(_layers[0])
+
+			#### Permutation Invariant net
+			k = _layers[0].shape[-1]
+			_shared_hypernet_layer = tf.keras.Sequential(name=f'shared_hypernet_layer_{_key}', layers=[
+				tf.keras.layers.Dense(k*_units, activation='relu'),
+				# tf.keras.layers.Dense(k*_units, activation='sigmoid'),
+				tf.keras.layers.Reshape((k,_units)),
+			])
+			_weights = list(map(_shared_hypernet_layer,_layers))
+			
+			_layers = list(map(tf.keras.layers.Reshape((1, k)), _layers))
+			_layers = [
+				tf.linalg.matmul(l,w)
+				for l,w in zip(_layers,_weights)
+			]
+			_layers = list(map(tf.keras.layers.Flatten(), _layers))
+			return tf.keras.layers.Add()(_layers)
 
 		def cnn_layers_build_fn(_key,_inputs):
 			return [
@@ -60,10 +86,14 @@ def get_tf_heads_model(obs_space):
 				for i,layer in enumerate(_inputs)
 			]
 
-		cnn_inputs,cnn_layers = build_heads(obs_space, 'cnn', cnn_layers_build_fn, fc_layers_aggregator_fn)
-		fc_inputs,fc_layers = build_heads(obs_space, 'fc', fc_layers_build_fn, fc_layers_aggregator_fn)
+		cnn_inputs,cnn_heads = build_heads(obs_space, 'cnn', cnn_layers_build_fn, fc_layers_aggregator_fn)
+		if len(cnn_heads) > 1: 
+			cnn_heads = [tf.keras.layers.Concatenate(axis=-1)(cnn_heads)]
+		fc_inputs,fc_heads = build_heads(obs_space, 'fc', fc_layers_build_fn, fc_layers_aggregator_fn)
+		if len(fc_heads) > 1: 
+			fc_heads = [tf.keras.layers.Concatenate(axis=-1)(fc_heads)]
 
-	last_layer = fc_layers + cnn_layers
+	last_layer = fc_heads + cnn_heads
 	if last_layer:
 		if len(last_layer) > 1: last_layer = tf.keras.layers.Concatenate()(last_layer)
 		else: last_layer = last_layer[0]

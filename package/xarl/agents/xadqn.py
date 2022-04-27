@@ -57,6 +57,7 @@ XADQN_EXTRA_OPTIONS = {
 			# "what": 8,
 		},
 		"default_n_clusters": 8,
+		"frequency_independent_clustering": False, # Setting this to True can be memory expensive, especially for who explanations
 		"agent_action_sliding_window": 2**4,
 		"episode_window_size": 2**6, 
 		"batch_window_size": 2**8, 

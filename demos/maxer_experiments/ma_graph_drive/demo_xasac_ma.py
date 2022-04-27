@@ -109,7 +109,7 @@ CONFIG.update({
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
 	"clustering_scheme": [ # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
-		# 'Who',
+		'Who',
 		'How_Well',
 		'Why',
 		# 'Where',
@@ -123,6 +123,7 @@ CONFIG.update({
 			# "what": 8,
 		},
 		"default_n_clusters": 8,
+		"frequency_independent_clustering": False, # Setting this to True can be memory expensive, especially for who explanations
 		"agent_action_sliding_window": 2**4,
 		"episode_window_size": 2**6, 
 		"batch_window_size": 2**8, 
