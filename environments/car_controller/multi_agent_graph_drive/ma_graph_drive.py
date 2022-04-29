@@ -48,44 +48,43 @@ class GraphDriveAgent:
 		# Spaces
 		self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)  # steering angle and speed
 		state_dict = {
-			"fc1_32": gym.spaces.Dict({
-				f"roads_view_{i}": gym.spaces.Box( # Junction properties and roads'
+			"fc_junctions-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
+				gym.spaces.Box( # Junction properties and roads'
 					low= -1,
 					high= 1,
 					shape= (
-						2 + 1 + 1 + 1 + # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
-						# (2 + self.obs_road_features)*self.env_config['max_roads_per_junction'], # (road.end_pos + road.af_features)*max_roads_per_junction
-						(1 + self.obs_road_features)*self.env_config['max_roads_per_junction'], # (road.normalised_slope + road.af_features)*max_roads_per_junction
+						# self.env_config['junctions_number'],
+						2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
 					),
 					dtype=np.float32
 				)
 				for i in range(self.env_config['junctions_number'])
-			}),
-			# "fc1_32": gym.spaces.Dict({
-			# 	"roads_view": gym.spaces.Box( # Junction properties and roads'
-			# 		low= -1,
-			# 		high= 1,
-			# 		shape= (
-			# 			self.env_config['junctions_number'],
-			# 			2 + 1 + 1 + 1 + (1 + self.obs_road_features)*self.env_config['max_roads_per_junction'], # (road.normalised_slope + road.af_features)*max_roads_per_junction
-			# 		),
-			# 		dtype=np.float32
-			# 	)
-			# }),
-			"fc2_32": gym.spaces.Dict({
-				"agent_features": gym.spaces.Box( # Agent features
+			]),
+			"fc_roads-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
+				gym.spaces.Box( # Junction properties and roads'
 					low= -1,
 					high= 1,
 					shape= (
-						self.agent_state_size + self.obs_car_features,
+						# self.env_config['junctions_number'],
+						self.env_config['max_roads_per_junction'],
+						1 + self.obs_road_features, # road.normalised_slope + road.af_features
 					),
 					dtype=np.float32
+				)
+				for i in range(self.env_config['junctions_number'])
+			]),
+			"fc_this_agent-16": gym.spaces.Box( # Agent features
+				low= -1,
+				high= 1,
+				shape= (
+					self.agent_state_size + self.obs_car_features,
 				),
-			}),
+				dtype=np.float32
+			),
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["fc3_32"] = gym.spaces.Dict({ # Agent features
-				f"agents_view_{i}": gym.spaces.Box( # permutation invariant
+			state_dict["fc_other_agents-16"] = gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
+				gym.spaces.Box( # permutation invariant
 					low= -1,
 					high= 1,
 					shape= (
@@ -94,13 +93,14 @@ class GraphDriveAgent:
 					dtype=np.float32
 				)
 				for i in range(self.n_of_other_agents)
-			})
+			])
 		self.observation_space = gym.spaces.Dict(state_dict)
 
+		self._empty_junction = np.full(self.observation_space['fc_junctions-16'][0].shape, -1, dtype=np.float32)
 		self._empty_road = (-1,*[-1]*self.obs_road_features)
-		self._empty_junction_roads = np.full(self.observation_space['fc1_32']["roads_view_0"].shape, -1, dtype=np.float32)
-		# self._empty_junction_roads = np.full(self.observation_space['fc1_32']["roads_view"].shape[1:], -1, dtype=np.float32)
-		self._empty_agent = np.full(self.observation_space['fc3_32']["agents_view_0"].shape, -1, dtype=np.float32)
+		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'][0].shape, -1, dtype=np.float32)
+		if self.n_of_other_agents > 0:
+			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'][0].shape, -1, dtype=np.float32)
 
 	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
@@ -142,27 +142,17 @@ class GraphDriveAgent:
 			car_point=self.car_point
 		if car_orientation is None:
 			car_orientation=self.car_orientation
-		roads_view_list, agents_view_list = self.get_view(car_point, car_orientation)
+		junctions_view_list, roads_view_list, agents_view_list = self.get_view(car_point, car_orientation)
 		state_dict = {
-			"fc1_32": {
-				f"roads_view_{i}": x
-				for i,x in enumerate(roads_view_list)
-			},
-			# "fc1_32": {
-			# 	"roads_view": np.array(roads_view_list, dtype=np.float32)
-			# },
-			"fc2_32": {
-				"agent_features": np.array([
-					*self.get_agent_state(),
-					*(self.agent_id.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), 
-				], dtype=np.float32)
-			},
+			"fc_junctions-16": junctions_view_list,
+			"fc_roads-16": roads_view_list,
+			"fc_this_agent-16": np.array([
+				*self.get_agent_state(),
+				*(self.agent_id.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), 
+			], dtype=np.float32),
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["fc3_32"] = {
-				f"agents_view_{i}": x
-				for i,x in enumerate(agents_view_list)
-			}
+			state_dict["fc_other_agents-16"] = agents_view_list
 		return state_dict
 
 	@property
@@ -192,9 +182,9 @@ class GraphDriveAgent:
 				return True
 		return False
 
-	def get_roads_feature_list(self, j, shift_rotate_normalise_point_fn):
-		roads_feature_list = self.junction_roads_dict.get(j.pos, None)
-		if roads_feature_list is None:
+	def get_junction_roads(self, j):
+		junction_road_list = self.junction_roads_dict.get(j.pos, None)
+		if junction_road_list is None:
 			roads = (
 				(
 					road.normalised_slope, # in [0,1]
@@ -205,32 +195,34 @@ class GraphDriveAgent:
 			)
 			sorted_roads = sorted(roads, key=lambda x:x[0])
 			missing_roads = [self._empty_road]*(self.env_config['max_roads_per_junction']-len(j.roads_connected))
-			roads_feature_list = self.junction_roads_dict[j.pos] = [
-				feature 
-				for feature_list in sorted_roads+missing_roads
-				for feature in feature_list
-			]
-		return roads_feature_list
+			junction_road_list = self.junction_roads_dict[j.pos] = sorted_roads+missing_roads
+		return junction_road_list
 
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
 		source_x, source_y = source_point
 		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
-
-		##### Get roads view
 		road_network_junctions = filter(lambda j: j.roads_connected, self.road_network.junctions)
 		road_network_junctions = map(lambda j: {'junction_pos':shift_rotate_normalise_point(j.pos), 'junction':j}, road_network_junctions)
 		sorted_junctions = sorted(road_network_junctions, key=lambda x: x['junction_pos'])
 
+		##### Get junctions view
+		junctions_view_list = [
+			np.array((
+				*sorted_junctions[i]['junction_pos'], 
+				sorted_junctions[i]['junction'].is_source, 
+				sorted_junctions[i]['junction'].is_target, 
+				get_normalized_food_count(sorted_junctions[i]['junction'],self.env_config['max_food_per_target']) if sorted_junctions[i]['junction'].is_target else -1
+				), dtype=np.float32
+			) 
+			if i < len(sorted_junctions) else 
+			self._empty_junction
+			for i in range(len(self.road_network.junctions))
+		]
+
+		##### Get roads view
 		roads_view_list = [
-			np.array(
-				[
-					*sorted_junctions[i]['junction_pos'], 
-					sorted_junctions[i]['junction'].is_source, 
-					sorted_junctions[i]['junction'].is_target, 
-					get_normalized_food_count(sorted_junctions[i]['junction'],self.env_config['max_food_per_target']) if sorted_junctions[i]['junction'].is_target else -1,
-				]+self.get_roads_feature_list(sorted_junctions[i]['junction'], shift_rotate_normalise_point)
-			, dtype=np.float32) 
+			np.array(self.get_junction_roads(sorted_junctions[i]['junction']), dtype=np.float32) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction_roads
 			for i in range(len(self.road_network.junctions))
@@ -262,7 +254,7 @@ class GraphDriveAgent:
 			agents_view = None
 
 		# print('seconds',time.time()-s)
-		return roads_view_list, agents_view_list
+		return junctions_view_list, roads_view_list, agents_view_list
 
 	def move(self, point, orientation, steering_angle, speed, add_noise=False):
 		# https://towardsdatascience.com/how-self-driving-cars-steer-c8e4b5b55d7f?gi=90391432aad7

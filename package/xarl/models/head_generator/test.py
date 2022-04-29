@@ -116,19 +116,23 @@ def get_tf_heads_model(obs_space):
 
 def get_heads_input(input_dict):
 	obs = input_dict['obs']
-	if not isinstance(obs, dict):
-		return input_dict['obs_flat']
-	obs_items = sorted(obs.items(), key=lambda x:x[0])
-	cnn_inputs = [y for _,y in filter(lambda x: x[0].startswith("cnn"), obs_items)]
-	fc_inputs = [y for _,y in filter(lambda x: x[0].startswith("fc"), obs_items)]
-	if not isinstance(cnn_inputs,(dict,list)):
-		cnn_inputs = [cnn_inputs]
-	if not isinstance(fc_inputs,(dict,list)):
-		fc_inputs = [fc_inputs]
-	if cnn_inputs or fc_inputs:
-		if isinstance(cnn_inputs,dict):
-			cnn_inputs = list(cnn_inputs.values())
-		if isinstance(fc_inputs,dict):
-			fc_inputs = list(fc_inputs.values())
-		return cnn_inputs + fc_inputs
-	return input_dict['obs_flat']
+	assert isinstance(obs, dict)
+	heads_input_list = []
+	obs_list = [obs['this']] + obs['others']
+	for obs in obs_list:
+		cnn_inputs = []
+		fc_inputs = []
+		other_inputs = []
+		for k,v in sorted(obs.items(), key=lambda x:x[0]):
+			if k.startswith("cnn"):
+				cnn_inputs.append(v)
+			elif k.startswith("fc"):
+				fc_inputs.append(v)
+			else:
+				other_inputs.append(v)
+		input_list = cnn_inputs + fc_inputs + other_inputs
+		flattened_input_list = []
+		for i in input_list:
+			flattened_input_list += i.values() if isinstance(i,dict) else i
+		heads_input_list.append(flattened_input_list)
+	return heads_input_list[0], heads_input_list[1:]
