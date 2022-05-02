@@ -16,25 +16,30 @@ from environments import *
 # Register the models to use.
 from xarl.models.sac import TFAdaptiveMultiHeadNet
 from ray.rllib.models import ModelCatalog
-from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
+
+from xarl.models.head_generator.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict
+ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+from xarl.models.head_generator.comm_adaptive_model_wrapper import get_input_layers_and_keras_layers as comm_get_input_layers_and_keras_layers, get_input_list_from_input_dict as comm_get_input_list_from_input_dict
+ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(comm_get_input_layers_and_keras_layers, comm_get_input_list_from_input_dict))
 
 
-SELECT_ENV = "MAGraphDrive"
+SELECT_ENV = "MAGraphDrive-PVComm"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 
 CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
-	'max_food_per_target': 10,
-	'blockage_probability': 0.3,
-	'min_blockage_ratio': 0.1,
-	'max_blockage_ratio': 0.75,
+	'visibility_radius': 3,
+	'max_food_per_target': 3,
+	'blockage_probability': None,
+	# 'blockage_probability': 0.15,
+	# 'min_blockage_ratio': 0.1,
+	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': 4,
-	'source_junctions_number': 4,
-	'max_steps_in_junction': 10,
+	'target_junctions_number': 9,
+	'source_junctions_number': 3,
+	'max_steps_in_junction': 2**6,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,
@@ -69,7 +74,7 @@ CONFIG.update({
 	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-		"custom_model": "adaptive_multihead_network"
+		"custom_model": "comm_adaptive_multihead_network"
 	},
 	# "normalize_actions": False,
 

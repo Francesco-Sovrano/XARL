@@ -157,28 +157,37 @@ def get_input_layers_and_keras_layers(obs_space, **args):
 			last_layer = tf.keras.layers.Concatenate(axis=-1)(last_layer)
 		return inputs, last_layer
 	
-	return apply_obs_to_main_model(obs_space)
+	logger.warning(f"Building keras layers for Comm model with {len(obs_space['all_agents'])} agents")
+	this_inputs, this_last_layer = apply_obs_to_main_model(obs_space['this_agent'])
+	apply_obs_to_message_model = apply_obs_to_main_model # obs_space['visibility_vector']
+	other_input_list, other_last_layer_list = map(list,zip(*list(map(apply_obs_to_message_model,obs_space['all_agents']))))
+	other_last_layer = tf.math.reduce_sum(other_last_layer_list, axis=0)
+	last_layer = tf.concat([this_last_layer, other_last_layer], axis=1)
+	inputs = this_inputs + other_input_list
+	return inputs, last_layer
 
 def get_input_list_from_input_dict(input_dict, **args):
 	obs = input_dict['obs']
 	assert isinstance(obs, dict)
-	cnn_inputs = []
-	fc_inputs = []
-	other_inputs = []
-	for k,v in sorted(obs.items(), key=lambda x:x[0]):
-		if k.startswith("cnn"):
-			cnn_inputs.append(v)
-		elif k.startswith("fc"):
-			fc_inputs.append(v)
-		else:
-			other_inputs.append(v)
-	input_list = cnn_inputs + fc_inputs + other_inputs
 	flattened_input_list = []
-	for i in input_list:
-		if isinstance(i,dict):
-			flattened_input_list += i.values()
-		elif isinstance(i,list):
-			flattened_input_list += i
-		else:
-			flattened_input_list.append(i)
+	obs_list = [obs['this_agent']] 
+	for obs in obs_list:
+		cnn_inputs = []
+		fc_inputs = []
+		other_inputs = []
+		for k,v in sorted(obs.items(), key=lambda x:x[0]):
+			if k.startswith("cnn"):
+				cnn_inputs.append(v)
+			elif k.startswith("fc"):
+				fc_inputs.append(v)
+			else:
+				other_inputs.append(v)
+		input_list = cnn_inputs + fc_inputs + other_inputs
+		for i in input_list:
+			if isinstance(i,dict):
+				flattened_input_list += i.values()
+			elif isinstance(i,list):
+				flattened_input_list += i
+			else:
+				flattened_input_list.append(i)
 	return flattened_input_list

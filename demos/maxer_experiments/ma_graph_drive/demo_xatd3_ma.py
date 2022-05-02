@@ -14,26 +14,30 @@ from xarl.agents.xaddpg import XATD3Trainer, XATD3_DEFAULT_CONFIG
 from environments import *
 from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG as TFAdaptiveMultiHeadNet
 from ray.rllib.models import ModelCatalog
-from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
-# Register the models to use.
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
+
+from xarl.models.head_generator.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict
+ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+from xarl.models.head_generator.comm_adaptive_model_wrapper import get_input_layers_and_keras_layers as comm_get_input_layers_and_keras_layers, get_input_list_from_input_dict as comm_get_input_list_from_input_dict
+ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(comm_get_input_layers_and_keras_layers, comm_get_input_list_from_input_dict))
 
 
-SELECT_ENV = "MAGraphDrive"
+SELECT_ENV = "MAGraphDrive-PVComm"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 
 CONFIG = XATD3_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
-	'max_food_per_target': 10,
-	'blockage_probability': 0.15,
-	'min_blockage_ratio': 0.1,
-	'max_blockage_ratio': 0.5,
+	'visibility_radius': 3,
+	'max_food_per_target': 3,
+	'blockage_probability': None,
+	# 'blockage_probability': 0.15,
+	# 'min_blockage_ratio': 0.1,
+	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': 3,
-	'source_junctions_number': 1,
-	'max_steps_in_junction': 2**5,
+	'target_junctions_number': 9,
+	'source_junctions_number': 3,
+	'max_steps_in_junction': 2**6,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,
@@ -65,28 +69,29 @@ CONFIG["env_config"] = {
 }
 CONFIG.update({
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
-	# "model": { # this is for GraphDrive and GridDrive
-	# 	"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-	# 	"custom_model": "adaptive_multihead_network"
-	# },
+	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	"model": { # this is for GraphDrive and GridDrive
+		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+		"custom_model": "comm_adaptive_multihead_network"
+	},
+	# "normalize_actions": False,
 
-	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
-	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
+	###########################
 	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
 	"train_batch_size": 2**8, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
-	# "batch_mode": "truncate_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
+	# "batch_mode": "complete_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	###########################
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
 	'buffer_size': 2**15, # Size of the experience buffer. Default 50000
 	"prioritized_replay_alpha": 0.6,
-	"prioritized_replay_beta": 0.4, # The smaller, the stronger is over-sampling
+	"prioritized_replay_beta": 0.4, # The smaller this is, the stronger is over-sampling
 	"prioritized_replay_eps": 1e-6,
 	"learning_starts": 2**15, # How many steps of the model to sample before learning starts.
 	###########################
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"tau": 1e-4,
+	# 'policy_delay': 6,
 	##################################
 	"buffer_options": {
 		'priority_id': 'td_errors', # Which batch column to use for prioritisation. Default is inherited by DQN and it is 'td_errors'. One of the following: rewards, prev_rewards, td_errors.
@@ -122,6 +127,7 @@ CONFIG.update({
 			# "what": 8,
 		},
 		"default_n_clusters": 8,
+		"frequency_independent_clustering": False, # Setting this to True can be memory expensive, especially for who explanations
 		"agent_action_sliding_window": 2**4,
 		"episode_window_size": 2**6, 
 		"batch_window_size": 2**8, 

@@ -281,12 +281,14 @@ def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_
 		length = len(df)
 		if max_length:
 			length = max_length
+		df = None
 		print(f"{name} has length {length}")
+
 		logs.append({
 			'name': name, 
-			'data_iter': list(parse(df, max_i=length, statistics_list=statistics_list, step_type=step_type)), 
+			'data_iter': parse(url, max_i=length, statistics_list=statistics_list, step_type=step_type),
 			'length':length, 
-			'line_example': parse_line(df.tail(1), statistics_list=statistics_list, step_type=step_type)
+			'line_example': parse_line(line_example, statistics_list=statistics_list, step_type=step_type)
 		})
 	line_plot(logs, figure_file, max_plot_size, show_deviation, base_list, base_shared_name, average_non_baselines, buckets_average)
 
@@ -341,11 +343,12 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 		obj = dict(filter(lambda x: x[0] in statistics_list, obj.items()))
 	return (step, obj)
 	
-def parse(df, max_i=None, statistics_list=None, step_type='num_steps_sampled'):
-	for i in range(len(df)):
-		if max_i and i > max_i:
-			return
-		yield parse_line(df.iloc[[i]], i=i, statistics_list=statistics_list, step_type=step_type)
+def parse(url, max_i=None, statistics_list=None, step_type='num_steps_sampled'):
+	with pd.read_csv(url, chunksize=1) as chunk_iter:
+		for i,df in enumerate(chunk_iter):
+			if max_i and i > max_i:
+				return
+			yield parse_line(df.loc[[i]], i=i, statistics_list=statistics_list, step_type=step_type)
 		
 	
 def heatmap(heatmap, figure_file):

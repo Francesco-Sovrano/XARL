@@ -1,5 +1,5 @@
 from ray.rllib.agents.ddpg.ddpg_tf_model import DDPGTFModel
-# from xarl.models.adaptive_model_wrapper import get_tf_heads_model, get_heads_input, tf
+# from xarl.models.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict, tf
 
 from ray.rllib.utils.framework import try_import_tf
 tf1, tf, tfv = try_import_tf()
@@ -7,10 +7,12 @@ tf1, tf, tfv = try_import_tf()
 class TFAdaptiveMultiHeadDDPG:
 
 	@staticmethod
-	def init(get_tf_heads_model, get_heads_input):
+	def init(get_input_layers_and_keras_layers, get_input_list_from_input_dict):
 		class TFAdaptiveMultiHeadDDPGInner(DDPGTFModel):
 			def __init__(self, obs_space, action_space, num_outputs, model_config, name, actor_hiddens=(256, 256), actor_hidden_activation="relu", critic_hiddens=(256, 256), critic_hidden_activation="relu", twin_q=False, add_layer_norm=False):
-				inputs, last_layer = get_tf_heads_model(obs_space)
+				inputs, last_layer = get_input_layers_and_keras_layers(obs_space)
+				self.preprocessing_model = tf.keras.Model(inputs, last_layer)
+				# self.register_variables(self.preprocessing_model.variables)
 				super().__init__(
 					obs_space=obs_space, 
 					action_space=action_space, 
@@ -24,11 +26,9 @@ class TFAdaptiveMultiHeadDDPG:
 					twin_q=twin_q, 
 					add_layer_norm=add_layer_norm
 				)
-				self.heads_model = tf.keras.Model(inputs, last_layer)
-				# self.register_variables(self.heads_model.variables)
 
 			def forward(self, input_dict, state, seq_lens):
-				model_out = self.heads_model(get_heads_input(input_dict))
+				model_out = self.preprocessing_model(get_input_list_from_input_dict(input_dict))
 				return model_out, state
 
 		return TFAdaptiveMultiHeadDDPGInner

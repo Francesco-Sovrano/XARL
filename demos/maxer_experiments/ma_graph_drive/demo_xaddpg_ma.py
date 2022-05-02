@@ -14,9 +14,9 @@ from xarl.agents.xaddpg import XADDPGTrainer, XADDPG_DEFAULT_CONFIG
 from environments import *
 from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG as TFAdaptiveMultiHeadNet
 from ray.rllib.models import ModelCatalog
-from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+from xarl.models.head_generator.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict
 # Register the models to use.
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
+ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
 
 SELECT_ENV = "MAGraphDrive-Easy"
 

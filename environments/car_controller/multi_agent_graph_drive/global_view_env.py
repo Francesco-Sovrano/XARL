@@ -14,8 +14,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.lines import Line2D
 
 from environments.car_controller.utils.geometry import *
-from environments.car_controller.graph_drive.lib.roads import RoadNetwork
-from environments.car_controller.multi_agent_graph_drive.ma_roads import MultiAgentRoadNetwork
+from environments.car_controller.multi_agent_graph_drive.multi_agent_road_network import MultiAgentRoadNetwork
 from environments.car_controller.grid_drive.lib.road_cultures import *
 
 import logging
@@ -36,7 +35,7 @@ class GraphDriveAgent:
 		return [seed]
 
 	def __init__(self, n_of_other_agents, culture, env_config):
-		super().__init__()
+		# super().__init__()
 		
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
@@ -112,7 +111,7 @@ class GraphDriveAgent:
 		self.car_point = car_point
 		self.car_orientation = (2*self.np_random.random()-1)*np.pi # in [-pi,pi]
 		self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point)
-		self.closest_junction = RoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
+		self.closest_junction = MultiAgentRoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 		# steering angle & speed
 		self.steering_angle = 0
 		self.speed = self.env_config['min_speed'] #+ (self.env_config['max_speed']-self.env_config['min_speed'])*self.np_random.random() # in [min_speed,max_speed]
@@ -251,7 +250,7 @@ class GraphDriveAgent:
 				for i in range(len(self.other_agent_list))
 			]
 		else:
-			agents_view = None
+			agents_view_list = None
 
 		# print('seconds',time.time()-s)
 		return junctions_view_list, roads_view_list, agents_view_list
@@ -329,7 +328,7 @@ class GraphDriveAgent:
 			self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point, self.closest_junction_list)
 		else:
 			self.distance_to_closest_road = point_to_line_dist(self.car_point, self.closest_road.edge)
-		self.closest_junction = RoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
+		self.closest_junction = MultiAgentRoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
 		if self.is_in_junction(self.car_point):
 			self.steps_in_junction += 1
@@ -354,7 +353,7 @@ class GraphDriveAgent:
 			#########
 			self.last_closest_junction = None
 			self.last_closest_road = self.closest_road # keep track of the current road
-			self.goal_junction = RoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
+			self.goal_junction = MultiAgentRoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
 			self.current_road_speed_list = []
 		self.current_road_speed_list.append(self.speed)
 		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food

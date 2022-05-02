@@ -1,4 +1,4 @@
-# from xarl.models.adaptive_model_wrapper import get_tf_heads_model, get_heads_input, tf
+# from xarl.models.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict, tf
 from ray.rllib.models.modelv2 import restore_original_dimensions
 
 import numpy as np
@@ -14,14 +14,14 @@ tf1, tf, tfv = try_import_tf()
 class TFAdaptiveMultiHeadNet:
 
 	@staticmethod
-	def init(get_tf_heads_model, get_heads_input):
+	def init(get_input_layers_and_keras_layers, get_input_list_from_input_dict):
 		class TFAdaptiveMultiHeadNetInner(TFModelV2):
 			"""Generic fully connected network implemented in ModelV2 API."""
 			def __init__(self, obs_space: gym.spaces.Space, action_space: gym.spaces.Space, num_outputs: int, model_config: ModelConfigDict, name: str):
 				super(TFAdaptiveMultiHeadNetInner, self).__init__(obs_space, action_space, num_outputs, model_config, name)
 
 				self._original_obs_space = obs_space
-				inputs, last_layer = get_tf_heads_model(obs_space)
+				inputs, last_layer = get_input_layers_and_keras_layers(obs_space)
 
 				activation = get_activation_fn(model_config.get("fcnet_activation"))
 				if not model_config.get("fcnet_hiddens", []):
@@ -122,8 +122,7 @@ class TFAdaptiveMultiHeadNet:
 				# self.register_variables(self.base_model.variables)
 
 			def forward(self, input_dict: Dict[str, TensorType], state: List[TensorType], seq_lens: TensorType) -> (TensorType, List[TensorType]):
-				# obs = restore_original_dimensions(input_dict["obs"], self._original_obs_space, 'tf')
-				model_out, self._value_out = self.base_model(get_heads_input(input_dict))
+				model_out, self._value_out = self.base_model(get_input_list_from_input_dict(input_dict))
 				return model_out, state
 
 			def value_function(self) -> TensorType:

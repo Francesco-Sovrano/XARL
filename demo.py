@@ -7,8 +7,9 @@ from ray.rllib.models import ModelCatalog
 from xarl.utils.workflow import train
 from ray.tune.registry import get_trainable_cls, _global_registry, ENV_CREATOR
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
-from xarl.models.head_generator.primal_adaptive_model_wrapper import get_tf_heads_model as get_tf_heads_model_primal, get_heads_input as get_heads_input_primal
-from xarl.models.head_generator.adaptive_model_wrapper import get_tf_heads_model, get_heads_input
+from xarl.models.head_generator.primal_adaptive_model_wrapper import get_input_layers_and_keras_layers as get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict as get_input_list_from_input_dict_primal
+from xarl.models.head_generator.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict
+from xarl.models.head_generator.comm_adaptive_model_wrapper import get_input_layers_and_keras_layers as get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict as get_input_list_from_input_dict_comm
 from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
 from environments import *
@@ -18,66 +19,76 @@ def get_algorithm_by_name(alg_name):
 	if alg_name == 'dqn':
 		from ray.rllib.agents.dqn.dqn import DQNTrainer, DEFAULT_CONFIG as DQN_DEFAULT_CONFIG
 		from xarl.models.dqn import TFAdaptiveMultiHeadDQN as TFAdaptiveMultiHeadNet
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return DQN_DEFAULT_CONFIG.copy(), DQNTrainer
 	if alg_name == 'xadqn':
 		from xarl.agents.xadqn import XADQNTrainer, XADQN_DEFAULT_CONFIG
 		from xarl.models.dqn import TFAdaptiveMultiHeadDQN as TFAdaptiveMultiHeadNet
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return XADQN_DEFAULT_CONFIG.copy(), XADQNTrainer
 	# DDPG
 	if alg_name == 'ddpg':
 		from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG as TFAdaptiveMultiHeadNet
 		from ray.rllib.agents.ddpg.ddpg import DDPGTrainer, DEFAULT_CONFIG as DDPG_DEFAULT_CONFIG
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return DDPG_DEFAULT_CONFIG.copy(), DDPGTrainer
 	if alg_name == 'xaddpg':
 		from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG as TFAdaptiveMultiHeadNet
 		from xarl.agents.xaddpg import XADDPGTrainer, XADDPG_DEFAULT_CONFIG
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return XADDPG_DEFAULT_CONFIG.copy(), XADDPGTrainer
 	# TD3
 	if alg_name == 'td3':
 		from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG
 		from ray.rllib.agents.ddpg.td3 import TD3Trainer, TD3_DEFAULT_CONFIG
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return TD3_DEFAULT_CONFIG.copy(), TD3Trainer
 	if alg_name == 'xatd3':
 		from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG as TFAdaptiveMultiHeadNet
 		from xarl.agents.xaddpg import XATD3Trainer, XATD3_DEFAULT_CONFIG
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return XATD3_DEFAULT_CONFIG.copy(), XATD3Trainer
 	# SAC
 	if alg_name == 'sac':
 		from ray.rllib.agents.sac.sac import SACTrainer, DEFAULT_CONFIG as SAC_DEFAULT_CONFIG
 		from xarl.models.sac import TFAdaptiveMultiHeadNet
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return SAC_DEFAULT_CONFIG.copy(), SACTrainer
 	if alg_name == 'xasac':
 		from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 		from xarl.models.sac import TFAdaptiveMultiHeadNet
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return XASAC_DEFAULT_CONFIG.copy(), XASACTrainer
 	# PPO
 	if alg_name in ['appo','ppo']:
 		from ray.rllib.agents.ppo.appo import APPOTrainer, DEFAULT_CONFIG as APPO_DEFAULT_CONFIG
 		from xarl.models.appo import TFAdaptiveMultiHeadNet
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return APPO_DEFAULT_CONFIG.copy(), APPOTrainer
 	if alg_name == 'xappo':
 		from xarl.agents.xappo import XAPPOTrainer, XAPPO_DEFAULT_CONFIG
 		from xarl.models.appo import TFAdaptiveMultiHeadNet
-		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model, get_heads_input))
-		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_tf_heads_model_primal, get_heads_input_primal))
+		ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
+		ModelCatalog.register_custom_model("primal_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal))
+		ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm))
 		return XAPPO_DEFAULT_CONFIG.copy(), XAPPOTrainer
 
 import sys
