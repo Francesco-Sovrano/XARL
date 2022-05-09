@@ -10,8 +10,8 @@ from xarl.utils.workflow import train
 
 from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
-from ray.rllib.models import ModelCatalog
-from xarl.models.sac import TFAdaptiveMultiHeadNet
+# from ray.rllib.models import ModelCatalog
+# from xarl.models.sac import TFAdaptiveMultiHeadNet
 # ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadDDPG)
 
 # SELECT_ENV = "CescoDrive-V1"

@@ -1,6 +1,3 @@
-# from xarl.models.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict, tf
-from ray.rllib.models.modelv2 import restore_original_dimensions
-
 import numpy as np
 import gym
 

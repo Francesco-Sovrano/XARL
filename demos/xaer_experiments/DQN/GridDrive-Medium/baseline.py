@@ -8,10 +8,10 @@ import ray
 import time
 from xarl.utils.workflow import train
 
-from xarl.agents.xadqn import XADQNTrainer, XADQN_DEFAULT_CONFIG
+# from xarl.agents.xadqn import XADQNTrainer, XADQN_DEFAULT_CONFIG
 from environments import *
-from xarl.models.dqn import TFAdaptiveMultiHeadDQN
-from ray.rllib.models import ModelCatalog
+# # from xarl.models.dqn import TFAdaptiveMultiHeadDQN
+# # from ray.rllib.models import ModelCatalog
 # Register the models to use.
 # # ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadDQN)
 

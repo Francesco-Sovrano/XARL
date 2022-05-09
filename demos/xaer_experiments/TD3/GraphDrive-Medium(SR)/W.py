@@ -10,8 +10,8 @@ from xarl.utils.workflow import train
 
 from xarl.agents.xaddpg import XATD3Trainer, XATD3_DEFAULT_CONFIG
 from environments import *
-from ray.rllib.models import ModelCatalog
-from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG
+# from ray.rllib.models import ModelCatalog
+# from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG
 # # ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadDDPG)
 
 # SELECT_ENV = "CescoDrive-V1"

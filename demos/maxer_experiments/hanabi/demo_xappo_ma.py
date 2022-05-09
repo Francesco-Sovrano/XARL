@@ -12,11 +12,6 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
 from xarl.agents.xappo import XAPPOTrainer, XAPPO_DEFAULT_CONFIG
 from environments import *
-from xarl.models.appo import TFAdaptiveMultiHeadNet
-from ray.rllib.models import ModelCatalog
-from xarl.models.head_generator.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict
-# Register the models to use.
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
 
 # SELECT_ENV = "Taxi-v3"
 # SELECT_ENV = "ToyExample-V0"
@@ -122,6 +117,12 @@ CONFIG["callbacks"] = CustomEnvironmentCallbacks
 # elif framework == "torch":
 # 	from ray.rllib.models.torch.fcnet import (FullyConnectedNetwork as FCNet)
 # ModelCatalog.register_custom_model("fcnet", FCNet)
+
+# Register models
+from ray.rllib.models import ModelCatalog
+from xarl.models import get_model_catalog_dict
+for k,v in get_model_catalog_dict('ppo', CONFIG["framework"]).items():
+	ModelCatalog.register_custom_model(k, v)
 
 # Setup MARL training strategy: centralised or decentralised
 env = _global_registry.get(ENV_CREATOR, SELECT_ENV)(CONFIG["env_config"])

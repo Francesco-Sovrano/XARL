@@ -159,11 +159,18 @@ def get_input_layers_and_keras_layers(obs_space, **args):
 	
 	logger.warning(f"Building keras layers for Comm model with {len(obs_space['all_agents'])} agents")
 	this_inputs, this_last_layer = apply_obs_to_main_model(obs_space['this_agent'])
-	apply_obs_to_message_model = apply_obs_to_main_model # obs_space['visibility_vector']
+	apply_obs_to_message_model = apply_obs_to_main_model # obs_space['message_visibility_mask']
+	###	Apply visibility mask
 	other_input_list, other_last_layer_list = map(list,zip(*list(map(apply_obs_to_message_model,obs_space['all_agents']))))
-	other_last_layer = tf.math.reduce_sum(other_last_layer_list, axis=0)
+	message_visibility_mask_input = tf.keras.layers.Input(shape=obs_space['message_visibility_mask'].shape)
+	masked_messages = [
+		m*message_visibility_mask_input[:,i]
+		for i,m in enumerate(other_last_layer_list)
+	]
+	###
+	other_last_layer = tf.math.reduce_sum(masked_messages, axis=0)
 	last_layer = tf.concat([this_last_layer, other_last_layer], axis=1)
-	inputs = this_inputs + other_input_list
+	inputs = this_inputs + other_input_list + [message_visibility_mask_input]
 	return inputs, last_layer
 
 def get_input_list_from_input_dict(input_dict, **args):

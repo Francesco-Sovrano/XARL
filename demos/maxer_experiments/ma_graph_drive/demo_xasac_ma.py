@@ -13,16 +13,6 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
 
-# Register the models to use.
-from xarl.models.sac import TFAdaptiveMultiHeadNet
-from ray.rllib.models import ModelCatalog
-
-from xarl.models.head_generator.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
-from xarl.models.head_generator.comm_adaptive_model_wrapper import get_input_layers_and_keras_layers as comm_get_input_layers_and_keras_layers, get_input_list_from_input_dict as comm_get_input_list_from_input_dict
-ModelCatalog.register_custom_model("comm_adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(comm_get_input_layers_and_keras_layers, comm_get_input_list_from_input_dict))
-
-
 SELECT_ENV = "MAGraphDrive-PVComm"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
@@ -70,6 +60,7 @@ CONFIG["env_config"] = {
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
+	"framework": "torch",
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
@@ -141,6 +132,12 @@ CONFIG.update({
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
+
+# Register models
+from ray.rllib.models import ModelCatalog
+from xarl.models import get_model_catalog_dict
+for k,v in get_model_catalog_dict('sac', CONFIG["framework"]).items():
+	ModelCatalog.register_custom_model(k, v)
 
 # Setup MARL training strategy: centralised or decentralised
 env = _global_registry.get(ENV_CREATOR, SELECT_ENV)(CONFIG["env_config"])

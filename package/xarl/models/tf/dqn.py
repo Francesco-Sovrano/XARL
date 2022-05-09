@@ -1,15 +1,14 @@
-from ray.rllib.agents.ddpg.ddpg_tf_model import DDPGTFModel
-# from xarl.models.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict, tf
+from ray.rllib.agents.dqn.distributional_q_tf_model import DistributionalQTFModel
 
 from ray.rllib.utils.framework import try_import_tf
 tf1, tf, tfv = try_import_tf()
 
-class TFAdaptiveMultiHeadDDPG:
+class TFAdaptiveMultiHeadDQN:
 
 	@staticmethod
 	def init(get_input_layers_and_keras_layers, get_input_list_from_input_dict):
-		class TFAdaptiveMultiHeadDDPGInner(DDPGTFModel):
-			def __init__(self, obs_space, action_space, num_outputs, model_config, name, actor_hiddens=(256, 256), actor_hidden_activation="relu", critic_hiddens=(256, 256), critic_hidden_activation="relu", twin_q=False, add_layer_norm=False):
+		class TFAdaptiveMultiHeadDQNInner(DistributionalQTFModel):
+			def __init__(self, obs_space, action_space, num_outputs, model_config, name, q_hiddens = (256, ), dueling = False, num_atoms = 1, use_noisy = False, v_min = -10.0, v_max = 10.0, sigma0 = 0.5, add_layer_norm = False):
 				inputs, last_layer = get_input_layers_and_keras_layers(obs_space)
 				self.preprocessing_model = tf.keras.Model(inputs, last_layer)
 				# self.register_variables(self.preprocessing_model.variables)
@@ -19,11 +18,13 @@ class TFAdaptiveMultiHeadDDPG:
 					num_outputs=last_layer.shape[1], 
 					model_config=model_config, 
 					name=name, 
-					actor_hiddens=actor_hiddens, 
-					actor_hidden_activation=actor_hidden_activation, 
-					critic_hiddens=critic_hiddens, 
-					critic_hidden_activation=critic_hidden_activation, 
-					twin_q=twin_q, 
+					q_hiddens=q_hiddens, 
+					dueling=dueling, 
+					num_atoms=num_atoms, 
+					use_noisy=use_noisy, 
+					v_min=v_min, 
+					v_max=v_max, 
+					sigma0=sigma0, 
 					add_layer_norm=add_layer_norm
 				)
 
@@ -31,4 +32,4 @@ class TFAdaptiveMultiHeadDDPG:
 				model_out = self.preprocessing_model(get_input_list_from_input_dict(input_dict))
 				return model_out, state
 
-		return TFAdaptiveMultiHeadDDPGInner
+		return TFAdaptiveMultiHeadDQNInner

@@ -1,6 +1,4 @@
-from ray.rllib.agents.sac.sac_tf_model import *
-from xarl.models.appo import TFAdaptiveMultiHeadNet as APPOTFAdaptiveMultiHeadNet
-# from xarl.models.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict, tf
+from ray.rllib.agents.sac.sac_tf_model import SACTFModel
 
 import gym
 from ray.rllib.utils.framework import try_import_tf

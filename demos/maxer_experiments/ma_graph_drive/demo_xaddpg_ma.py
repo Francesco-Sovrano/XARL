@@ -12,11 +12,6 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
 from xarl.agents.xaddpg import XADDPGTrainer, XADDPG_DEFAULT_CONFIG
 from environments import *
-from xarl.models.ddpg import TFAdaptiveMultiHeadDDPG as TFAdaptiveMultiHeadNet
-from ray.rllib.models import ModelCatalog
-from xarl.models.head_generator.adaptive_model_wrapper import get_input_layers_and_keras_layers, get_input_list_from_input_dict
-# Register the models to use.
-ModelCatalog.register_custom_model("adaptive_multihead_network", TFAdaptiveMultiHeadNet.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict))
 
 SELECT_ENV = "MAGraphDrive-Easy"
 
@@ -135,6 +130,12 @@ CONFIG.update({
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 })
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
+
+# Register models
+from ray.rllib.models import ModelCatalog
+from xarl.models import get_model_catalog_dict
+for k,v in get_model_catalog_dict('ddpg', CONFIG["framework"]).items():
+	ModelCatalog.register_custom_model(k, v)
 
 # Setup MARL training strategy: centralised or decentralised
 env = _global_registry.get(ENV_CREATOR, SELECT_ENV)(CONFIG["env_config"])

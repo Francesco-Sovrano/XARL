@@ -39,7 +39,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 				shape= (
 					self.agent_state_size + self.obs_car_features,
 				),
-				dtype=np.float32
+				dtype='bool'
 			),
 		}
 		self.observation_space = gym.spaces.Dict(state_dict)
@@ -111,7 +111,7 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		self.observation_space = gym.spaces.Dict({
 			'this_agent': base_space,
 			'all_agents': gym.spaces.Tuple([base_space]*self.num_agents),
-			'visibility_mask': gym.spaces.Box(low=0, high=1, shape= (self.num_agents,), dtype=np.float32),
+			'message_visibility_mask': gym.spaces.Box(low=0, high=1, shape= (self.num_agents,), dtype=np.float32),
 		})
 		self.seed(config.get('seed',21))
 
@@ -126,7 +126,7 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 					state_dict.get(that_agent_id, empty_state)
 					for that_agent_id, that_agent in enumerate(self.agent_list)
 				],
-				'visibility_mask': np.array([
+				'message_visibility_mask': np.array([
 					this_agent_id != that_agent_id and that_agent_id in state_dict and self.agent_list[this_agent_id].can_see(that_agent.car_point)
 					for that_agent_id, that_agent in enumerate(self.agent_list)
 				], dtype=np.float32)
