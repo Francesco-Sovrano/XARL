@@ -39,7 +39,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 				shape= (
 					self.agent_state_size + self.obs_car_features,
 				),
-				dtype='bool'
+				dtype=np.float32
 			),
 		}
 		self.observation_space = gym.spaces.Dict(state_dict)
