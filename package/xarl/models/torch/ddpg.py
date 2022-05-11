@@ -9,7 +9,7 @@ class TorchAdaptiveMultiHeadDDPG:
 		class TorchAdaptiveMultiHeadDDPGInner(DDPGTorchModel):
 			def __init__(self, obs_space, action_space, num_outputs, model_config, name, actor_hiddens=(256, 256), actor_hidden_activation="relu", critic_hiddens=(256, 256), critic_hidden_activation="relu", twin_q=False, add_layer_norm=False):
 				nn.Module.__init__(self)
-				self.preprocessing_model = preprocessing_model(obs_space)
+				self.preprocessing_model = preprocessing_model(obs_space, model_config)
 				# self.register_variables(self.preprocessing_model.variables)
 				super().__init__(
 					obs_space=obs_space, 

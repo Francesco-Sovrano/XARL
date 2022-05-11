@@ -110,20 +110,35 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		base_space = self.agent_list[0].observation_space
 		self.observation_space = gym.spaces.Dict({
 			'this_agent': base_space,
-			'all_agents': gym.spaces.Tuple([base_space]*self.num_agents),
+			'all_agents': gym.spaces.Tuple([gym.spaces.Dict({
+				'position': gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32),
+				'features': base_space,
+			})]*self.num_agents),
 			'message_visibility_mask': gym.spaces.Box(low=0, high=1, shape= (self.num_agents,), dtype=np.float32),
 		})
 		self.seed(config.get('seed',21))
+
+	def get_normalized_relative_position(self, this_agent_id, that_agent_id):
+		this_agent = self.agent_list[this_agent_id]
+		source_x, source_y = this_agent.car_point
+		source_orientation = this_agent.car_orientation
+
+		that_agent = self.agent_list[that_agent_id]
+		return this_agent.normalize_point(shift_and_rotate(*that_agent.car_point, -source_x, -source_y, -source_orientation))
 
 	def build_state_with_comm(self, state_dict):
 		if not state_dict:
 			return state_dict
 		empty_state = next(iter(state_dict.values()))
+
 		return {
 			this_agent_id: {
 				'this_agent': this_state, 
 				'all_agents': [
-					state_dict.get(that_agent_id, empty_state)
+					{
+						'position': np.array(self.get_normalized_relative_position(this_agent_id, that_agent_id), dtype=np.float32),
+						'features': state_dict.get(that_agent_id, empty_state),
+					}
 					for that_agent_id, that_agent in enumerate(self.agent_list)
 				],
 				'message_visibility_mask': np.array([

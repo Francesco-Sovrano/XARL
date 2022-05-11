@@ -18,12 +18,13 @@ class TorchAdaptiveMultiHeadNet:
 			"""
 			
 			def build_policy_model(self, obs_space, num_outputs, policy_model_config, name):
-				self.policy_preprocessing_model = preprocessing_model(obs_space)
+				# print(policy_model_config)
+				self.policy_preprocessing_model = preprocessing_model(obs_space, self.model_config)
 				policy_preprocessed_obs_space = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=self.policy_preprocessing_model.get_num_outputs(), dtype=np.float32)
 				return super().build_policy_model(policy_preprocessed_obs_space, num_outputs, policy_model_config, name)
 
 			def build_q_model(self, obs_space, action_space, num_outputs, q_model_config, name):
-				self.value_preprocessing_model = preprocessing_model(obs_space)
+				self.value_preprocessing_model = preprocessing_model(obs_space, self.model_config)
 				value_preprocessed_obs_space = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=self.value_preprocessing_model.get_num_outputs(), dtype=np.float32)
 				return super().build_q_model(value_preprocessed_obs_space, action_space, num_outputs, q_model_config, name)
 

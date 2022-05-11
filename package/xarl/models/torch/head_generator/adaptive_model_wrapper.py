@@ -7,8 +7,16 @@ import itertools
 logger = logging.getLogger(__name__)
 torch, nn = try_import_torch()
 
+def get_input_shape_recursively(_obs_space, valid_key_fn=lambda x: True):
+	if isinstance(_obs_space, gym.spaces.Dict):
+		space_iter = (v for k,v in _obs_space.spaces.items() if valid_key_fn(k))
+		return list(itertools.chain.from_iterable(map(get_input_shape_recursively,space_iter)))
+	elif isinstance(_obs_space, gym.spaces.Tuple):
+		return list(itertools.chain.from_iterable(map(get_input_shape_recursively,_obs_space.spaces)))
+	return [_obs_space.shape]
+
 class AdaptiveModel(nn.Module):
-	def __init__(self, obs_space):
+	def __init__(self, obs_space, config):
 		super().__init__()
 		if hasattr(obs_space, 'original_space'):
 			obs_space = obs_space.original_space
@@ -35,14 +43,7 @@ class AdaptiveModel(nn.Module):
 			]
 
 		###### Others
-		def get_input_shape_recursively(_obs_space):
-			if isinstance(_obs_space, gym.spaces.Dict):
-				space_iter = (v for k,v in _obs_space.spaces.items() if not k.startswith('fc') and not k.startswith('cnn'))
-				return list(itertools.chain.from_iterable(map(get_input_shape_recursively,space_iter)))
-			elif isinstance(_obs_space, gym.spaces.Tuple):
-				return list(itertools.chain.from_iterable(map(get_input_shape_recursively,_obs_space.spaces)))
-			return [_obs_space.shape]
-		other_inputs_shape_list = get_input_shape_recursively(obs_space)
+		other_inputs_shape_list = get_input_shape_recursively(obs_space, lambda k: not k.startswith('fc') and not k.startswith('cnn'))
 		if other_inputs_shape_list:
 			self.sub_model_dict[''] = [nn.Flatten() for l in other_inputs_shape_list]
 		if not self.sub_model_dict.get('cnn',None) and not self.sub_model_dict.get('fc',None):

@@ -161,7 +161,7 @@ def get_input_layers_and_keras_layers(obs_space, **args):
 	this_inputs, this_last_layer = apply_obs_to_main_model(obs_space['this_agent'])
 	apply_obs_to_message_model = apply_obs_to_main_model # obs_space['message_visibility_mask']
 	###	Apply visibility mask
-	other_input_list, other_last_layer_list = map(list,zip(*list(map(apply_obs_to_message_model,obs_space['all_agents']))))
+	other_input_list, other_last_layer_list = map(list,zip(*[apply_obs_to_message_model(y['features']) for y in obs_space['all_agents']]))
 	message_visibility_mask_input = tf.keras.layers.Input(shape=obs_space['message_visibility_mask'].shape)
 	masked_messages = [
 		m*message_visibility_mask_input[:,i]
