@@ -35,7 +35,7 @@ for culture_level in culture_level_list:
 	register_env(f"GraphDrive-{culture_level}-Sparse-S*J", lambda config: GraphDrive({"reward_fn": 'sparse_reward_step_multiplied_by_junctions', "culture_level": culture_level}))
 
 ### MultiAgentGraphDrive
-from environments.car_controller.multi_agent_graph_drive.global_view_env import MultiAgentGraphDrive
+from environments.car_controller.tragedy_of_commons_graph_drive.global_view_env import MultiAgentGraphDrive
 culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
 	register_env(f"MAGraphDrive-{culture_level}", lambda config: MultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
@@ -43,7 +43,7 @@ for culture_level in culture_level_list:
 register_env(f"MAGraphDrive", lambda config: MultiAgentGraphDrive({"reward_fn": 'frequent_reward_no_culture', "culture_level": "Easy", **config}))
 register_env(f"MAGraphDrive-Sparse", lambda config: MultiAgentGraphDrive({"reward_fn": 'sparse_reward_no_culture', "culture_level": "Easy", **config}))
 
-from environments.car_controller.multi_agent_graph_drive.partial_view_with_comm_env import PVCommMultiAgentGraphDrive
+from environments.car_controller.tragedy_of_commons_graph_drive.partial_view_with_comm_env import PVCommMultiAgentGraphDrive
 culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
 	register_env(f"MAGraphDrive-PVComm-{culture_level}", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))

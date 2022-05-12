@@ -21,6 +21,7 @@ CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'visibility_radius': 3,
+	'max_n_junctions_in_view': 8,
 	'max_food_per_target': 3,
 	'blockage_probability': None,
 	# 'blockage_probability': 0.15,

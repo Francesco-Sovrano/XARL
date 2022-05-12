@@ -1,4 +1,4 @@
-from xarl.models.torch.head_generator.adaptive_model_wrapper import AdaptiveModel, get_input_shape_recursively
+from xarl.models.torch.head_generator.adaptive_model_wrapper import AdaptiveModel
 from xarl.utils.torch_gnn_models.model import GNNBranch
 from ray.rllib.utils.framework import try_import_torch
 import logging
@@ -19,8 +19,6 @@ class CommAdaptiveModel(AdaptiveModel):
 
 		#################
 		###### GNN ######
-		# print(get_input_shape_recursively(obs_space['all_agents'][0]['features']))
-		# agent_features_size = sum((np.prod(shape) for shape in get_input_shape_recursively(obs_space['all_agents'][0]['features'])))
 		agent_features_size = self.get_agent_features_size()
 		logger.warning(f"Agent features size: {agent_features_size}")
 		message_features = config.get('message_features', 32)

@@ -14,7 +14,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.lines import Line2D
 
 from environments.car_controller.utils.geometry import *
-from environments.car_controller.multi_agent_graph_drive.multi_agent_road_network import MultiAgentRoadNetwork
+from environments.car_controller.tragedy_of_commons_graph_drive.lib.multi_agent_road_network import MultiAgentRoadNetwork
 from environments.car_controller.grid_drive.lib.road_cultures import *
 
 import logging

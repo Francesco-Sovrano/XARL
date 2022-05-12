@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-from environments.car_controller.multi_agent_graph_drive.global_view_env import *
+from environments.car_controller.tragedy_of_commons_graph_drive.global_view_env import *
 
 
 class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 
 	def __init__(self, n_of_other_agents, culture, env_config):
 		super().__init__(n_of_other_agents, culture, env_config)
+		self.max_n_junctions_in_view = min(self.env_config.get('max_n_junctions_in_view',float('inf')), self.env_config['junctions_number'])
 		
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
@@ -18,7 +19,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 					),
 					dtype=np.float32
 				)
-				for i in range(self.env_config['junctions_number'])
+				for i in range(self.max_n_junctions_in_view)
 			]),
 			"fc_roads-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
 				gym.spaces.Box( # Junction properties and roads'
@@ -31,7 +32,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 					),
 					dtype=np.float32
 				)
-				for i in range(self.env_config['junctions_number'])
+				for i in range(self.max_n_junctions_in_view)
 			]),
 			"fc_this_agent-16": gym.spaces.Box( # Agent features
 				low= -1,
@@ -83,7 +84,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 			) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction
-			for i in range(len(self.road_network.junctions))
+			for i in range(self.max_n_junctions_in_view)
 		]
 
 		##### Get roads view
@@ -91,7 +92,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 			np.array(self.get_junction_roads(sorted_junctions[i]['junction']), dtype=np.float32) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction_roads
-			for i in range(len(self.road_network.junctions))
+			for i in range(self.max_n_junctions_in_view)
 		]
 
 		# print('seconds',time.time()-s)

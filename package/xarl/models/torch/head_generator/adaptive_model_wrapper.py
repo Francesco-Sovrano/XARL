@@ -7,13 +7,18 @@ import itertools
 logger = logging.getLogger(__name__)
 torch, nn = try_import_torch()
 
-def get_input_shape_recursively(_obs_space, valid_key_fn=lambda x: True):
+def get_input_recursively(_obs_space, valid_key_fn=lambda x: True):
 	if isinstance(_obs_space, gym.spaces.Dict):
 		space_iter = (v for k,v in _obs_space.spaces.items() if valid_key_fn(k))
-		return list(itertools.chain.from_iterable(map(get_input_shape_recursively,space_iter)))
+		return list(itertools.chain.from_iterable(map(get_input_recursively,space_iter)))
 	elif isinstance(_obs_space, gym.spaces.Tuple):
-		return list(itertools.chain.from_iterable(map(get_input_shape_recursively,_obs_space.spaces)))
-	return [_obs_space.shape]
+		return list(itertools.chain.from_iterable(map(get_input_recursively,_obs_space.spaces)))
+	elif isinstance(_obs_space, dict):
+		space_iter = (v for k,v in _obs_space.items() if valid_key_fn(k))
+		return list(itertools.chain.from_iterable(map(get_input_recursively,space_iter)))
+	elif isinstance(_obs_space, (list,tuple)):
+		return list(itertools.chain.from_iterable(map(get_input_recursively,_obs_space)))
+	return [_obs_space]
 
 class AdaptiveModel(nn.Module):
 	def __init__(self, obs_space, config):
@@ -43,11 +48,11 @@ class AdaptiveModel(nn.Module):
 			]
 
 		###### Others
-		other_inputs_shape_list = get_input_shape_recursively(obs_space, lambda k: not k.startswith('fc') and not k.startswith('cnn'))
-		if other_inputs_shape_list:
-			self.sub_model_dict[''] = [nn.Flatten() for l in other_inputs_shape_list]
+		other_inputs_list = get_input_recursively(obs_space, lambda k: not k.startswith('fc') and not k.startswith('cnn'))
+		if other_inputs_list:
+			self.sub_model_dict[''] = [[nn.Flatten()] for l in other_inputs_list]
 		if not self.sub_model_dict.get('cnn',None) and not self.sub_model_dict.get('fc',None):
-			assert other_inputs_shape_list
+			assert other_inputs_list
 			logger.warning('N.B.: Flattening all observations!')	
 		# print(self.sub_model_dict)
 
@@ -81,7 +86,7 @@ class AdaptiveModel(nn.Module):
 					return list(map(get_random_input_recursively, _obs_space.spaces))
 				return torch.rand(1,*_obs_space.shape)
 			random_obs = get_random_input_recursively(self.obs_space)
-			self._num_outputs = self.forward(random_obs).data.shape[1:]
+			self._num_outputs = self.forward(random_obs).shape[-1]
 		return self._num_outputs
 
 	@staticmethod
@@ -122,7 +127,7 @@ class AdaptiveModel(nn.Module):
 			else:
 				if '' not in inputs_dict:
 					inputs_dict[''] = []
-				inputs_dict[''].append(v)
+				inputs_dict[''] += get_input_recursively(v, lambda k: not k.startswith('fc') and not k.startswith('cnn'))
 			
 		for _type,_input_list in inputs_dict.items():
 			inputs_dict[_type] = [

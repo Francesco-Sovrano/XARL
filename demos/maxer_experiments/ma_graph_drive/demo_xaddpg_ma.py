@@ -13,18 +13,20 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 from xarl.agents.xaddpg import XADDPGTrainer, XADDPG_DEFAULT_CONFIG
 from environments import *
 
-SELECT_ENV = "MAGraphDrive-Easy"
-
+SELECT_ENV = "MAGraphDrive-PVComm"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 
 CONFIG = XADDPG_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
-	'max_food_per_target': 10,
-	'blockage_probability': 0.15,
-	'min_blockage_ratio': 0.1,
-	'max_blockage_ratio': 0.5,
+	'visibility_radius': 3,
+	'max_n_junctions_in_view': 8,
+	'max_food_per_target': 3,
+	'blockage_probability': None,
+	# 'blockage_probability': 0.15,
+	# 'min_blockage_ratio': 0.1,
+	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
 	'target_junctions_number': 4,
 	'source_junctions_number': 4,
@@ -59,12 +61,14 @@ CONFIG["env_config"] = {
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
+	"framework": "torch",
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
-	# "model": { # this is for GraphDrive and GridDrive
-	# 	"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-	# 	"custom_model": "adaptive_multihead_network"
-	# },
+	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	"model": { # this is for GraphDrive and GridDrive
+		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+		"custom_model": "comm_adaptive_multihead_network"
+	},
+	# "normalize_actions": False,
 
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.

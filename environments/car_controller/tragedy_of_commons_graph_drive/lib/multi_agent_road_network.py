@@ -1,5 +1,5 @@
 from environments.car_controller.graph_drive.lib.roads import RoadNetwork
-from ..grid_drive.lib.road_agent import RoadAgent
+from ...grid_drive.lib.road_agent import RoadAgent
 
 class MultiAgentRoadNetwork(RoadNetwork):
 
