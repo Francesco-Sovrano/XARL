@@ -142,8 +142,6 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		return shift_and_rotate(*that_agent.car_point, -source_x, -source_y, -source_orientation)
 
 	def is_visible(self, this_agent_id, that_agent_id):
-		if this_agent_id == that_agent_id:
-			return False
 		this_agent = self.agent_list[this_agent_id]
 		that_agent = self.agent_list[that_agent_id]
 		return not that_agent.is_dead and this_agent.can_see(that_agent.car_point)
@@ -164,7 +162,7 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 					for that_agent_id in range(self.num_agents)
 				],
 				'all_agents_features_list': [
-					state_dict[that_agent_id] if self.is_visible(this_agent_id, that_agent_id) else self.empty_agent_features
+					state_dict[that_agent_id] if this_agent_id==that_agent_id or self.is_visible(this_agent_id, that_agent_id) else self.empty_agent_features
 					for that_agent_id in range(self.num_agents)
 				],
 				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
