@@ -110,42 +110,64 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		self.action_space = self.agent_list[0].action_space
 		base_space = self.agent_list[0].observation_space
 		self.observation_space = gym.spaces.Dict({
-			'this_agent': base_space,
-			'all_agents': gym.spaces.Tuple([gym.spaces.Dict({
-				'position': gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32),
-				'features': base_space,
-			})]*self.num_agents),
-			'message_visibility_mask': gym.spaces.Box(low=0, high=1, shape= (self.num_agents,), dtype=np.float32),
+			'all_agents_position_list': gym.spaces.Tuple(
+				[gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(2,), dtype=np.float32)]*self.num_agents
+			),
+			'all_agents_features_list': gym.spaces.Tuple(
+				[base_space]*self.num_agents
+			),
+			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.float32),
 		})
+		# self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float32)
+		self.empty_agent_features = self.get_empty_state_recursively(base_space)
 		self.seed(config.get('seed',21))
 
-	def get_normalized_relative_position(self, this_agent_id, that_agent_id):
+	@staticmethod
+	def get_empty_state_recursively(_obs_space):
+		if isinstance(_obs_space, gym.spaces.Dict):
+			return {
+				k: PVCommMultiAgentGraphDrive.get_empty_state_recursively(v)
+				for k,v in _obs_space.spaces.items()
+			}
+		elif isinstance(_obs_space, gym.spaces.Tuple):
+			return list(map(PVCommMultiAgentGraphDrive.get_empty_state_recursively, _obs_space.spaces))
+		return np.zeros(_obs_space.shape, dtype=_obs_space.dtype)
+
+	def get_relative_position(self, this_agent_id, that_agent_id):
 		this_agent = self.agent_list[this_agent_id]
 		source_x, source_y = this_agent.car_point
 		source_orientation = this_agent.car_orientation
 
 		that_agent = self.agent_list[that_agent_id]
-		return this_agent.normalize_point(shift_and_rotate(*that_agent.car_point, -source_x, -source_y, -source_orientation))
+		return shift_and_rotate(*that_agent.car_point, -source_x, -source_y, -source_orientation)
+
+	def is_visible(self, this_agent_id, that_agent_id):
+		if this_agent_id == that_agent_id:
+			return False
+		this_agent = self.agent_list[this_agent_id]
+		that_agent = self.agent_list[that_agent_id]
+		return not that_agent.is_dead and this_agent.can_see(that_agent.car_point)
+
+	def get_this_agent_id_mask(self, this_agent_id):
+		agent_id_mask = np.zeros((self.num_agents,), dtype=np.float32)
+		agent_id_mask[this_agent_id] = 1
+		return agent_id_mask
 
 	def build_state_with_comm(self, state_dict):
 		if not state_dict:
 			return state_dict
-		empty_state = next(iter(state_dict.values()))
 
 		return {
 			this_agent_id: {
-				'this_agent': this_state, 
-				'all_agents': [
-					{
-						'position': np.array(self.get_normalized_relative_position(this_agent_id, that_agent_id), dtype=np.float32),
-						'features': state_dict.get(that_agent_id, empty_state),
-					}
-					for that_agent_id, that_agent in enumerate(self.agent_list)
+				'all_agents_position_list': [
+					np.array(self.get_relative_position(this_agent_id, that_agent_id), dtype=np.float32)
+					for that_agent_id in range(self.num_agents)
 				],
-				'message_visibility_mask': np.array([
-					this_agent_id != that_agent_id and that_agent_id in state_dict and self.agent_list[this_agent_id].can_see(that_agent.car_point)
-					for that_agent_id, that_agent in enumerate(self.agent_list)
-				], dtype=np.float32)
+				'all_agents_features_list': [
+					state_dict.get(that_agent_id, self.empty_agent_features)
+					for that_agent_id in range(self.num_agents)
+				],
+				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
 			}
 			for this_agent_id,this_state in state_dict.items()
 		}
