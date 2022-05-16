@@ -38,8 +38,7 @@ class MultiAgentRoadNetwork(RoadNetwork):
 	def deliver_food(self, j):
 		j.food_deliveries += 1
 		self.food_deliveries += 1
-		if j.food_deliveries-1 == self.min_food_deliveries and self.food_deliveries >= len(self.junctions):
-			self.min_food_deliveries = min(map(lambda x: x.food_deliveries, self.junctions))
+		self.min_food_deliveries = min(map(lambda x: x.food_deliveries, self.target_junctions))
 
 	def get_random_starting_point_list(self, n=1):
 		return [
