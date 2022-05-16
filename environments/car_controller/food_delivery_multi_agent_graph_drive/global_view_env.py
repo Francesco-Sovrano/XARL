@@ -464,10 +464,11 @@ class GraphDriveAgent:
 		# if space_traveled_towards_goal < 0:
 		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
 
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
+		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Stay on the road" rule
+			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
+				return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
 
 		#######################################
 		# "Follow regulation" rule. # Run dialogue against culture.
@@ -476,15 +477,16 @@ class GraphDriveAgent:
 		if not following_regulation:
 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 
-		#######################################
-		# "Move towards source without food" rule
-		if is_source_junction(self.goal_junction) and not self.has_food:
-			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_source_without_food')
+		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Move towards source without food" rule
+			if is_source_junction(self.goal_junction) and not self.has_food:
+				return step_reward(is_positive=True, is_terminal=False, label='moving_towards_source_without_food')
 
-		#######################################
-		# "Move towards target with food" rule
-		if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
-			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
+			#######################################
+			# "Move towards target with food" rule
+			if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
+				return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
 		
 		#######################################
 		# "Move forward" rule
@@ -531,10 +533,11 @@ class GraphDriveAgent:
 		# if space_traveled_towards_goal < 0:
 		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
 
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
+		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Stay on the road" rule
+			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
+				return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
 
 		#######################################
 		# "Follow regulation" rule. # Run dialogue against culture.
@@ -590,20 +593,21 @@ class GraphDriveAgent:
 		# if space_traveled_towards_goal < 0:
 		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
 
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-		
-		#######################################
-		# "Move towards source without food" rule
-		if is_source_junction(self.goal_junction) and not self.has_food:
-			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_source_without_food')
+		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Stay on the road" rule
+			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
+				return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
 
-		#######################################
-		# "Move towards target with food" rule
-		if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
-			return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
+			#######################################
+			# "Move towards source without food" rule
+			if is_source_junction(self.goal_junction) and not self.has_food:
+				return step_reward(is_positive=True, is_terminal=False, label='moving_towards_source_without_food')
+
+			#######################################
+			# "Move towards target with food" rule
+			if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
+				return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
 		
 		#######################################
 		# "Move forward" rule
@@ -649,10 +653,11 @@ class GraphDriveAgent:
 		# if space_traveled_towards_goal < 0:
 		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
 
-		#######################################
-		# "Stay on the road" rule
-		if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-			return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
+		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Stay on the road" rule
+			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
+				return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
 
 		#######################################
 		# "Move forward" rule
