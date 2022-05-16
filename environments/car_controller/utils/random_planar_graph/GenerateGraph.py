@@ -1,19 +1,23 @@
 #!/usr/bin/env python
-from random import Random
+from random import Random, randint
 from environments.car_controller.utils.random_planar_graph import graphops
 from environments.car_controller.utils.random_planar_graph import graphio
+import sys
 
 def default_seed():
-	import os, struct
-	try:
-		# get very random 32-bit int from the operating system
-		return struct.unpack('I', os.urandom(4))[0]
-	except NotImplementedError:
-		# backup seed: this can be imperfect so we don't want it always
-		import time
-		return int(time.time()) | os.getpid()
+	# import os, struct
+	# try:
+	# 	# get very random 32-bit int from the operating system
+	# 	return struct.unpack('I', os.urandom(4))[0]
+	# except NotImplementedError:
+	# 	# backup seed: this can be imperfect so we don't want it always
+	# 	import time
+	# 	return int(time.time()) | os.getpid()
+	return randint(0,sys.maxsize)
 
 def make_streams(seed):
+	if seed is None:
+		seed = default_seed()
 	# since triangulator is specialised and might need its own random stream
 	# may as well stream the other steps too!
 	streams = {}
@@ -33,7 +37,6 @@ def get_random_planar_graph(options=None): # Create random planar graphs
 			"radius": 40, # "Nodes will not be placed within this distance of each other."
 			"double": 0.0, # "Probability of an edge being doubled."
 			"hair": 0.0, # "Adjustment factor to favour dead-end nodes.  Ranges from 0.00 (least hairy) to 1.00 (most hairy).  Some dead-ends may exist even with a low hair factor."
-			"seed": default_seed(), # "Seed for the random number generator."
 			"debug_trimode": 'conform', # ['pyhull', 'triangle', 'conform'], "Triangulation mode to generate the initial triangular graph.  Default is conform.")
 			"debug_tris": None, # "If a filename is specified here, the initial triangular graph will be saved as a graph for inspection."
 			"debug_span": None, # "If a filename is specified here, the spanning tree will be saved as a graph for inspection."
@@ -45,7 +48,7 @@ def get_random_planar_graph(options=None): # Create random planar graphs
 
 	num_nodes = options['nodes']
 	num_edges = options['edges']
-	streams = make_streams(options['seed'])
+	streams = make_streams(options.get('seed',None))
 
 	# first generate some points in the plane, according to our constraints
 	nodes = graphops.generate_nodes(num_nodes, options['width'], options['height'], options['radius'], streams['gen'])

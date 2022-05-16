@@ -22,7 +22,7 @@ class CommAdaptiveModel(AdaptiveModel):
 		agent_features_size = self.get_agent_features_size()
 		logger.warning(f"Agent features size: {agent_features_size}")
 		message_features = config.get('message_features', 32)
-		self.comm_range = torch.Tensor([config.get('comm_range', 3.)])
+		self.comm_range = torch.Tensor([config.get('comm_range', 10.)])
 		self.gnn = GNNBranch(
 			in_features= agent_features_size, 
 			msg_features= message_features, 
@@ -51,10 +51,11 @@ class CommAdaptiveModel(AdaptiveModel):
 		all_agents_positions = torch.stack(x['all_agents_position_list'], dim=1)
 		all_agents_features = torch.stack(list(map(super_forward, x['all_agents_features_list'])), dim=1)
 
-		main_output = torch.sum(all_agents_features*this_agent_id_mask, dim=1)
+		# main_output = torch.sum(all_agents_features*this_agent_id_mask, dim=1)
 		
 		gnn_output = self.gnn(all_agents_positions, all_agents_features, self.comm_range)
 		message_from_others = torch.sum(gnn_output*this_agent_id_mask, dim=1)
 		
-		output = torch.cat([main_output, message_from_others], dim=1)
+		output = message_from_others
+		# output = torch.cat([main_output, message_from_others], dim=1)
 		return output

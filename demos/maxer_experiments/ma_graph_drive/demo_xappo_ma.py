@@ -21,14 +21,16 @@ NUM_AGENTS = 16
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
-	'max_food_per_target': 10,
-	'blockage_probability': 0.15,
-	'min_blockage_ratio': 0.1,
-	'max_blockage_ratio': 0.5,
+	'force_car_to_stay_on_road': True,
+	'visibility_radius': 10,
+	'max_food_per_target': 1,
+	'blockage_probability': None,
+	# 'blockage_probability': 0.15,
+	# 'min_blockage_ratio': 0.1,
+	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': 4,
-	'source_junctions_number': 4,
-	'max_steps_in_junction': 2**5,
+	'target_junctions_number': 9,
+	'source_junctions_number': 1,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,
@@ -37,10 +39,10 @@ CONFIG["env_config"] = {
 	'max_distance_to_path': .5, # meters
 	################################
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
-	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
+	'mean_seconds_per_step': 0.5, # in average, a step every n seconds
 	################################
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
-	'wheelbase': 0.35, # meters # https://en.wikipedia.org/wiki/Wheelbase
+	'wheelbase': 0.15, # meters # https://en.wikipedia.org/wiki/Wheelbase
 	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
 	'min_speed': 0.2, # m/s
 	'max_speed': 1.2, # m/s

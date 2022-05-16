@@ -14,7 +14,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.lines import Line2D
 
 from environments.car_controller.utils.geometry import *
-from environments.car_controller.tragedy_of_commons_graph_drive.lib.multi_agent_road_network import MultiAgentRoadNetwork
+from environments.car_controller.food_delivery_multi_agent_graph_drive.lib.multi_agent_road_network import MultiAgentRoadNetwork
 from environments.car_controller.grid_drive.lib.road_cultures import *
 
 import logging
@@ -37,13 +37,13 @@ class GraphDriveAgent:
 	def __init__(self, n_of_other_agents, culture, env_config):
 		# super().__init__()
 		
+		self.culture = culture
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
 		self.reward_fn = eval(f'self.{self.env_config["reward_fn"]}')
 		
-		self.culture = culture
-		self.obs_road_features = len(self.culture.properties) if self.env_config["culture_level"] else 0  # Number of binary ROAD features in Hard Culture
-		self.obs_car_features = (len(self.culture.agent_properties) - 1) if self.env_config["culture_level"] else 0  # Number of binary CAR features in Hard Culture (excluded speed)
+		self.obs_road_features = len(culture.properties) if culture else 0  # Number of binary ROAD features in Hard Culture
+		self.obs_car_features = (len(culture.agent_properties) - 1) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
 		# Spaces
 		self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)  # steering angle and speed
 		state_dict = {
@@ -116,7 +116,8 @@ class GraphDriveAgent:
 		self.steering_angle = 0
 		self.speed = self.env_config['min_speed'] #+ (self.env_config['max_speed']-self.env_config['min_speed'])*self.np_random.random() # in [min_speed,max_speed]
 		# self.speed = self.env_config['min_speed']+(self.env_config['max_speed']-self.env_config['min_speed'])*(70/120) # for testing
-		self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
+		if self.culture:
+			self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
 
 		self.last_closest_road = None
 		self.last_closest_junction = None
@@ -147,7 +148,7 @@ class GraphDriveAgent:
 			"fc_roads-16": roads_view_list,
 			"fc_this_agent-16": np.array([
 				*self.get_agent_state(),
-				*(self.agent_id.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), 
+				*(self.agent_id.binary_features(as_tuple=True) if self.culture else []), 
 			], dtype=np.float32),
 		}
 		if self.n_of_other_agents > 0:
@@ -156,7 +157,7 @@ class GraphDriveAgent:
 
 	@property
 	def agent_state_size(self):
-		return 8 # normalised steering angle + normalised speed	+ has food
+		return 7 # normalised steering angle + normalised speed	+ has food
 
 	def get_agent_state(self):
 		return (
@@ -167,7 +168,7 @@ class GraphDriveAgent:
 			self.slowdown_factor,
 			self.has_food,
 			self.is_dead,
-			min(1,self.steps_in_junction/(self.env_config['max_steps_in_junction']+1)),
+			# min(1,self.steps_in_junction/(self.env_config['max_steps_in_junction']+1)),
 		)
 
 	def normalize_point(self, p):
@@ -188,7 +189,7 @@ class GraphDriveAgent:
 				(
 					road.normalised_slope, # in [0,1]
 					# *shift_rotate_normalise_point_fn(road.start.pos if j.pos!=road.start.pos else road.end.pos), # in [0,1]
-					*(road.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), # in [0,1]
+					*(road.binary_features(as_tuple=True) if self.culture else []), # in [0,1]
 				)
 				for road in j.roads_connected
 			)
@@ -234,7 +235,7 @@ class GraphDriveAgent:
 				(
 					shift_rotate_normalise_point(agent.car_point), 
 					agent.get_agent_state(), 
-					(agent.agent_id.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), 
+					(agent.agent_id.binary_features(as_tuple=True) if self.culture else []), 
 					# agent.is_dead
 				)
 				for agent in alive_agent
@@ -263,16 +264,20 @@ class GraphDriveAgent:
 			steering_angle = np.clip(steering_angle, -self.env_config['max_steering_angle'], self.env_config['max_steering_angle']) # |steering_angle| <= max_steering_angle, ALWAYS
 			speed += (2*self.np_random.random()-1)*self.env_config['max_speed_noise']
 		#### Ackerman Steering: Forward Kinematic for Car-Like vehicles #### https://www.xarg.org/book/kinematics/ackerman-steering/
-		turning_radius = self.env_config['wheelbase']/np.tan(steering_angle)
-		# Max taylor approximation error of the tangent simplification is about 3° at 30° steering lock
-		# turning_radius = self.env_config['wheelbase']/steering_angle
-		angular_velocity = speed/turning_radius
-		# get normalized new orientation
-		new_orientation = np.mod(orientation + angular_velocity*self.seconds_per_step, 2*np.pi) # in [0,2*pi)
+		if steering_angle:
+			turning_radius = self.env_config['wheelbase']/np.tan(steering_angle)
+			# Max taylor approximation error of the tangent simplification is about 3° at 30° steering lock
+			# turning_radius = self.env_config['wheelbase']/steering_angle
+			angular_velocity = speed/turning_radius
+			# get normalized new orientation
+			new_orientation = np.mod(orientation + angular_velocity*self.seconds_per_step, 2*np.pi) # in [0,2*pi)
+		else:
+			new_orientation = orientation
 		# Move point
 		x, y = point
 		dir_x, dir_y = get_heading_vector(angle=new_orientation, space=speed*self.seconds_per_step)
-		return (x+dir_x, y+dir_y), new_orientation
+		new_point = (x+dir_x, y+dir_y)
+		return new_point, new_orientation
 
 	def get_steering_angle_from_action(self, action): # action is in [-1,1]
 		return action*self.env_config['max_steering_angle'] # in [-max_steering_angle, max_steering_angle]
@@ -304,12 +309,19 @@ class GraphDriveAgent:
 		# first of all, get the seconds passed from last step
 		self.seconds_per_step = self.get_step_seconds()
 		# compute new steering angle
-		self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
+		if self.env_config['force_car_to_stay_on_road'] and self.closest_road and self.goal_junction:
+			self.car_point = self.get_car_projection_on_road(self.car_point, self.closest_road)
+			road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else reversed(self.closest_road.edge)
+			self.car_orientation = get_slope_radians(*road_edge)
+			self.steering_angle = 0
+		else:
+			self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
 		# compute new acceleration
 		self.acceleration = self.get_acceleration_from_action(action=action_vector[1])
 		# compute new speed
 		self.speed = self.accelerate(speed=self.speed, acceleration=self.acceleration)
-		self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
+		if self.culture:
+			self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
 		# move car
 		old_car_point = self.car_point
 		old_goal_junction = self.goal_junction
@@ -317,6 +329,7 @@ class GraphDriveAgent:
 		visiting_new_junction = False
 		has_just_taken_food = False
 		has_just_delivered_food = False
+
 		self.car_point, self.car_orientation = self.move(
 			point=self.car_point, 
 			orientation=self.car_orientation, 
@@ -348,15 +361,21 @@ class GraphDriveAgent:
 					self.road_network.deliver_food(self.closest_junction)
 					self.has_food = False
 					has_just_delivered_food = True
-		elif self.last_closest_road != self.closest_road: # not in junction and visiting a new road
-			visiting_new_road = True
-			#########
-			self.last_closest_junction = None
-			self.last_closest_road = self.closest_road # keep track of the current road
-			self.goal_junction = MultiAgentRoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
-			self.current_road_speed_list = []
+		else:
+			if self.env_config['force_car_to_stay_on_road'] and self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
+				self.car_point = old_car_point
+			if self.last_closest_road != self.closest_road: # not in junction and visiting a new road
+				visiting_new_road = True
+				#########
+				self.last_closest_junction = None
+				self.last_closest_road = self.closest_road # keep track of the current road
+				self.goal_junction = MultiAgentRoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
+				self.current_road_speed_list = []
 		self.current_road_speed_list.append(self.speed)
 		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food
+
+	def get_car_projection_on_road(self, car_point, closest_road):
+		return poit_to_line_projection(car_point, closest_road.edge)
 
 	def get_fairness_score(self, has_just_delivered_food, has_just_taken_food):
 		#######
@@ -434,16 +453,16 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
-			if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-				return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		assert self.goal_junction
 
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal < 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+		# #######################################
+		# # "No U-Turning outside junction" rule
+		# space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
+		# if space_traveled_towards_goal < 0:
+		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
 
 		#######################################
 		# "Stay on the road" rule
@@ -501,16 +520,16 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
-			if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-				return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		assert self.goal_junction
 
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal < 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+		# #######################################
+		# # "No U-Turning outside junction" rule
+		# space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
+		# if space_traveled_towards_goal < 0:
+		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
 
 		#######################################
 		# "Stay on the road" rule
@@ -560,16 +579,16 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
-			if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-				return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		assert self.goal_junction
 
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal < 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+		# #######################################
+		# # "No U-Turning outside junction" rule
+		# space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
+		# if space_traveled_towards_goal < 0:
+		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
 
 		#######################################
 		# "Stay on the road" rule
@@ -619,16 +638,16 @@ class GraphDriveAgent:
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
-			if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-				return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
 			return null_reward(is_terminal=False, label='is_in_junction')
 		#assert self.goal_junction
 
-		#######################################
-		# "No U-Turning outside junction" rule
-		space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		if space_traveled_towards_goal < 0:
-			return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
+		# #######################################
+		# # "No U-Turning outside junction" rule
+		# space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
+		# if space_traveled_towards_goal < 0:
+		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
 
 		#######################################
 		# "Stay on the road" rule
@@ -648,6 +667,8 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 			seed = a.seed(seed+i)[0]
 		self._seed = seed-1
 		self.np_random, _ = seeding.np_random(self._seed)
+		# if self.culture:
+		# 	self.culture.np_random = self.np_random
 		return [self._seed]
 
 	def __init__(self, config=None):
@@ -683,7 +704,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 				'paid_charge': 1/2,
 				'speed': self.env_config['max_normalised_speed'],
 			}
-		)
+		) if self.env_config["culture_level"] else None
 
 		self.agent_list = [
 			GraphDriveAgent(self.num_agents-1, self.culture, self.env_config)
@@ -695,11 +716,10 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		self.seed(config.get('seed',21))
 
 	def reset(self):
-		self.culture.np_random = self.np_random
-		self.culture.seed = self._seed
 		###########################
 		self.road_network = MultiAgentRoadNetwork(
 			self.culture, 
+			self.np_random,
 			map_size=self.env_config['map_size'], 
 			min_junction_distance=self.env_config['min_junction_distance'],
 			max_roads_per_junction=self.env_config['max_roads_per_junction'],
@@ -768,6 +788,26 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		junction1_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=0.5, label='Target Node')
 		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=0.5, label='Source Node')
 		
+		# [Car]
+		for uid,agent in enumerate(self.agent_list):
+			car_x, car_y = agent.car_point
+			color = get_car_color(agent)
+			car_handle = ax.scatter(car_x, car_y, marker='o', color=color, label='Car')
+			visibility_radius = self.env_config.get('visibility_radius',None)
+			if visibility_radius and not agent.is_dead:
+				car_view = [
+					Circle(
+						agent.car_point, 
+						visibility_radius, 
+						color='yellow', 
+						alpha=0.25,
+					)
+				]
+				ax.add_collection(PatchCollection(car_view, match_original=True))
+			# [Heading Vector]
+			dir_x, dir_y = get_heading_vector(angle=agent.car_orientation, space=self.env_config['max_dimension']/16)
+			heading_vector_handle = ax.plot([car_x, car_x+dir_x],[car_y, car_y+dir_y], color=color, alpha=0.5, label='Heading Vector')
+
 		# [Junctions]
 		if len(self.road_network.junctions) > 0:
 			junctions = [
@@ -792,15 +832,6 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 					ha='center', 
 					va='center'
 				)
-
-		# [Car]
-		for uid,agent in enumerate(self.agent_list):
-			car_x, car_y = agent.car_point
-			color = get_car_color(agent)
-			car_handle = ax.scatter(car_x, car_y, marker='o', color=color, label='Car')
-			# [Heading Vector]
-			dir_x, dir_y = get_heading_vector(angle=agent.car_orientation, space=self.env_config['max_dimension']/16)
-			heading_vector_handle = ax.plot([car_x, car_x+dir_x],[car_y, car_y+dir_y], color=color, alpha=0.5, label='Heading Vector')
 
 		# [Roads]
 		for road in self.road_network.roads:

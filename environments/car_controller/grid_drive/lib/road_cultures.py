@@ -11,12 +11,10 @@ import copy
 class RoadCulture(Culture):
 	starting_argument_id = 0
 
-	def __init__(self, np_random=None, seed=None):
-		self.np_random = np.random if np_random is None else np_random
-		self.seed = seed
+	def __init__(self):
 		super().__init__()
 
-	def initialise_random_agent(self, agent: RoadAgent):
+	def initialise_random_agent(self, agent: RoadAgent, np_random):
 		"""
 		Receives an empty RoadAgent and initialises properties with acceptable random values.
 		:param agent: uninitialised RoadAgent.
@@ -67,13 +65,13 @@ class RoadCulture(Culture):
 		return (min_speed, max_speed)
 
 class EasyRoadCulture(RoadCulture):
-	def __init__(self, road_options=None, agent_options=None, np_random=None, seed=None):
+	def __init__(self, road_options=None, agent_options=None):
 		if road_options is None: road_options = {}
 		if agent_options is None: agent_options = {}
 		self.road_options = road_options
 		self.agent_options = agent_options
 		self.ids = {}
-		super().__init__(np_random, seed)
+		super().__init__()
 		self.name = "Easy Road Culture"
 		# Properties of the culture with their default values go in self.properties.
 		self.properties = {"Motorway": False,
@@ -127,18 +125,18 @@ class EasyRoadCulture(RoadCulture):
 
 		self.AF.add_arguments(args)
 
-	def initialise_random_road(self, road: RoadCell):
+	def initialise_random_road(self, road: RoadCell, np_random):
 		"""
 		Receives an empty RoadCell and initialises properties with acceptable random values.
 		:param road: uninitialised RoadCell.
 		"""
-		motorway = True if self.np_random.random() <= self.road_options.get('motorway',1/2) else False
+		motorway = True if np_random.random() <= self.road_options.get('motorway',1/2) else False
 		road.assign_property_value("Motorway", motorway)
 
 		if motorway:
 			road.assign_property_value("Stop Sign", False)
 		else:
-			stop_sign = True if self.np_random.random() <= self.road_options.get('stop_sign',1/2) else False
+			stop_sign = True if np_random.random() <= self.road_options.get('stop_sign',1/2) else False
 			road.assign_property_value("Stop Sign", stop_sign)
 
 	def define_attacks(self):
@@ -158,13 +156,13 @@ class EasyRoadCulture(RoadCulture):
 #######################
 
 class MediumRoadCulture(RoadCulture):
-	def __init__(self, road_options=None, agent_options=None, np_random=None, seed=None):
+	def __init__(self, road_options=None, agent_options=None):
 		if road_options is None: road_options = {}
 		if agent_options is None: agent_options = {}
 		self.road_options = road_options
 		self.agent_options = agent_options
 		self.ids = {}
-		super().__init__(np_random, seed)
+		super().__init__()
 		self.name = "Medium Road Culture"
 		# Properties of the culture with their default values go in self.properties.
 		self.properties = {"Motorway": False,
@@ -279,12 +277,12 @@ class MediumRoadCulture(RoadCulture):
 
 		self.AF.add_arguments(args)
 
-	def initialise_random_road(self, road: RoadCell):
+	def initialise_random_road(self, road: RoadCell, np_random):
 		"""
 		Receives an empty RoadCell and initialises properties with acceptable random values.
 		:param road: uninitialised RoadCell.
 		"""
-		motorway = True if self.np_random.random() <= self.road_options.get('motorway',1/2) else False
+		motorway = True if np_random.random() <= self.road_options.get('motorway',1/2) else False
 		road.assign_property_value("Motorway", motorway)
 
 		if motorway:
@@ -292,27 +290,27 @@ class MediumRoadCulture(RoadCulture):
 			road.assign_property_value("Town Road", False)
 			road.assign_property_value("Stop Sign", False)
 		else:
-			stop_sign = True if self.np_random.random() <= self.road_options.get('stop_sign',1/2) else False
+			stop_sign = True if np_random.random() <= self.road_options.get('stop_sign',1/2) else False
 			road.assign_property_value("Stop Sign", stop_sign)
 
-			school = True if self.np_random.random() <= self.road_options.get('school',1/2) else False
+			school = True if np_random.random() <= self.road_options.get('school',1/2) else False
 			road.assign_property_value("School", school)
 
-			town_road = True if self.np_random.random() <= self.road_options.get('town_road',1/2) else False
+			town_road = True if np_random.random() <= self.road_options.get('town_road',1/2) else False
 			road.assign_property_value("Town Road", town_road)
 
-		single_lane = True if self.np_random.random() <= self.road_options.get('single_lane',1/2) else False
+		single_lane = True if np_random.random() <= self.road_options.get('single_lane',1/2) else False
 		road.assign_property_value("Single Lane", single_lane)
 
-	def initialise_random_agent(self, agent: RoadAgent):
+	def initialise_random_agent(self, agent: RoadAgent, np_random):
 		"""
 		Receives an empty RoadAgent and initialises properties with acceptable random values.
 		:param agent: uninitialised RoadAgent.
 		"""
-		emergency_vehicle = True if self.np_random.random() <= self.agent_options.get('emergency_vehicle',1/5) else False
+		emergency_vehicle = True if np_random.random() <= self.agent_options.get('emergency_vehicle',1/5) else False
 		agent.assign_property_value("Emergency Vehicle", emergency_vehicle)
 
-		super().initialise_random_agent(agent)
+		super().initialise_random_agent(agent, np_random)
 
 	def define_attacks(self):
 		"""
@@ -345,13 +343,13 @@ class MediumRoadCulture(RoadCulture):
 #####################
 
 class HardRoadCulture(RoadCulture):
-	def __init__(self, road_options=None, agent_options=None, np_random=None, seed=None):
+	def __init__(self, road_options=None, agent_options=None):
 		if road_options is None: road_options = {}
 		if agent_options is None: agent_options = {}
 		self.road_options = road_options
 		self.agent_options = agent_options
 		self.ids = {}
-		super().__init__(np_random, seed)
+		super().__init__()
 		self.name = "Hard Road Culture"
 		# Properties of the culture with their default values go in self.properties.
 		self.properties = {"Motorway": False,
@@ -538,12 +536,12 @@ class HardRoadCulture(RoadCulture):
 
 		self.AF.add_arguments(args)
 
-	def initialise_random_road(self, road: RoadCell):
+	def initialise_random_road(self, road: RoadCell, np_random):
 		"""
 		Receives an empty RoadCell and initialises properties with acceptable random values.
 		:param road: uninitialised RoadCell.
 		"""
-		motorway = True if self.np_random.random() <= self.road_options.get('motorway',1/2) else False
+		motorway = True if np_random.random() <= self.road_options.get('motorway',1/2) else False
 		road.assign_property_value("Motorway", motorway)
 
 		if motorway:
@@ -551,51 +549,51 @@ class HardRoadCulture(RoadCulture):
 			road.assign_property_value("Town Road", False)
 			road.assign_property_value("Stop Sign", False)
 		else:
-			school = True if self.np_random.random() <= self.road_options.get('school',1/2) else False
+			school = True if np_random.random() <= self.road_options.get('school',1/2) else False
 			road.assign_property_value("School", school)
 
-			town_road = True if self.np_random.random() <= self.road_options.get('town_road',1/2) else False
+			town_road = True if np_random.random() <= self.road_options.get('town_road',1/2) else False
 			road.assign_property_value("Town Road", town_road)
 
-			stop_sign = True if self.np_random.random() <= self.road_options.get('stop_sign',1/2) else False
+			stop_sign = True if np_random.random() <= self.road_options.get('stop_sign',1/2) else False
 			road.assign_property_value("Stop Sign", stop_sign)
 
-		single_lane = True if self.np_random.random() <= self.road_options.get('single_lane',1/2) else False
+		single_lane = True if np_random.random() <= self.road_options.get('single_lane',1/2) else False
 		road.assign_property_value("Single Lane", single_lane)
 
-		roadworks = True if self.np_random.random() <= self.road_options.get('roadworks',1/2) else False
+		roadworks = True if np_random.random() <= self.road_options.get('roadworks',1/2) else False
 		road.assign_property_value("Roadworks", roadworks)
 
-		accident = True if self.np_random.random() <= self.road_options.get('accident',1/8) else False
+		accident = True if np_random.random() <= self.road_options.get('accident',1/8) else False
 		road.assign_property_value("Accident", accident)
 
-		heavy_rain = True if self.np_random.random() <= self.road_options.get('heavy_rain',1/2) else False
+		heavy_rain = True if np_random.random() <= self.road_options.get('heavy_rain',1/2) else False
 		road.assign_property_value("Heavy Rain", heavy_rain)
 
-		congestion_charge = True if self.np_random.random() <= self.road_options.get('congestion_charge',1/2) else False
+		congestion_charge = True if np_random.random() <= self.road_options.get('congestion_charge',1/2) else False
 		road.assign_property_value("Congestion Charge", congestion_charge)
 
-	def initialise_random_agent(self, agent: RoadAgent):
+	def initialise_random_agent(self, agent: RoadAgent, np_random):
 		"""
 		Receives an empty RoadAgent and initialises properties with acceptable random values.
 		:param agent: uninitialised RoadAgent.
 		"""
-		emergency_vehicle = True if self.np_random.random() <= self.agent_options.get('emergency_vehicle',1/5) else False
+		emergency_vehicle = True if np_random.random() <= self.agent_options.get('emergency_vehicle',1/5) else False
 		agent.assign_property_value("Emergency Vehicle", emergency_vehicle)
 
-		heavy_vehicle = True if self.np_random.random() <= self.agent_options.get('heavy_vehicle',1/4) else False
+		heavy_vehicle = True if np_random.random() <= self.agent_options.get('heavy_vehicle',1/4) else False
 		agent.assign_property_value("Heavy Vehicle", heavy_vehicle)
 
-		worker_vehicle = True if self.np_random.random() <= self.agent_options.get('worker_vehicle',1/3) else False
+		worker_vehicle = True if np_random.random() <= self.agent_options.get('worker_vehicle',1/3) else False
 		agent.assign_property_value("Worker Vehicle", worker_vehicle)
 
-		tasked = True if self.np_random.random() <= self.agent_options.get('tasked',1/2) else False
+		tasked = True if np_random.random() <= self.agent_options.get('tasked',1/2) else False
 		agent.assign_property_value("Tasked", tasked)
 
-		paid_charge = True if self.np_random.random() <= self.agent_options.get('paid_charge',1/2) else False
+		paid_charge = True if np_random.random() <= self.agent_options.get('paid_charge',1/2) else False
 		agent.assign_property_value("Paid Charge", paid_charge)
 
-		super().initialise_random_agent(agent)
+		super().initialise_random_agent(agent, np_random)
 
 	def define_attacks(self):
 		"""

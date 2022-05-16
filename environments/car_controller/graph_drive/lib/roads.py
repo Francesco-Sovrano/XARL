@@ -5,6 +5,7 @@ from ...grid_drive.lib.road_cell import RoadCell
 from ...grid_drive.lib.road_agent import RoadAgent
 from environments.car_controller.utils.geometry import *
 from environments.car_controller.utils.random_planar_graph.GenerateGraph import get_random_planar_graph
+import sys
 
 class Junction:
 	def __init__(self, pos):
@@ -67,7 +68,8 @@ class Road(RoadCell):
 
 class RoadNetwork:
 
-	def __init__(self, culture, map_size=(50, 50), min_junction_distance=None, max_roads_per_junction=8):
+	def __init__(self, culture, np_random, map_size=(50, 50), min_junction_distance=None, max_roads_per_junction=8):
+		self.np_random = np_random
 		self.junctions = []
 		self.roads = []
 		self.map_size = map_size
@@ -78,8 +80,9 @@ class RoadNetwork:
 		else:
 			self.min_junction_distance = min_junction_distance
 		self.road_culture = culture
-		self.agent.set_culture(culture)
-		self.road_culture.initialise_random_agent(self.agent)
+		if self.road_culture:
+			self.agent.set_culture(culture)
+			self.road_culture.initialise_random_agent(self.agent, self.np_random)
 
 	@staticmethod
 	def get_closest_junction(junction_list, point):
@@ -181,7 +184,7 @@ class RoadNetwork:
 			"radius": self.min_junction_distance, # "Nodes will not be placed within this distance of each other."
 			"double": 0, # "Probability of an edge being doubled."
 			"hair": 0, # "Adjustment factor to favour dead-end nodes.  Ranges from 0.00 (least hairy) to 1.00 (most hairy).  Some dead-ends may exist even with a low hair factor."
-			"seed": self.road_culture.seed, # "Seed for the random number generator."
+			"seed": self.np_random.randint(0,sys.maxsize), # "Seed for the random number generator."
 			"debug_trimode": 'conform', # ['pyhull', 'triangle', 'conform'], "Triangulation mode to generate the initial triangular graph.  Default is conform.")
 			"debug_tris": None, # "If a filename is specified here, the initial triangular graph will be saved as a graph for inspection."
 			"debug_span": None, # "If a filename is specified here, the spanning tree will be saved as a graph for inspection."
@@ -196,9 +199,10 @@ class RoadNetwork:
 			j2 = self.junction_dict[p2]
 			if len(j1) < self.max_roads_per_junction and len(j2) < self.max_roads_per_junction:
 				road = Road(j1, j2, connect=True)
-				road.set_culture(self.road_culture)
-				self.road_culture.initialise_random_road(road)
 				self.roads.append(road)
-		starting_index = self.road_culture.np_random.choice(len(random_planar_graph['spanning_tree']), 1)[0]
+				if self.road_culture:
+					road.set_culture(self.road_culture)
+					self.road_culture.initialise_random_road(road, self.np_random)
+		starting_index = self.np_random.choice(len(random_planar_graph['spanning_tree']), 1)[0]
 		starting_point = random_planar_graph['spanning_tree'][starting_index][0]
 		return starting_point

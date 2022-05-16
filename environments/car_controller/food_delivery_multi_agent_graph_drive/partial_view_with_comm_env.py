@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-from environments.car_controller.tragedy_of_commons_graph_drive.global_view_env import *
+from environments.car_controller.food_delivery_multi_agent_graph_drive.global_view_env import *
 
 
 class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 
 	def __init__(self, n_of_other_agents, culture, env_config):
 		super().__init__(n_of_other_agents, culture, env_config)
-		self.max_n_junctions_in_view = min(self.env_config.get('max_n_junctions_in_view',float('inf')), self.env_config['junctions_number'])
+		self.max_n_junctions_in_view = int(np.ceil((self.env_config['visibility_radius']/self.env_config['min_junction_distance'])**2))
+		# logger.warning(f'max_n_junctions_in_view: {self.max_n_junctions_in_view}')
+		# min(self.env_config.get('max_n_junctions_in_view',float('inf')), self.env_config['junctions_number'])
 		
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
@@ -56,7 +58,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 			"fc_roads-16": roads_view_list,
 			"fc_this_agent-16": np.array([
 				*self.get_agent_state(),
-				*(self.agent_id.binary_features(as_tuple=True) if self.env_config["culture_level"] else []), 
+				*(self.agent_id.binary_features(as_tuple=True) if self.culture else []), 
 			], dtype=np.float32),
 		}
 		return state_dict
@@ -162,7 +164,8 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 					for that_agent_id in range(self.num_agents)
 				],
 				'all_agents_features_list': [
-					state_dict[that_agent_id] if this_agent_id==that_agent_id or self.is_visible(this_agent_id, that_agent_id) else self.empty_agent_features
+					# state_dict[that_agent_id] if this_agent_id==that_agent_id or self.is_visible(this_agent_id, that_agent_id) else self.empty_agent_features
+					state_dict.get(that_agent_id,self.empty_agent_features)
 					for that_agent_id in range(self.num_agents)
 				],
 				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),

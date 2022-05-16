@@ -1,6 +1,7 @@
 import numpy as np
 import scipy
 import scipy.integrate as integrate
+from skspatial.objects import Line
 
 two_pi = 2*np.pi
 pi = np.pi
@@ -161,6 +162,10 @@ def point_to_line_dist(point, line):
 	else:
 		# if not, then return the minimum distance to the segment endpoints
 		return endpoint_dist
+
+def poit_to_line_projection(point, line):
+	line = Line.from_points(point_a=line[0], point_b=line[1])
+	return line.project_point(point)
 
 def midpoint(p1, p2):
 	return ((p1[0]+p2[0])/2, (p1[1]+p2[1])/2)

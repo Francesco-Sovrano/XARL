@@ -12,15 +12,17 @@ if PLOT_EPISODE:
 	os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 env_config = {
-	'num_agents': 16,
-	'max_food_per_target': 10,
-	'blockage_probability': 0.15,
-	'min_blockage_ratio': 0.1,
-	'max_blockage_ratio': 0.5,
+	'num_agents': 64,
+	'force_car_to_stay_on_road': True,
+	'visibility_radius': 10,
+	'max_food_per_target': 1,
+	'blockage_probability': None,
+	# 'blockage_probability': 0.15,
+	# 'min_blockage_ratio': 0.1,
+	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': 3,
+	'target_junctions_number': 9,
 	'source_junctions_number': 1,
-	'max_steps_in_junction': 2**5,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,
@@ -29,10 +31,10 @@ env_config = {
 	'max_distance_to_path': .5, # meters
 	################################
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
-	'mean_seconds_per_step': 0.25, # in average, a step every n seconds
+	'mean_seconds_per_step': 0.5, # in average, a step every n seconds
 	################################
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
-	'wheelbase': 0.35, # meters # https://en.wikipedia.org/wiki/Wheelbase
+	'wheelbase': 0.15, # meters # https://en.wikipedia.org/wiki/Wheelbase
 	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
 	'min_speed': 0.2, # m/s
 	'max_speed': 1.2, # m/s
@@ -50,7 +52,9 @@ env_config = {
 	'max_steering_noise_degree': 0,
 	'max_normalised_speed': 120,
 }
-env = MultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": "Hard", **env_config})
+
+env = PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_no_culture', "culture_level": None, **env_config})
+env.seed(38)
 # env = CescoDriveV0()
 multiagent = isinstance(env, MultiAgentEnv)
 render_modes = env.metadata['render.modes']
@@ -87,7 +91,6 @@ def print_screen(screens_directory, step):
 	return filename
 
 def run_one_episode(env):
-	env.seed(38)
 	state = env.reset()
 	step = 0
 	sum_reward = 0
@@ -126,4 +129,5 @@ def run_one_episode(env):
 		plt.make_gif(file_list=file_list, gif_path=gif_filename)
 	return sum_reward
 
+sum_reward = run_one_episode(env)
 sum_reward = run_one_episode(env)
