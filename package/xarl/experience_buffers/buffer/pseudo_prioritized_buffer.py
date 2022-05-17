@@ -13,6 +13,7 @@ from ray.rllib.policy.sample_batch import SampleBatch
 
 logger = logging.getLogger(__name__)
 
+discard_batch = lambda x: all(map(lambda y: y.get('discard',False), x[SampleBatch.INFOS]))
 get_batch_infos = lambda x: x[SampleBatch.INFOS][0]
 get_batch_indexes = lambda x: get_batch_infos(x)['batch_index']
 get_batch_uid = lambda x: get_batch_infos(x)['batch_uid']

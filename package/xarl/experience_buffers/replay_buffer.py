@@ -12,7 +12,7 @@ import random
 import ray  # noqa F401
 import psutil  # noqa E402
 
-from xarl.experience_buffers.buffer.pseudo_prioritized_buffer import PseudoPrioritizedBuffer, get_batch_infos, get_batch_indexes, get_batch_uid
+from xarl.experience_buffers.buffer.pseudo_prioritized_buffer import PseudoPrioritizedBuffer, get_batch_infos, get_batch_indexes, get_batch_uid, discard_batch
 from xarl.experience_buffers.buffer.buffer import Buffer
 from xarl.utils import ReadWriteLock
 
@@ -81,6 +81,8 @@ class SimpleReplayBuffer:
 		return len(self.replay_batches) >= self.num_slots
 
 	def add_batch(self, sample_batch):
+		if discard_batch(sample_batch):
+			return
 		if self.num_slots > 0:
 			if len(self.replay_batches) < self.num_slots:
 				self.replay_batches.append(sample_batch)
@@ -146,6 +148,8 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 			self._buffer_lock.acquire_write()
 			for policy_id in batch.policy_batches.keys():
 				sub_batch = MultiAgentBatchWithDefaultAgent.from_multi_agent_batch(batch, policy_id)
+				if discard_batch(sub_batch):
+					continue
 				buffer_id = DEFAULT_POLICY_ID if self.centralised_buffer else policy_id
 				batch_type = get_batch_infos(sub_batch)["batch_type"]
 				####################################

@@ -136,6 +136,7 @@ class GraphDriveAgent:
 		# self.steps_in_junction = 0
 		self.junction_roads_dict = {}
 		self.step = 0
+		self.idle = False
 
 	@property
 	def normalised_speed(self):
@@ -328,13 +329,16 @@ class GraphDriveAgent:
 		# 	# self.steering_angle = np.clip(self.car_orientation-get_slope_radians(*road_edge), -self.env_config['max_steering_angle'], self.env_config['max_steering_angle'])
 		# 	self.car_orientation = get_slope_radians(*(road_edge if self.steering_angle >= 0 else road_edge[::-1]))
 		# 	self.steering_angle = 0
-		self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
 		if self.env_config['optimal_steering_angle_on_road'] and self.closest_road and self.goal_junction:
 			# self.car_point = self.get_car_projection_on_road(self.car_point, self.closest_road)
 			road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else self.closest_road.edge[::-1]
 			# self.steering_angle = np.clip(self.car_orientation-get_slope_radians(*road_edge), -self.env_config['max_steering_angle'], self.env_config['max_steering_angle'])
-			self.car_orientation = get_slope_radians(*(road_edge if self.steering_angle >= 0 else road_edge[::-1]))
+			self.car_orientation = get_slope_radians(*road_edge)
 			self.steering_angle = 0
+			self.idle = True
+		else:
+			self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
+			self.idle = False
 		# compute new acceleration and speed
 		self.speed = self.accelerate(
 			speed=self.speed, 
@@ -427,13 +431,14 @@ class GraphDriveAgent:
 		self.last_reward_type = reward_type
 		info_dict = {'explanation':{
 			'why': reward_type,
-			'how_fair': self.get_fairness_score(has_just_delivered_food, has_just_taken_food)
+			'how_fair': self.get_fairness_score(has_just_delivered_food, has_just_taken_food),
 		}}
 		info_dict["stats_dict"] = {
 			"min_food_deliveries": self.road_network.min_food_deliveries,
 			"food_deliveries": self.road_network.food_deliveries,
 			# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.speed)/(len(self.other_agent_list)+1),
 		}
+		info_dict['discard'] = self.idle and not reward
 		self.is_dead = dead
 		self.step += 1
 		return [state, reward, dead, info_dict]
