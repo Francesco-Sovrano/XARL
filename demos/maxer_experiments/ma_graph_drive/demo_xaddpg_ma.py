@@ -21,6 +21,7 @@ CONFIG = XADDPG_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'force_car_to_stay_on_road': True,
+	'optimal_steering_angle_on_road': True,
 	'visibility_radius': 10,
 	'max_food_per_target': 1,
 	'blockage_probability': None,

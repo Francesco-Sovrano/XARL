@@ -51,11 +51,11 @@ class CommAdaptiveModel(AdaptiveModel):
 		all_agents_positions = torch.stack(x['all_agents_position_list'], dim=1)
 		all_agents_features = torch.stack(list(map(super_forward, x['all_agents_features_list'])), dim=1)
 
-		# main_output = torch.sum(all_agents_features*this_agent_id_mask, dim=1)
+		main_output = torch.sum(all_agents_features*this_agent_id_mask, dim=1)
 		
 		gnn_output = self.gnn(all_agents_positions, all_agents_features, self.comm_range)
 		message_from_others = torch.sum(gnn_output*this_agent_id_mask, dim=1)
 		
-		output = message_from_others
-		# output = torch.cat([main_output, message_from_others], dim=1)
+		# output = message_from_others
+		output = torch.cat([main_output, message_from_others], dim=1)
 		return output

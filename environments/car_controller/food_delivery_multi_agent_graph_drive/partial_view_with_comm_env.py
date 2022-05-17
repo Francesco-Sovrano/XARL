@@ -46,6 +46,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 			),
 		}
 		self.observation_space = gym.spaces.Dict(state_dict)
+		# self._visible_road_network_junctions = None
 
 	def get_state(self, car_point=None, car_orientation=None):
 		if car_point is None:
@@ -63,6 +64,12 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 		}
 		return state_dict
 
+	# @property
+	# def visible_road_network_junctions(self):
+	# 	if self._visible_road_network_junctions is None or self.step % 16 == 0:
+	# 		self._visible_road_network_junctions = list(filter(lambda j: self.can_see(j.pos), self.road_network.junctions))
+	# 	return self._visible_road_network_junctions
+
 	def can_see(self, p):
 		return euclidean_distance(p, self.car_point) <= self.env_config['visibility_radius']
 
@@ -70,19 +77,22 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 		# s = time.time()
 		source_x, source_y = source_point
 		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
-		road_network_junctions = filter(lambda j: j.roads_connected, self.road_network.junctions)
-		road_network_junctions = filter(lambda j: self.can_see(j.pos), road_network_junctions)
-		road_network_junctions = map(lambda j: {'junction_pos':shift_rotate_normalise_point(j.pos), 'junction':j}, road_network_junctions)
-		sorted_junctions = sorted(road_network_junctions, key=lambda x: x['junction_pos'])
+		visible_road_network_junctions = self.road_network.junctions
+		visible_road_network_junctions = filter(lambda j: self.can_see(j.pos), visible_road_network_junctions) #self.visible_road_network_junctions
+		visible_road_network_junctions = filter(lambda j: j.roads_connected, visible_road_network_junctions)
+		visible_road_network_junctions = map(lambda j: {'junction_pos':shift_rotate_normalise_point(j.pos), 'junction':j}, visible_road_network_junctions)
+		sorted_junctions = sorted(visible_road_network_junctions, key=lambda x: x['junction_pos'])
 
 		##### Get junctions view
 		junctions_view_list = [
-			np.array((
-				*sorted_junctions[i]['junction_pos'], 
-				sorted_junctions[i]['junction'].is_source, 
-				sorted_junctions[i]['junction'].is_target, 
-				get_normalized_food_count(sorted_junctions[i]['junction'],self.env_config['max_food_per_target']) if sorted_junctions[i]['junction'].is_target else -1
-				), dtype=np.float32
+			np.array(
+				(
+					*sorted_junctions[i]['junction_pos'], 
+					sorted_junctions[i]['junction'].is_source, 
+					sorted_junctions[i]['junction'].is_target, 
+					get_normalized_food_count(sorted_junctions[i]['junction'],self.env_config['max_food_per_target']) if sorted_junctions[i]['junction'].is_target else -1
+				), 
+				dtype=np.float32
 			) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction
@@ -120,8 +130,9 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 			),
 			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.float32),
 		})
-		# self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float32)
+		self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float32)
 		self.empty_agent_features = self.get_empty_state_recursively(base_space)
+		self.agent_id_mask_dict = {}
 		self.seed(config.get('seed',21))
 
 	@staticmethod
@@ -149,28 +160,36 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		return not that_agent.is_dead and this_agent.can_see(that_agent.car_point)
 
 	def get_this_agent_id_mask(self, this_agent_id):
-		agent_id_mask = np.zeros((self.num_agents,), dtype=np.float32)
-		agent_id_mask[this_agent_id] = 1
+		agent_id_mask = self.agent_id_mask_dict.get(this_agent_id,None)
+		if agent_id_mask is None:
+			agent_id_mask = np.zeros((self.num_agents,), dtype=np.float32)
+			agent_id_mask[this_agent_id] = 1
+			self.agent_id_mask_dict[this_agent_id] = agent_id_mask
 		return agent_id_mask
 
 	def build_state_with_comm(self, state_dict):
 		if not state_dict:
 			return state_dict
 
+		all_agents_position_list = [
+			np.array(self.agent_list[that_agent_id].car_point, dtype=np.float32)
+			for that_agent_id in range(self.num_agents)
+		]
+		all_agents_features_list = [
+			state_dict.get(that_agent_id,self.empty_agent_features)
+			for that_agent_id in range(self.num_agents)
+		]
 		return {
 			this_agent_id: {
-				'all_agents_position_list': [
-					np.array(self.get_relative_position(this_agent_id, that_agent_id), dtype=np.float32)
-					for that_agent_id in range(self.num_agents)
-				],
-				'all_agents_features_list': [
-					# state_dict[that_agent_id] if this_agent_id==that_agent_id or self.is_visible(this_agent_id, that_agent_id) else self.empty_agent_features
-					state_dict.get(that_agent_id,self.empty_agent_features)
-					for that_agent_id in range(self.num_agents)
-				],
+				'all_agents_position_list': all_agents_position_list,
+				# 'all_agents_position_list': [
+				# 	np.array(self.get_relative_position(this_agent_id, that_agent_id), dtype=np.float32) #if self.is_visible(this_agent_id, that_agent_id) else self.invisible_position_vec
+				# 	for that_agent_id in range(self.num_agents)
+				# ],
+				'all_agents_features_list': all_agents_features_list,
 				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
 			}
-			for this_agent_id,this_state in state_dict.items()
+			for this_agent_id in state_dict.keys()
 		}
 
 	def reset(self):

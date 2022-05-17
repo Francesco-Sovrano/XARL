@@ -307,7 +307,7 @@ class GraphDrive(gym.Env):
 		elif self.last_closest_road != self.closest_road: # not in junction and visiting a new road
 			visiting_new_road = True
 			self.last_closest_road = self.closest_road # keep track of the current road
-			self.goal_junction = RoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
+			self.goal_junction = RoadNetwork.get_furthermost_junction(self.closest_junction_list, self.car_point)
 			self.current_road_speed_list = []
 		self.current_road_speed_list.append(self.speed)
 		# compute perceived reward

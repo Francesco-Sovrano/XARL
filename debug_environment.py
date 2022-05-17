@@ -6,6 +6,7 @@ import sys
 import os
 from environments import *
 
+HORIZON = 2**7
 PLOT_EPISODE = False
 if PLOT_EPISODE:
 	OUTPUT_DIR = './demo_episode'
@@ -14,6 +15,7 @@ if PLOT_EPISODE:
 env_config = {
 	'num_agents': 64,
 	'force_car_to_stay_on_road': True,
+	'optimal_steering_angle_on_road': True,
 	'visibility_radius': 10,
 	'max_food_per_target': 1,
 	'blockage_probability': None,
@@ -22,10 +24,10 @@ env_config = {
 	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
 	'target_junctions_number': 9,
-	'source_junctions_number': 1,
+	'source_junctions_number': 2,
 	################################
-	'max_dimension': 32,
-	'junctions_number': 32,
+	'max_dimension': 64,
+	'junctions_number': 64,
 	'max_roads_per_junction': 4,
 	'junction_radius': 1,
 	'max_distance_to_path': .5, # meters
@@ -99,7 +101,8 @@ def run_one_episode(env):
 	if multiagent:
 		done_dict = {i: False for i in state.keys()}
 		done_dict['__all__'] = False
-		while not done_dict['__all__']:
+		while not done_dict['__all__'] and step <= HORIZON:
+			t = time.time()
 			step += 1
 			action_dict = {
 				i: env.action_space.sample()
@@ -109,17 +112,20 @@ def run_one_episode(env):
 			state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
 			state = state_dict
 			sum_reward += sum(reward_dict.values())
+			print(f'step {step} took {time.time()-t:.2f} seconds')
 			if PLOT_EPISODE:
 				file_list.append(print_screen(OUTPUT_DIR, step))
 			env.render()
 			# time.sleep(0.25)
 	else:
 		done = False
-		while not done:
+		while not done and step <= HORIZON:
+			t = time.time()
 			step += 1
 			action = env.action_space.sample()
 			state, reward, done, info = env.step(action)
 			sum_reward += reward
+			print(f'step {step} took {time.time()-t:.2f} seconds')
 			if PLOT_EPISODE:
 				file_list.append(print_screen(OUTPUT_DIR, step))
 			env.render()

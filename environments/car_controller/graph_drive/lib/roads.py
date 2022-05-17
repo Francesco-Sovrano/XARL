@@ -89,7 +89,7 @@ class RoadNetwork:
 		return min(junction_list, key=lambda x: euclidean_distance(x.pos,point))
 
 	@staticmethod
-	def get_furthest_junction(junction_list, point):
+	def get_furthermost_junction(junction_list, point):
 		return max(junction_list, key=lambda x: euclidean_distance(x.pos,point))
 
 	def run_dialogue(self, road, agent, explanation_type="verbose"):

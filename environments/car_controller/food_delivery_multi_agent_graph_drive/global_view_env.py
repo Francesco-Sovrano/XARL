@@ -45,7 +45,11 @@ class GraphDriveAgent:
 		self.obs_road_features = len(culture.properties) if culture else 0  # Number of binary ROAD features in Hard Culture
 		self.obs_car_features = (len(culture.agent_properties) - 1) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
 		# Spaces
-		self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)  # steering angle and speed
+		self.decides_acceleration = not self.env_config['force_car_to_stay_on_road'] or self.culture
+		if self.decides_acceleration:
+			self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float32)  # steering angle and speed
+		else:
+			self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)  # steering angle
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
 				gym.spaces.Box( # Junction properties and roads'
@@ -129,8 +133,9 @@ class GraphDriveAgent:
 		self.last_action_mask = None
 		self.is_dead = False
 		self.has_food = True
-		self.steps_in_junction = 0
+		# self.steps_in_junction = 0
 		self.junction_roads_dict = {}
+		self.step = 0
 
 	@property
 	def normalised_speed(self):
@@ -157,19 +162,26 @@ class GraphDriveAgent:
 
 	@property
 	def agent_state_size(self):
-		return 7 # normalised steering angle + normalised speed	+ has food
+		agent_state_size = 5
+		if not self.env_config['force_car_to_stay_on_road']:
+			agent_state_size += 1
+		if self.env_config['blockage_probability']:
+			agent_state_size += 1
+		return agent_state_size
 
 	def get_agent_state(self):
-		return (
+		agent_state = [
 			self.steering_angle/self.env_config['max_steering_angle'], # normalised steering angle
 			self.speed/self.env_config['max_speed'], # normalised speed
-			min(1, self.distance_to_closest_road/self.env_config['max_distance_to_path']),
 			self.is_in_junction(self.car_point),
-			self.slowdown_factor,
 			self.has_food,
 			self.is_dead,
-			# min(1,self.steps_in_junction/(self.env_config['max_steps_in_junction']+1)),
-		)
+		]
+		if not self.env_config['force_car_to_stay_on_road']:
+			agent_state.append(min(1, self.distance_to_closest_road/self.env_config['max_distance_to_path']))
+		if self.env_config['blockage_probability']:
+			agent_state.append(self.slowdown_factor)
+		return agent_state
 
 	def normalize_point(self, p):
 		return (np.clip(p[0]/self.env_config['map_size'][0],-1,1), np.clip(p[1]/self.env_config['map_size'][1],-1,1))
@@ -309,17 +321,25 @@ class GraphDriveAgent:
 		# first of all, get the seconds passed from last step
 		self.seconds_per_step = self.get_step_seconds()
 		# compute new steering angle
-		if self.env_config['force_car_to_stay_on_road'] and self.closest_road and self.goal_junction:
-			self.car_point = self.get_car_projection_on_road(self.car_point, self.closest_road)
-			road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else reversed(self.closest_road.edge)
-			self.car_orientation = get_slope_radians(*road_edge)
+		# self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
+		# if self.env_config['optimal_steering_angle_on_road'] and self.closest_road and self.goal_junction:
+		# 	# self.car_point = self.get_car_projection_on_road(self.car_point, self.closest_road)
+		# 	road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else self.closest_road.edge[::-1]
+		# 	# self.steering_angle = np.clip(self.car_orientation-get_slope_radians(*road_edge), -self.env_config['max_steering_angle'], self.env_config['max_steering_angle'])
+		# 	self.car_orientation = get_slope_radians(*(road_edge if self.steering_angle >= 0 else road_edge[::-1]))
+		# 	self.steering_angle = 0
+		self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
+		if self.env_config['optimal_steering_angle_on_road'] and self.closest_road and self.goal_junction:
+			# self.car_point = self.get_car_projection_on_road(self.car_point, self.closest_road)
+			road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else self.closest_road.edge[::-1]
+			# self.steering_angle = np.clip(self.car_orientation-get_slope_radians(*road_edge), -self.env_config['max_steering_angle'], self.env_config['max_steering_angle'])
+			self.car_orientation = get_slope_radians(*(road_edge if self.steering_angle >= 0 else road_edge[::-1]))
 			self.steering_angle = 0
-		else:
-			self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
-		# compute new acceleration
-		self.acceleration = self.get_acceleration_from_action(action=action_vector[1])
-		# compute new speed
-		self.speed = self.accelerate(speed=self.speed, acceleration=self.acceleration)
+		# compute new acceleration and speed
+		self.speed = self.accelerate(
+			speed=self.speed, 
+			acceleration=self.get_acceleration_from_action(action=action_vector[1] if self.decides_acceleration else 1)
+		)
 		if self.culture:
 			self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
 		# move car
@@ -344,7 +364,7 @@ class GraphDriveAgent:
 		self.closest_junction = MultiAgentRoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
 		if self.is_in_junction(self.car_point):
-			self.steps_in_junction += 1
+			# self.steps_in_junction += 1
 			if self.last_closest_road is not None: # if closest_road is not the first visited road
 				self.last_closest_road.is_visited_by(self.agent_id, True) # set the old road as visited
 			if self.closest_junction != self.last_closest_junction:
@@ -369,7 +389,7 @@ class GraphDriveAgent:
 				#########
 				self.last_closest_junction = None
 				self.last_closest_road = self.closest_road # keep track of the current road
-				self.goal_junction = MultiAgentRoadNetwork.get_furthest_junction(self.closest_junction_list, self.car_point)
+				self.goal_junction = MultiAgentRoadNetwork.get_furthermost_junction(self.closest_junction_list, self.car_point)
 				self.current_road_speed_list = []
 		self.current_road_speed_list.append(self.speed)
 		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food
@@ -412,9 +432,10 @@ class GraphDriveAgent:
 		info_dict["stats_dict"] = {
 			"min_food_deliveries": self.road_network.min_food_deliveries,
 			"food_deliveries": self.road_network.food_deliveries,
-			"avg_speed": (sum((x.speed for x in self.other_agent_list))+self.speed)/(len(self.other_agent_list)+1),
+			# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.speed)/(len(self.other_agent_list)+1),
 		}
 		self.is_dead = dead
+		self.step += 1
 		return [state, reward, dead, info_dict]
 			
 	def get_info(self):
@@ -794,24 +815,38 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=0.5, label='Source Node')
 		
 		# [Car]
-		for uid,agent in enumerate(self.agent_list):
+		visibility_radius = self.env_config.get('visibility_radius',None)
+		if visibility_radius: # [Visibility]
+			visibility_view = [
+				Circle(
+					agent.car_point, 
+					visibility_radius, 
+					color='yellow', 
+					alpha=0.25,
+				)
+				for uid,agent in enumerate(self.agent_list)
+				if not agent.is_dead
+			]
+			ax.add_collection(PatchCollection(visibility_view, match_original=True))
+		car_view = [ # [Vehicle]
+			Circle(
+				agent.car_point, 
+				1, 
+				color=get_car_color(agent), 
+				alpha=0.5,
+			)
+			for uid,agent in enumerate(self.agent_list)
+		]
+		ax.add_collection(PatchCollection(car_view, match_original=True))
+		for uid,agent in enumerate(self.agent_list): # [Heading Vector]
 			car_x, car_y = agent.car_point
-			color = get_car_color(agent)
-			car_handle = ax.scatter(car_x, car_y, marker='o', color=color, label='Car')
-			visibility_radius = self.env_config.get('visibility_radius',None)
-			if visibility_radius and not agent.is_dead:
-				car_view = [
-					Circle(
-						agent.car_point, 
-						visibility_radius, 
-						color='yellow', 
-						alpha=0.25,
-					)
-				]
-				ax.add_collection(PatchCollection(car_view, match_original=True))
-			# [Heading Vector]
 			dir_x, dir_y = get_heading_vector(angle=agent.car_orientation, space=self.env_config['max_dimension']/16)
-			heading_vector_handle = ax.plot([car_x, car_x+dir_x],[car_y, car_y+dir_y], color=color, alpha=0.5, label='Heading Vector')
+			heading_vector_handle = ax.plot(
+				[car_x, car_x+dir_x],[car_y, car_y+dir_y], 
+				color=get_car_color(agent), 
+				alpha=0.5, 
+				# label='Heading Vector'
+			)
 
 		# [Junctions]
 		if len(self.road_network.junctions) > 0:
