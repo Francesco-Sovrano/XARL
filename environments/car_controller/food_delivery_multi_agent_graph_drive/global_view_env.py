@@ -325,29 +325,21 @@ class GraphDriveAgent:
 		self.seconds_per_step = self.get_step_seconds()
 		# compute new steering angle
 		##################################
-		# self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
-		# if self.env_config['optimal_steering_angle_on_road'] and self.closest_road and self.goal_junction:
-		# 	# self.car_point = self.get_car_projection_on_road(self.car_point, self.closest_road)
-		# 	road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else self.closest_road.edge[::-1]
-		# 	# self.steering_angle = np.clip(self.car_orientation-get_slope_radians(*road_edge), -self.env_config['max_steering_angle'], self.env_config['max_steering_angle'])
-		# 	if self.steering_angle < 0:
-		# 		road_edge = road_edge[::-1]
-		# 		tmp = self.goal_junction
-		# 		self.goal_junction = self.source_junction
-		# 		self.source_junction = tmp
-		# 	self.car_orientation = get_slope_radians(*road_edge)%two_pi # in [0, 2*pi)
-		# 	self.steering_angle = 0
-		##################################
 		if self.env_config['optimal_steering_angle_on_road'] and self.closest_road and self.goal_junction:
-			# self.car_point = self.get_car_projection_on_road(self.car_point, self.closest_road)
 			road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else self.closest_road.edge[::-1]
-			# self.steering_angle = np.clip(self.car_orientation-get_slope_radians(*road_edge), -self.env_config['max_steering_angle'], self.env_config['max_steering_angle'])
+			if self.env_config['allow_uturns_on_edges']:
+				if self.get_steering_angle_from_action(action=action_vector[0]) < 0:
+					road_edge = road_edge[::-1]
+					tmp = self.goal_junction
+					self.goal_junction = self.source_junction
+					self.source_junction = tmp
+			else:
+				self.idle = True
 			self.car_orientation = get_slope_radians(*road_edge)%two_pi # in [0, 2*pi)
 			self.steering_angle = 0
-			self.idle = True
 		else:
 			self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
-			self.idle = False
+			# self.idle = False
 		##################################
 		# compute new acceleration and speed
 		##################################
