@@ -32,7 +32,7 @@ class Road(RoadCell):
 		self.start = start
 		self.end = end
 		self.edge = (start.pos, end.pos)
-		self.normalised_slope = (get_slope_radians(*self.edge)%two_pi)/two_pi  # in [0,1]
+		self.normalised_slope = (get_slope_radians(*self.edge)%two_pi)/two_pi  # in [0,1)
 		self.is_connected = False
 		self.visiting_dict = {}
 		self.colour = None

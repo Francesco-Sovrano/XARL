@@ -70,8 +70,11 @@ CONFIG.update({
 		"custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
 			"comm_range": VISIBILITY_RADIUS,
-			"message_features": 32,
-			"gnn_activation": 'relu',
+			'max_num_neighbors': 32,
+			'message_size': 128,
+			'node_embedding_units': 64,
+			'edge_embedding_units': 64,
+			'gnn_embedding_units': 256,
 		},
 	},
 	# "normalize_actions": False,

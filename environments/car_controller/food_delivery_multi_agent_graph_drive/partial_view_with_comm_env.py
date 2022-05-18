@@ -122,10 +122,10 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		self.action_space = self.agent_list[0].action_space
 		base_space = self.agent_list[0].observation_space
 		self.observation_space = gym.spaces.Dict({
-			'all_agents_position_list': gym.spaces.Tuple(
+			'all_agents_absolute_position_list': gym.spaces.Tuple(
 				[gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(2,), dtype=np.float32)]*self.num_agents
 			),
-			'all_agents_features_list': gym.spaces.Tuple(
+			'all_agents_relative_features_list': gym.spaces.Tuple(
 				[base_space]*self.num_agents
 			),
 			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.float32),
@@ -147,6 +147,8 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		return np.zeros(_obs_space.shape, dtype=_obs_space.dtype)
 
 	def get_relative_position(self, this_agent_id, that_agent_id):
+		if this_agent_id==that_agent_id:
+			return (0,0)
 		this_agent = self.agent_list[this_agent_id]
 		source_x, source_y = this_agent.car_point
 		source_orientation = this_agent.car_orientation
@@ -154,10 +156,10 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		that_agent = self.agent_list[that_agent_id]
 		return shift_and_rotate(*that_agent.car_point, -source_x, -source_y, -source_orientation)
 
-	def is_visible(self, this_agent_id, that_agent_id):
+	def is_alive_and_visible(self, this_agent_id, that_agent_id):
 		this_agent = self.agent_list[this_agent_id]
 		that_agent = self.agent_list[that_agent_id]
-		return this_agent.can_see(that_agent.car_point)
+		return not that_agent.is_dead and this_agent.can_see(that_agent.car_point)
 
 	def get_this_agent_id_mask(self, this_agent_id):
 		agent_id_mask = self.agent_id_mask_dict.get(this_agent_id,None)
@@ -171,30 +173,39 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		if not state_dict:
 			return state_dict
 
-		all_agents_position_list = [
+		all_agents_absolute_position_list = [
 			np.array(self.agent_list[that_agent_id].car_point, dtype=np.float32) if that_agent_id in state_dict else self.invisible_position_vec
 			for that_agent_id in range(self.num_agents)
 		]
-		all_agents_features_list = [
+		all_agents_relative_features_list = [
 			state_dict.get(that_agent_id,self.empty_agent_features)
 			for that_agent_id in range(self.num_agents)
 		]
 		return {
 			this_agent_id: {
-				'all_agents_position_list': all_agents_position_list,
-				# 'all_agents_position_list': [
-				# 	np.array(self.get_relative_position(this_agent_id, that_agent_id), dtype=np.float32) if that_agent_id in state_dict and self.is_visible(this_agent_id, that_agent_id) else self.invisible_position_vec
-				# 	for that_agent_id in range(self.num_agents)
-				# ],
-				'all_agents_features_list': all_agents_features_list,
-				# 'all_agents_features_list': [
-				# 	state_dict.get(that_agent_id,self.empty_agent_features) if self.is_visible(this_agent_id, that_agent_id) else self.empty_agent_features
-				# 	for that_agent_id in range(self.num_agents)
-				# ],
+				'all_agents_absolute_position_list': all_agents_absolute_position_list,
+				'all_agents_relative_features_list': all_agents_relative_features_list,
 				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
 			}
 			for this_agent_id in state_dict.keys()
 		}
+		# new_state_dict = {}
+		# for this_agent_id in state_dict.keys():
+		# 	all_agents_absolute_position_list = []
+		# 	all_agents_relative_features_list = []
+		# 	for that_agent_id in range(self.num_agents):
+		# 		if that_agent_id==this_agent_id or self.is_alive_and_visible(this_agent_id, that_agent_id):
+		# 			all_agents_absolute_position_list.append(np.array(self.get_relative_position(this_agent_id, that_agent_id), dtype=np.float32))
+		# 			all_agents_relative_features_list.append(state_dict[that_agent_id])
+		# 		else:
+		# 			all_agents_absolute_position_list.append(self.invisible_position_vec)
+		# 			all_agents_relative_features_list.append(self.empty_agent_features)
+		# 	new_state_dict[this_agent_id] = {
+		# 		'all_agents_absolute_position_list': all_agents_absolute_position_list,
+		# 		'all_agents_relative_features_list': all_agents_relative_features_list,
+		# 		'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
+		# 	}
+		# return new_state_dict
 
 	def reset(self):
 		return self.build_state_with_comm(super().reset())

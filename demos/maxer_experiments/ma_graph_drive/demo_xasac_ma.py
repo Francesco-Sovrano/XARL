@@ -18,20 +18,23 @@ CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 VISIBILITY_RADIUS = 10
 
+TARGET_JUNCTIONS_NUMBER = 1+NUM_AGENTS//4
+SOURCE_JUNCTIONS_NUMBER = 2
+
 CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'force_car_to_stay_on_road': True,
 	'optimal_steering_angle_on_road': True,
 	'visibility_radius': VISIBILITY_RADIUS,
-	'max_food_per_target': 1,
+	'max_food_per_target': (NUM_AGENTS//TARGET_JUNCTIONS_NUMBER)+2,
 	'blockage_probability': None,
 	# 'blockage_probability': 0.15,
 	# 'min_blockage_ratio': 0.1,
 	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': 9,
-	'source_junctions_number': 1,
+	'target_junctions_number': TARGET_JUNCTIONS_NUMBER,
+	'source_junctions_number': SOURCE_JUNCTIONS_NUMBER,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,
@@ -70,8 +73,11 @@ CONFIG.update({
 		"custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
 			"comm_range": VISIBILITY_RADIUS,
-			"message_features": 32,
-			"gnn_activation": 'relu',
+			'max_num_neighbors': 32,
+			'message_size': 128,
+			'node_embedding_units': 64,
+			'edge_embedding_units': 64,
+			'gnn_embedding_units': 256,
 		},
 	},
 	# "normalize_actions": False,
@@ -183,7 +189,7 @@ CONFIG["multiagent"].update({
 	# #   multi-agent actions are passed/how many multi-agent observations
 	# #   have been returned in the previous step).
 	# # agent_steps: Count each individual agent step as one step.
-	"count_steps_by": "agent_steps",
+	# "count_steps_by": "env_steps",
 })
 print('Config:', CONFIG)
 

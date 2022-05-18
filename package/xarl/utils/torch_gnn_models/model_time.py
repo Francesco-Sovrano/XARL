@@ -1,3 +1,5 @@
+# Code by Jan Blumenkamp
+
 from ray.rllib.models.modelv2 import ModelV2, restore_original_dimensions
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.policy.view_requirement import ViewRequirement
