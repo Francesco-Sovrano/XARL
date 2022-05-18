@@ -18,14 +18,12 @@ CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 VISIBILITY_RADIUS = 10
 
-TARGET_JUNCTIONS_NUMBER = 1+NUM_AGENTS//2
-SOURCE_JUNCTIONS_NUMBER = 2
-
 CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'force_car_to_stay_on_road': True,
 	'optimal_steering_angle_on_road': True,
+	'allow_uturns_on_edges': False,
 	'visibility_radius': VISIBILITY_RADIUS,
 	'max_food_per_target': 1,
 	'blockage_probability': None,
@@ -33,8 +31,8 @@ CONFIG["env_config"] = {
 	# 'min_blockage_ratio': 0.1,
 	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': TARGET_JUNCTIONS_NUMBER,
-	'source_junctions_number': SOURCE_JUNCTIONS_NUMBER,
+	'target_junctions_number': 1+NUM_AGENTS//2,
+	'source_junctions_number': 2,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,

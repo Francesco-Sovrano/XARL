@@ -17,21 +17,23 @@ SELECT_ENV = "MAGraphDrive"
 
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
+VISIBILITY_RADIUS = 10
 
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'force_car_to_stay_on_road': True,
 	'optimal_steering_angle_on_road': True,
-	'visibility_radius': 10,
+	'allow_uturns_on_edges': False,
+	'visibility_radius': VISIBILITY_RADIUS,
 	'max_food_per_target': 1,
 	'blockage_probability': None,
 	# 'blockage_probability': 0.15,
 	# 'min_blockage_ratio': 0.1,
 	# 'max_blockage_ratio': 0.5,
 	'agent_collision_radius': None,
-	'target_junctions_number': 9,
-	'source_junctions_number': 1,
+	'target_junctions_number': 1+NUM_AGENTS//2,
+	'source_junctions_number': 2,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,
@@ -62,11 +64,20 @@ CONFIG["env_config"] = {
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
+	"framework": "torch",
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "adaptive_multihead_network",
+		"custom_model_config": {
+			"comm_range": VISIBILITY_RADIUS,
+			'max_num_neighbors': 32,
+			'message_size': 128,
+			'node_embedding_units': 64,
+			'edge_embedding_units': 64,
+			'gnn_embedding_units': 256,
+		},
 	},
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
