@@ -54,22 +54,6 @@ class RelVel(BaseTransform):
 	def __repr__(self) -> str:
 		return f"{self.__class__.__name__}(norm={self.norm}, " f"max_value={self.max})"
 
-
-class PreProc(nn.Module):
-	def __init__(self, node_embedding_size=32):
-		nn.Module.__init__(self)
-		self.nn_pos = torch.nn.Linear(2, 8)
-		self.nn_vel = torch.nn.Linear(2, 8)
-		self.nn_total = torch.nn.Linear(24, node_embedding_size)
-
-	def forward(self, pos, vel):
-		enc_pos = self.nn_pos(pos)
-		enc_vel = self.nn_vel(vel)
-		x = torch.cat([enc_pos, enc_vel], dim=1)
-		x_act = torch.nn.ReLU()(x)
-		return self.nn_total(x_act)
-
-
 class GNNBranch(nn.Module):
 	def __init__(
 		self,
@@ -84,9 +68,9 @@ class GNNBranch(nn.Module):
 
 		self.gnn_nn = torch.nn.Sequential(
 			torch.nn.Linear(node_embedding + edge_embedding, 16),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			torch.nn.Linear(16, gnn_embedding),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 		)
 
 		'''
@@ -100,11 +84,11 @@ class GNNBranch(nn.Module):
 
 		self.post_gnn = torch.nn.Sequential(
 			torch.nn.Linear(gnn_embedding, 16),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			torch.nn.Linear(16, gnn_embedding),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			#torch.nn.Linear(32, 8),
-			#torch.nn.ReLU(),
+			#torch.nn.LeakyReLU(),
 		)
 
 		'''
@@ -116,32 +100,28 @@ class GNNBranch(nn.Module):
 
 		self.gnn = GNNConv(nn=self.gnn_nn, aggr="add")
 
-		#self.local = torch.nn.Sequential(
-		#    torch.nn.Linear(node_features, 8),
-		#)
-		# self.node_pre = PreProc(node_features)
 		self.node_enc = torch.nn.Sequential(
 			torch.nn.Linear(node_features, 16),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			torch.nn.Linear(16, node_embedding),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			#torch.nn.Linear(32, 32),
-			#torch.nn.ReLU(),
+			#torch.nn.LeakyReLU(),
 			#torch.nn.Linear(32, node_embedding),
 		)
 		self.edge_enc = torch.nn.Sequential(
 			torch.nn.Linear(edge_features, 16),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			torch.nn.Linear(16, edge_embedding),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			#torch.nn.Linear(32, edge_embedding),
 		)
 		self.post_proc = torch.nn.Sequential(
 			torch.nn.LayerNorm(node_features + gnn_embedding),
 			torch.nn.Linear(node_features + gnn_embedding, 32),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			torch.nn.Linear(32, 32),
-			torch.nn.ReLU(),
+			torch.nn.LeakyReLU(),
 			torch.nn.Linear(32, out_features),
 		)
 

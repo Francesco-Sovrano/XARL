@@ -62,6 +62,7 @@ CONFIG["env_config"] = {
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
+	"framework": "torch",
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive

@@ -33,7 +33,7 @@ env_config = {
 	'max_distance_to_path': .5, # meters
 	################################
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
-	'mean_seconds_per_step': 0.5, # in average, a step every n seconds
+	'mean_seconds_per_step': 1, # in average, a step every n seconds
 	################################
 	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
 	'wheelbase': 0.15, # meters # https://en.wikipedia.org/wiki/Wheelbase
@@ -55,7 +55,7 @@ env_config = {
 	'max_normalised_speed': 120,
 }
 
-env = PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_no_culture', "culture_level": None, **env_config})
+env = PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **env_config})
 env.seed(38)
 # env = CescoDriveV0()
 multiagent = isinstance(env, MultiAgentEnv)

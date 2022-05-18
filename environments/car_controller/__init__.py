@@ -48,5 +48,5 @@ culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
 	register_env(f"MAGraphDrive-PVComm-{culture_level}", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
 	register_env(f"MAGraphDrive-PVComm-{culture_level}-Sparse", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
-register_env(f"MAGraphDrive-PVComm", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_no_culture', "culture_level": None, **config}))
-register_env(f"MAGraphDrive-PVComm-Sparse", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'sparse_reward_no_culture', "culture_level": None, **config}))
+register_env(f"MAGraphDrive-PVComm", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **config}))
+register_env(f"MAGraphDrive-PVComm-Sparse", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": None, **config}))
