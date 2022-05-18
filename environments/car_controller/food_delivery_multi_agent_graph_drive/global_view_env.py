@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 get_normalized_food_count = lambda j, max_food_per_target: np.clip(j.food_deliveries, 0, max_food_per_target)/max_food_per_target
 is_source_junction = lambda j: j.is_source
-is_target_junction = lambda j, max_food_per_target: j.is_target and get_normalized_food_count(j, max_food_per_target) < 1
+is_target_junction = lambda j, max_food_per_target: j.is_target and j.food_deliveries < max_food_per_target
 is_relevant_junction = lambda j, max_food_per_target: is_source_junction(j) or is_target_junction(j, max_food_per_target)
 
 class GraphDriveAgent:
