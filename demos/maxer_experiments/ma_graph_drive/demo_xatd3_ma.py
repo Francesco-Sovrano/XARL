@@ -16,13 +16,14 @@ from environments import *
 SELECT_ENV = "MAGraphDrive-PVComm"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
+VISIBILITY_RADIUS = 10
 
 CONFIG = XATD3_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'force_car_to_stay_on_road': True,
 	'optimal_steering_angle_on_road': True,
-	'visibility_radius': 10,
+	'visibility_radius': VISIBILITY_RADIUS,
 	'max_food_per_target': 1,
 	'blockage_probability': None,
 	# 'blockage_probability': 0.15,
@@ -65,7 +66,12 @@ CONFIG.update({
 	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
-		"custom_model": "comm_adaptive_multihead_network"
+		"custom_model": "comm_adaptive_multihead_network",
+		"custom_model_config": {
+			"comm_range": VISIBILITY_RADIUS,
+			"message_features": 32,
+			"gnn_activation": 'relu',
+		},
 	},
 	# "normalize_actions": False,
 

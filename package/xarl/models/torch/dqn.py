@@ -9,7 +9,7 @@ class TorchAdaptiveMultiHeadDQN:
 		class TorchAdaptiveMultiHeadDQNInner(DQNTorchModel):
 			def __init__(self, obs_space, action_space, num_outputs, model_config, name, *, q_hiddens = (256,), dueling = False, dueling_activation = "relu", num_atoms = 1, use_noisy = False, v_min = -10.0, v_max = 10.0, sigma0 = 0.5, add_layer_norm = False):
 				nn.Module.__init__(self)
-				m = preprocessing_model(obs_space, model_config)
+				m = preprocessing_model(obs_space, model_config['custom_model_config'])
 				super().__init__(
 					obs_space=obs_space, 
 					action_space=action_space, 

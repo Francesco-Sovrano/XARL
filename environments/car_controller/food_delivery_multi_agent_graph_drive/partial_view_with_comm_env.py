@@ -157,7 +157,7 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 	def is_visible(self, this_agent_id, that_agent_id):
 		this_agent = self.agent_list[this_agent_id]
 		that_agent = self.agent_list[that_agent_id]
-		return not that_agent.is_dead and this_agent.can_see(that_agent.car_point)
+		return this_agent.can_see(that_agent.car_point)
 
 	def get_this_agent_id_mask(self, this_agent_id):
 		agent_id_mask = self.agent_id_mask_dict.get(this_agent_id,None)
@@ -172,7 +172,7 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 			return state_dict
 
 		all_agents_position_list = [
-			np.array(self.agent_list[that_agent_id].car_point, dtype=np.float32)
+			np.array(self.agent_list[that_agent_id].car_point, dtype=np.float32) if that_agent_id in state_dict else self.invisible_position_vec
 			for that_agent_id in range(self.num_agents)
 		]
 		all_agents_features_list = [
@@ -183,10 +183,14 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 			this_agent_id: {
 				'all_agents_position_list': all_agents_position_list,
 				# 'all_agents_position_list': [
-				# 	np.array(self.get_relative_position(this_agent_id, that_agent_id), dtype=np.float32) #if self.is_visible(this_agent_id, that_agent_id) else self.invisible_position_vec
+				# 	np.array(self.get_relative_position(this_agent_id, that_agent_id), dtype=np.float32) if that_agent_id in state_dict and self.is_visible(this_agent_id, that_agent_id) else self.invisible_position_vec
 				# 	for that_agent_id in range(self.num_agents)
 				# ],
 				'all_agents_features_list': all_agents_features_list,
+				# 'all_agents_features_list': [
+				# 	state_dict.get(that_agent_id,self.empty_agent_features) if self.is_visible(this_agent_id, that_agent_id) else self.empty_agent_features
+				# 	for that_agent_id in range(self.num_agents)
+				# ],
 				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
 			}
 			for this_agent_id in state_dict.keys()
