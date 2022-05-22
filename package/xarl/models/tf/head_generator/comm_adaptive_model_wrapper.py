@@ -157,27 +157,33 @@ def get_input_layers_and_keras_layers(obs_space, **args):
 			last_layer = tf.keras.layers.Concatenate(axis=-1)(last_layer)
 		return inputs, last_layer
 	
-	logger.warning(f"Building keras layers for Comm model with {len(obs_space['all_agents'])} agents")
-	this_inputs, this_last_layer = apply_obs_to_main_model(obs_space['this_agent'])
-	apply_obs_to_message_model = apply_obs_to_main_model # obs_space['message_visibility_mask']
-	###	Apply visibility mask
-	other_input_list, other_last_layer_list = map(list,zip(*[apply_obs_to_message_model(y['features']) for y in obs_space['all_agents']]))
-	message_visibility_mask_input = tf.keras.layers.Input(shape=obs_space['message_visibility_mask'].shape)
-	masked_messages = [
-		m*message_visibility_mask_input[:,i]
-		for i,m in enumerate(other_last_layer_list)
-	]
-	###
-	other_last_layer = tf.math.reduce_sum(masked_messages, axis=0)
-	last_layer = tf.concat([this_last_layer, other_last_layer], axis=1)
-	inputs = this_inputs + other_input_list + [message_visibility_mask_input]
-	return inputs, last_layer
+	logger.warning(f"Building keras layers for Comm model with {len(obs_space['all_agents_absolute_position_list'])} agents")
+	input_list, last_layer_list = map(list,zip(*map(apply_obs_to_main_model, obs_space['all_agents_relative_features_list'])))
+	all_agents_features = tf.stack(last_layer_list, 1)
+
+	this_agent_id_mask_input = tf.keras.layers.Input(shape=obs_space['this_agent_id_mask'].shape)
+	this_agent_id_mask = tf.expand_dims(this_agent_id_mask_input, -1)
+	
+	main_output = tf.math.reduce_sum(all_agents_features*this_agent_id_mask, 1)
+
+	all_agents_positions_input_list = [tf.keras.layers.Input(shape=p.shape) for p in obs_space['all_agents_absolute_position_list']]
+	all_agents_positions = tf.stack(all_agents_positions_input_list, 1)
+	# all_agents_positions = tf.keras.layers.Flatten()(all_agents_positions)
+	
+	message = tf.concat([all_agents_features, all_agents_positions], axis=-1)
+	message = tf.keras.Sequential(layers=[
+		tf.keras.layers.Flatten(),
+		tf.keras.layers.Dense(32, activation='relu')
+	])(message)
+	last_layer = tf.concat([main_output, message], name='last_layer_concat', axis=-1)
+	input_list += all_agents_positions_input_list + [this_agent_id_mask_input]
+	return input_list, last_layer
 
 def get_input_list_from_input_dict(input_dict, **args):
 	obs = input_dict['obs']
 	assert isinstance(obs, dict)
 	flattened_input_list = []
-	obs_list = [obs['this_agent']] 
+	obs_list = obs['all_agents_relative_features_list'] + [obs['this_agent_id_mask']] + obs['all_agents_absolute_position_list']
 	for obs in obs_list:
 		cnn_inputs = []
 		fc_inputs = []

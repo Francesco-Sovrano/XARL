@@ -11,32 +11,26 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 		# min(self.env_config.get('max_n_junctions_in_view',float('inf')), self.env_config['junctions_number'])
 		
 		state_dict = {
-			"fc_junctions-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
-				gym.spaces.Box( # Junction properties and roads'
-					low= -1,
-					high= 1,
-					shape= (
-						# self.env_config['junctions_number'],
-						2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
-					),
-					dtype=np.float32
-				)
-				for i in range(self.max_n_junctions_in_view)
-			]),
-			"fc_roads-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
-				gym.spaces.Box( # Junction properties and roads'
-					low= -1,
-					high= 1,
-					shape= (
-						# self.env_config['junctions_number'],
-						self.env_config['max_roads_per_junction'],
-						1 + self.obs_road_features, # road.normalised_slope + road.af_features
-					),
-					dtype=np.float32
-				)
-				for i in range(self.max_n_junctions_in_view)
-			]),
-			"fc_this_agent-16": gym.spaces.Box( # Agent features
+			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
+				low= -1,
+				high= 1,
+				shape= (
+					self.max_n_junctions_in_view,
+					2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
+				),
+				dtype=np.float32
+			),
+			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
+				low= -1,
+				high= 1,
+				shape= (
+					self.max_n_junctions_in_view,
+					self.env_config['max_roads_per_junction'],
+					2 + self.obs_road_features, # road.end + road.af_features
+				),
+				dtype=np.float32
+			),
+			"fc_this_agent-8": gym.spaces.Box( # Agent features
 				low= -1,
 				high= 1,
 				shape= (
@@ -55,9 +49,9 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 			car_orientation=self.car_orientation
 		junctions_view_list, roads_view_list = self.get_view(car_point, car_orientation)
 		state_dict = {
-			"fc_junctions-16": junctions_view_list,
-			"fc_roads-16": roads_view_list,
-			"fc_this_agent-16": np.array([
+			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
+			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
+			"fc_this_agent-8": np.array([
 				*self.get_agent_state(),
 				*(self.agent_id.binary_features(as_tuple=True) if self.culture else []), 
 			], dtype=np.float32),
@@ -76,7 +70,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
 		source_x, source_y = source_point
-		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
+		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, 0))
 		visible_road_network_junctions = self.road_network.junctions
 		visible_road_network_junctions = filter(lambda j: self.can_see(j.pos), visible_road_network_junctions) #self.visible_road_network_junctions
 		visible_road_network_junctions = filter(lambda j: j.roads_connected, visible_road_network_junctions)
@@ -101,7 +95,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 
 		##### Get roads view
 		roads_view_list = [
-			np.array(self.get_junction_roads(sorted_junctions[i]['junction']), dtype=np.float32) 
+			np.array(self.get_junction_roads(sorted_junctions[i]['junction'], shift_rotate_normalise_point), dtype=np.float32) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction_roads
 			for i in range(self.max_n_junctions_in_view)
@@ -125,6 +119,9 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 			'all_agents_absolute_position_list': gym.spaces.Tuple(
 				[gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(2,), dtype=np.float32)]*self.num_agents
 			),
+			# 'all_agents_absolute_orientation_list': gym.spaces.Tuple(
+			# 	[gym.spaces.Box(low=0, high=two_pi, shape=(1,), dtype=np.float32)]*self.num_agents
+			# ),
 			'all_agents_relative_features_list': gym.spaces.Tuple(
 				[base_space]*self.num_agents
 			),
@@ -177,6 +174,10 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 			np.array(self.agent_list[that_agent_id].car_point, dtype=np.float32) if that_agent_id in state_dict else self.invisible_position_vec
 			for that_agent_id in range(self.num_agents)
 		]
+		# all_agents_absolute_orientation_list = [
+		# 	np.array(self.agent_list[that_agent_id].car_orientation, dtype=np.float32) if that_agent_id in state_dict else 0
+		# 	for that_agent_id in range(self.num_agents)
+		# ]
 		all_agents_relative_features_list = [
 			state_dict.get(that_agent_id,self.empty_agent_features)
 			for that_agent_id in range(self.num_agents)
@@ -184,6 +185,7 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		return {
 			this_agent_id: {
 				'all_agents_absolute_position_list': all_agents_absolute_position_list,
+				# 'all_agents_absolute_orientation_list': all_agents_absolute_orientation_list,
 				'all_agents_relative_features_list': all_agents_relative_features_list,
 				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
 			}
@@ -212,4 +214,5 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 
 	def step(self, action_dict):
 		state_dict, reward_dict, terminal_dict, info_dict = super().step(action_dict)
+		# assert not any(terminal_dict.values())
 		return self.build_state_with_comm(state_dict), reward_dict, terminal_dict, info_dict

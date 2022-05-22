@@ -10,6 +10,7 @@ matplotlib_use('Agg',force=True) # no display
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import Circle
+from matplotlib.text import Text
 from matplotlib.collections import PatchCollection
 from matplotlib.lines import Line2D
 
@@ -51,32 +52,26 @@ class GraphDriveAgent:
 		else:
 			self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)  # steering angle
 		state_dict = {
-			"fc_junctions-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
-				gym.spaces.Box( # Junction properties and roads'
-					low= -1,
-					high= 1,
-					shape= (
-						# self.env_config['junctions_number'],
-						2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
-					),
-					dtype=np.float32
-				)
-				for i in range(self.env_config['junctions_number'])
-			]),
-			"fc_roads-16": gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
-				gym.spaces.Box( # Junction properties and roads'
-					low= -1,
-					high= 1,
-					shape= (
-						# self.env_config['junctions_number'],
-						self.env_config['max_roads_per_junction'],
-						1 + self.obs_road_features, # road.normalised_slope + road.af_features
-					),
-					dtype=np.float32
-				)
-				for i in range(self.env_config['junctions_number'])
-			]),
-			"fc_this_agent-16": gym.spaces.Box( # Agent features
+			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
+				low= -1,
+				high= 1,
+				shape= (
+					self.env_config['junctions_number'],
+					2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
+				),
+				dtype=np.float32
+			),
+			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
+				low= -1,
+				high= 1,
+				shape= (
+					self.env_config['junctions_number'],
+					self.env_config['max_roads_per_junction'],
+					2 + self.obs_road_features, # road.end + road.af_features
+				),
+				dtype=np.float32
+			),
+			"fc_this_agent-8": gym.spaces.Box( # Agent features
 				low= -1,
 				high= 1,
 				shape= (
@@ -86,24 +81,22 @@ class GraphDriveAgent:
 			),
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["fc_other_agents-16"] = gym.spaces.Tuple([ # Tuple is a permutation invariant net, Dict is a concat net
-				gym.spaces.Box( # permutation invariant
-					low= -1,
-					high= 1,
-					shape= (
-						2 + self.agent_state_size + self.obs_car_features,
-					), # for each other possible agent give position + state + features
-					dtype=np.float32
-				)
-				for i in range(self.n_of_other_agents)
-			])
+			state_dict["fc_other_agents-16"] = gym.spaces.Box( # permutation invariant
+				low= -1,
+				high= 1,
+				shape= (
+					self.n_of_other_agents,
+					2 + self.agent_state_size + self.obs_car_features,
+				), # for each other possible agent give position + state + features
+				dtype=np.float32
+			)
 		self.observation_space = gym.spaces.Dict(state_dict)
 
-		self._empty_junction = np.full(self.observation_space['fc_junctions-16'][0].shape, -1, dtype=np.float32)
-		self._empty_road = (-1,*[-1]*self.obs_road_features)
-		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'][0].shape, -1, dtype=np.float32)
+		self._empty_junction = np.full(self.observation_space['fc_junctions-16'].shape[1:], -1, dtype=np.float32)
+		self._empty_road = (-1,-1,*[-1]*self.obs_road_features)
+		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'].shape[1:], -1, dtype=np.float32)
 		if self.n_of_other_agents > 0:
-			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'][0].shape, -1, dtype=np.float32)
+			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], -1, dtype=np.float32)
 
 	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
@@ -151,15 +144,15 @@ class GraphDriveAgent:
 			car_orientation=self.car_orientation
 		junctions_view_list, roads_view_list, agents_view_list = self.get_view(car_point, car_orientation)
 		state_dict = {
-			"fc_junctions-16": junctions_view_list,
-			"fc_roads-16": roads_view_list,
-			"fc_this_agent-16": np.array([
+			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
+			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
+			"fc_this_agent-8": np.array([
 				*self.get_agent_state(),
 				*(self.agent_id.binary_features(as_tuple=True) if self.culture else []), 
 			], dtype=np.float32),
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["fc_other_agents-16"] = agents_view_list
+			state_dict["fc_other_agents-16"] = np.array(agents_view_list, dtype=np.float32),
 		return state_dict
 
 	@property
@@ -197,13 +190,13 @@ class GraphDriveAgent:
 				return True
 		return False
 
-	def get_junction_roads(self, j):
+	def get_junction_roads(self, j, shift_rotate_normalise_point_fn):
 		junction_road_list = self.junction_roads_dict.get(j.pos, None)
 		if junction_road_list is None:
 			roads = (
 				(
-					road.normalised_slope, # in [0,1]
-					# *shift_rotate_normalise_point_fn(road.start.pos if j.pos!=road.start.pos else road.end.pos), # in [0,1]
+					# road.normalised_slope, # in [0,1] # completely wrong if using relative position, this slope is absolute
+					*shift_rotate_normalise_point_fn(road.start.pos if j.pos!=road.start.pos else road.end.pos), # in [0,1]
 					*(road.binary_features(as_tuple=True) if self.culture else []), # in [0,1]
 				)
 				for road in j.roads_connected
@@ -216,7 +209,7 @@ class GraphDriveAgent:
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
 		source_x, source_y = source_point
-		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
+		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, 0))
 		road_network_junctions = filter(lambda j: j.roads_connected, self.road_network.junctions)
 		road_network_junctions = map(lambda j: {'junction_pos':shift_rotate_normalise_point(j.pos), 'junction':j}, road_network_junctions)
 		sorted_junctions = sorted(road_network_junctions, key=lambda x: x['junction_pos'])
@@ -237,7 +230,7 @@ class GraphDriveAgent:
 
 		##### Get roads view
 		roads_view_list = [
-			np.array(self.get_junction_roads(sorted_junctions[i]['junction']), dtype=np.float32) 
+			np.array(self.get_junction_roads(sorted_junctions[i]['junction'], shift_rotate_normalise_point), dtype=np.float32) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction_roads
 			for i in range(len(self.road_network.junctions))
@@ -320,6 +313,12 @@ class GraphDriveAgent:
 			return 0
 		return self.np_random.uniform(self.env_config['min_blockage_ratio'], self.env_config['max_blockage_ratio'])
 
+	def compute_distance_to_closest_road(self):
+		if self.goal_junction is None:
+			self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point, self.closest_junction_list)
+		else:
+			self.distance_to_closest_road = point_to_line_dist(self.car_point, self.closest_road.edge)
+
 	def start_step(self, action_vector):
 		# first of all, get the seconds passed from last step
 		self.seconds_per_step = self.get_step_seconds()
@@ -364,15 +363,17 @@ class GraphDriveAgent:
 			speed=self.speed*(1-self.slowdown_factor),
 			add_noise=True
 		)
-		if self.goal_junction is None:
-			self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point, self.closest_junction_list)
-		else:
-			self.distance_to_closest_road = point_to_line_dist(self.car_point, self.closest_road.edge)
+		self.compute_distance_to_closest_road()
+		if self.env_config['force_car_to_stay_on_road']:
+			if not self.is_in_junction(self.car_point) and self.distance_to_closest_road >= self.env_config['max_distance_to_path']: # go back
+				self.car_point = old_car_point
+				self.compute_distance_to_closest_road()
 		self.closest_junction = MultiAgentRoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 		# if a new road is visited, add the old one to the set of visited ones
 		if self.is_in_junction(self.car_point):
 			# self.steps_in_junction += 1
 			if self.last_closest_road is not None: # if closest_road is not the first visited road
+				self.closest_junction.is_visited_by(self.agent_id, True) # set the current junction as visited
 				self.last_closest_road.is_visited_by(self.agent_id, True) # set the old road as visited
 			if self.closest_junction != self.last_closest_junction:
 				visiting_new_junction = True
@@ -390,8 +391,6 @@ class GraphDriveAgent:
 					self.has_food = False
 					has_just_delivered_food = True
 		else:
-			if self.env_config['force_car_to_stay_on_road'] and self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-				self.car_point = old_car_point
 			if self.last_closest_road != self.closest_road: # not in junction and visiting a new road
 				visiting_new_road = True
 				#########
@@ -407,20 +406,31 @@ class GraphDriveAgent:
 		return poit_to_line_projection(car_point, closest_road.edge)
 
 	def get_fairness_score(self, has_just_delivered_food, has_just_taken_food):
-		#######
+		####### Facts
 		if has_just_delivered_food: 
 			just_delivered_to_worst_target = self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries
-			return 'fair' if just_delivered_to_worst_target else 'unfair'
-		moving_towards_target_with_food = self.goal_junction and is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food
-		if moving_towards_target_with_food:
-			delivering_to_worst_target = self.goal_junction.food_deliveries == self.road_network.min_food_deliveries
-			return 'fair' if delivering_to_worst_target else 'unfair'
+			return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
+		if self.goal_junction:
+			moving_towards_target_with_food = is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food
+			if moving_towards_target_with_food:
+				delivering_to_worst_target = self.goal_junction.food_deliveries == self.road_network.min_food_deliveries
+				return 'is_fairly_pursuing_a_poor_target' if delivering_to_worst_target else 'is_pursuing_a_rich_target'
+		####### Conjectures
+		if self.goal_junction:
+			is_exploring_fairly = not self.goal_junction.is_visited
+			if is_exploring_fairly:
+				return 'is_exploring_fairly'
+			closest_target_type = self.road_network.get_closest_target_type(self.goal_junction, max_depth=3)
+			if closest_target_type=='worst':
+				return 'is_likely_to_pursue_a_rich_target_in_3_nodes'
+			if closest_target_type=='best':
+				return 'is_likely_to_pursue_a_poor_target_in_3_nodes'
 		#######
-		if has_just_taken_food: 
-			return 'fair'
-		moving_towards_source_without_food = self.goal_junction and is_source_junction(self.goal_junction) and not self.has_food
-		if moving_towards_source_without_food:
-			return 'fair'
+		# if has_just_taken_food: 
+		# 	return 'fair'
+		# moving_towards_source_without_food = self.goal_junction and is_source_junction(self.goal_junction) and not self.has_food
+		# if moving_towards_source_without_food:
+		# 	return 'fair'
 		#######
 		return 'unknown'
 
@@ -444,7 +454,7 @@ class GraphDriveAgent:
 				"food_deliveries": self.road_network.food_deliveries,
 				# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.speed)/(len(self.other_agent_list)+1),
 			},
-			'discard': self.idle and not reward,
+			# 'discard': self.idle and not reward,
 		}
 		self.is_dead = dead
 		self.step += 1
@@ -718,6 +728,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=0.5, label='Source Node')
 		
 		# [Car]
+		#######################
 		visibility_radius = self.env_config.get('visibility_radius',None)
 		if visibility_radius: # [Visibility]
 			visibility_view = [
@@ -731,6 +742,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 				if not agent.is_dead
 			]
 			ax.add_collection(PatchCollection(visibility_view, match_original=True))
+		#######################
 		car_view = [ # [Vehicle]
 			Circle(
 				agent.car_point, 
@@ -741,6 +753,16 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 			for uid,agent in enumerate(self.agent_list)
 		]
 		ax.add_collection(PatchCollection(car_view, match_original=True))
+		#######################
+		for uid,agent in enumerate(self.agent_list): # [Rewards]
+			if not agent.last_reward:
+				continue
+			ax.text(
+				x=agent.car_point[0],
+				y=agent.car_point[1]+0.5,
+				s=agent.last_reward, 
+			)
+		#######################
 		for uid,agent in enumerate(self.agent_list): # [Heading Vector]
 			car_x, car_y = agent.car_point
 			dir_x, dir_y = get_heading_vector(angle=agent.car_orientation, space=self.env_config['max_dimension']/16)
@@ -750,7 +772,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 				alpha=0.5, 
 				# label='Heading Vector'
 			)
-
+		#######################
 		# [Junctions]
 		if len(self.road_network.junctions) > 0:
 			junctions = [

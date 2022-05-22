@@ -23,7 +23,7 @@ CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'force_car_to_stay_on_road': True,
 	'optimal_steering_angle_on_road': True,
-	'allow_uturns_on_edges': False,
+	'allow_uturns_on_edges': True,
 	'visibility_radius': VISIBILITY_RADIUS,
 	'max_food_per_target': 1,
 	'blockage_probability': None,
@@ -65,17 +65,17 @@ CONFIG["env_config"] = {
 CONFIG.update({
 	"framework": "torch",
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	# "no_done_at_end": False, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
 			"comm_range": VISIBILITY_RADIUS,
 			'max_num_neighbors': 32,
-			'message_size': 128,
-			'node_embedding_units': 64,
-			'edge_embedding_units': 64,
-			'gnn_embedding_units': 256,
+			'message_size': 64,
+			'node_embedding_units': 16,
+			'edge_embedding_units': 16,
+			'gnn_embedding_units': 64,
 		},
 	},
 	# "normalize_actions": False,
@@ -197,4 +197,4 @@ print('Config:', CONFIG)
 ray.shutdown()
 ray.init(ignore_reinit_error=True, include_dashboard=False)
 
-train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7//10, stop_training_after_n_step=4e7)
+train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7//100, stop_training_after_n_step=4e7)

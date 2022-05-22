@@ -11,6 +11,7 @@ class Junction:
 	def __init__(self, pos):
 		self.pos = pos
 		self.roads_connected = []
+		self.visiting_dict = {}
 
 	def __eq__(self, other):
 		if not isinstance(other,Junction):
@@ -19,6 +20,16 @@ class Junction:
 
 	def __len__(self):
 		return len(self.roads_connected)
+
+	def is_visited_by(self, agent, set_to=None):
+		if set_to is not None:
+			self.visiting_dict[agent] = set_to
+		else:
+			return self.visiting_dict.get(agent,False)
+
+	@property
+	def is_visited(self):
+		return len(self.visiting_dict) > 0 and any(self.visiting_dict.values())
 
 	def connect(self, road):
 		if road not in self.roads_connected:
@@ -48,10 +59,6 @@ class Road(RoadCell):
 	@property
 	def is_visited(self):
 		return len(self.visiting_dict) > 0 and any(self.visiting_dict.values())
-
-	@is_visited.setter
-	def is_visited(self, value):
-		self.visiting_dict['anonymous'] = value
 	
 	def __eq__(self, other):
 		if not isinstance(other,Road):

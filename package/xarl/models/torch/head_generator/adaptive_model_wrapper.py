@@ -56,6 +56,12 @@ class AdaptiveModel(nn.Module):
 			logger.warning('N.B.: Flattening all observations!')	
 		# print(self.sub_model_dict)
 
+	def variables(self, as_dict = False):
+		p = list(self.parameters())
+		if as_dict:
+			return {k: p[i] for i, k in enumerate(self.state_dict().keys())}
+		return p
+
 	def forward(self, x):
 		output_list = []
 		inputs_dict = self.get_inputs_dict(x)
