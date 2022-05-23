@@ -383,13 +383,14 @@ class GraphDriveAgent:
 				self.last_closest_road = None
 				self.last_closest_junction = self.closest_junction
 				#########
-				if is_source_junction(self.closest_junction) and not self.has_food:
-					has_just_taken_food = True
-					self.has_food = True
-				elif is_target_junction(self.closest_junction, self.env_config['max_food_per_target']) and self.has_food:
-					self.road_network.deliver_food(self.closest_junction)
-					self.has_food = False
-					has_just_delivered_food = True
+				if self.env_config['allow_uturns_on_edges']:
+					if is_source_junction(self.closest_junction) and not self.has_food:
+						has_just_taken_food = True
+						self.has_food = True
+					elif is_target_junction(self.closest_junction, self.env_config['max_food_per_target']) and self.has_food:
+						self.road_network.deliver_food(self.closest_junction)
+						self.has_food = False
+						has_just_delivered_food = True
 		else:
 			if self.last_closest_road != self.closest_road: # not in junction and visiting a new road
 				visiting_new_road = True
@@ -399,6 +400,14 @@ class GraphDriveAgent:
 				self.source_junction = MultiAgentRoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 				self.goal_junction = MultiAgentRoadNetwork.get_furthermost_junction(self.closest_junction_list, self.car_point)
 				self.current_road_speed_list = []
+			if not self.env_config['allow_uturns_on_edges']:
+				if is_source_junction(self.goal_junction) and not self.has_food:
+					has_just_taken_food = True
+					self.has_food = True
+				elif is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
+					self.road_network.deliver_food(self.goal_junction)
+					self.has_food = False
+					has_just_delivered_food = True
 		self.current_road_speed_list.append(self.speed)
 		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food
 
@@ -407,8 +416,9 @@ class GraphDriveAgent:
 
 	def get_fairness_score(self, has_just_delivered_food, has_just_taken_food):
 		####### Facts
+		j = self.closest_junction if self.env_config['allow_uturns_on_edges'] else self.goal_junction
 		if has_just_delivered_food: 
-			just_delivered_to_worst_target = self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries
+			just_delivered_to_worst_target = j.food_deliveries == self.road_network.min_food_deliveries or j.food_deliveries-1 == self.road_network.min_food_deliveries
 			return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
 		if self.goal_junction:
 			moving_towards_target_with_food = is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food
