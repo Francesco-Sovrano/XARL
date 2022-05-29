@@ -13,7 +13,7 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
 
-SELECT_ENV = "MAGraphDrive-PVComm"
+SELECT_ENV = "MAGraphDrive-FullWorldSomeAgents"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 VISIBILITY_RADIUS = 10
@@ -24,6 +24,7 @@ CONFIG["env_config"] = {
 	'force_car_to_stay_on_road': True,
 	'optimal_steering_angle_on_road': True,
 	'allow_uturns_on_edges': True,
+	'fairness_reward_fn': 'sparse_fairness_reward', # one of the following: None, 'sparse_fairness_reward', 'frequent_fairness_reward'
 	'visibility_radius': VISIBILITY_RADIUS,
 	'max_food_per_target': 1,
 	'blockage_probability': None,

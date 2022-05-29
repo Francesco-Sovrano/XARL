@@ -34,19 +34,27 @@ for culture_level in culture_level_list:
 	register_env(f"GraphDrive-{culture_level}-Sparse-ExplanationEngineering-V3", lambda config: GraphDrive({"reward_fn": 'sparse_reward_explanation_engineering_v3', "culture_level": culture_level}))
 	register_env(f"GraphDrive-{culture_level}-Sparse-S*J", lambda config: GraphDrive({"reward_fn": 'sparse_reward_step_multiplied_by_junctions', "culture_level": culture_level}))
 
-### MultiAgentGraphDrive
-from environments.car_controller.food_delivery_multi_agent_graph_drive.global_view_env import MultiAgentGraphDrive
+### Multi-Agent GraphDrive
+from environments.car_controller.food_delivery_multi_agent_graph_drive.full_world_all_agents_env import FullWorldAllAgents_GraphDrive
 culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
-	register_env(f"MAGraphDrive-{culture_level}", lambda config: MultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
-	register_env(f"MAGraphDrive-{culture_level}-Sparse", lambda config: MultiAgentGraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
-register_env(f"MAGraphDrive", lambda config: MultiAgentGraphDrive({"reward_fn": 'frequent_reward_no_culture', "culture_level": "Easy", **config}))
-register_env(f"MAGraphDrive-Sparse", lambda config: MultiAgentGraphDrive({"reward_fn": 'sparse_reward_no_culture', "culture_level": "Easy", **config}))
+	register_env(f"MAGraphDrive-FullWorldAllAgents-{culture_level}", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
+	register_env(f"MAGraphDrive-FullWorldAllAgents-{culture_level}-Sparse", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
+register_env(f"MAGraphDrive-FullWorldAllAgents", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'frequent_reward_no_culture', "culture_level": "Easy", **config}))
+register_env(f"MAGraphDrive-FullWorldAllAgents-Sparse", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'sparse_reward_no_culture', "culture_level": "Easy", **config}))
 
-from environments.car_controller.food_delivery_multi_agent_graph_drive.partial_view_with_comm_env import PVCommMultiAgentGraphDrive
+from environments.car_controller.food_delivery_multi_agent_graph_drive.part_world_some_agents_env import PartWorldSomeAgents_GraphDrive
 culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
-	register_env(f"MAGraphDrive-PVComm-{culture_level}", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
-	register_env(f"MAGraphDrive-PVComm-{culture_level}-Sparse", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
-register_env(f"MAGraphDrive-PVComm", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **config}))
-register_env(f"MAGraphDrive-PVComm-Sparse", lambda config: PVCommMultiAgentGraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": None, **config}))
+	register_env(f"MAGraphDrive-PartWorldSomeAgents-{culture_level}", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
+	register_env(f"MAGraphDrive-PartWorldSomeAgents-{culture_level}-Sparse", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
+register_env(f"MAGraphDrive-PartWorldSomeAgents", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **config}))
+register_env(f"MAGraphDrive-PartWorldSomeAgents-Sparse", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": None, **config}))
+
+from environments.car_controller.food_delivery_multi_agent_graph_drive.full_world_some_agents_env import FullWorldSomeAgents_GraphDrive
+culture_level_list = ["Easy","Medium","Hard"]
+for culture_level in culture_level_list:
+	register_env(f"MAGraphDrive-FullWorldSomeAgents-{culture_level}", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
+	register_env(f"MAGraphDrive-FullWorldSomeAgents-{culture_level}-Sparse", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
+register_env(f"MAGraphDrive-FullWorldSomeAgents", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **config}))
+register_env(f"MAGraphDrive-FullWorldSomeAgents-Sparse", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": None, **config}))

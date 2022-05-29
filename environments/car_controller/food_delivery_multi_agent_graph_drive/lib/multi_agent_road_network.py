@@ -38,29 +38,25 @@ class MultiAgentRoadNetwork(RoadNetwork):
 			x.pos: x
 			for x in self.junctions
 		}
-		self._closest_target_type_by_depth_cache = {}
 
 	def deliver_food(self, j):
 		j.food_deliveries += 1
 		self.food_deliveries += 1
 		self.min_food_deliveries = min(map(lambda x: x.food_deliveries, self.target_junctions))
 
-	def get_target_type(self, j):
-		if not j.is_target:
+	def get_target_type(self, j, is_target_fn):
+		if not is_target_fn(j):
 			return None
 		if j.food_deliveries == self.min_food_deliveries:
 			return 'worst'
 		return 'best'
 
-	def get_closest_target_type(self, start_junction, max_depth=float('inf')):
-		target_type = self.get_target_type(start_junction)
+	def get_closest_target_type(self, start_junction, max_depth=float('inf'), is_target_fn=None):
+		if not is_target_fn:
+			is_target_fn = lambda x: x.is_target
+		target_type = self.get_target_type(start_junction, is_target_fn)
 		if target_type:
 			return target_type
-		cache = self._closest_target_type_by_depth_cache.get(max_depth, None)
-		if cache is None:
-			cache = self._closest_target_type_by_depth_cache[max_depth] = {}
-		elif start_junction.pos in cache:
-			return cache[start_junction.pos]
 		visited_junction_set = set()
 		junction_list = [start_junction]
 		depth = 1
@@ -72,7 +68,7 @@ class MultiAgentRoadNetwork(RoadNetwork):
 				advantaged_target_list = []
 				for road in junction.roads_connected:
 					other_junction = self.junction_dict[road.end.pos if road.start.pos == junction.pos else road.start.pos]
-					target_type = self.get_target_type(other_junction)
+					target_type = self.get_target_type(other_junction, is_target_fn)
 					if target_type == 'worst':
 						least_advantaged_target_list.append(other_junction)
 					elif target_type == 'best':
@@ -80,17 +76,13 @@ class MultiAgentRoadNetwork(RoadNetwork):
 					elif other_junction.pos not in visited_junction_set:
 						other_junction_list.append(other_junction)
 				if least_advantaged_target_list and advantaged_target_list:
-					cache[start_junction.pos] = 'best_n_worst'
 					return 'best_n_worst'
 				if least_advantaged_target_list:
-					cache[start_junction.pos] = 'worst'
 					return 'worst'
 				if advantaged_target_list:
-					cache[start_junction.pos] = 'best'
 					return 'best'
 			junction_list = other_junction_list
 			depth += 1
-		cache[start_junction.pos] = None
 		return None
 
 	def get_random_starting_point_list(self, n=1):

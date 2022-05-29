@@ -5,9 +5,27 @@ import logging
 import numpy as np
 import gym
 import torch_geometric
+from torch_geometric.transforms import BaseTransform
 
 logger = logging.getLogger(__name__)
 torch, nn = try_import_torch()
+
+class RelativeOrientation(BaseTransform):
+	def __init__(self):
+		pass
+
+	def __call__(self, data):
+		(row, col), deg, pseudo = data.edge_index, data.deg, data.edge_attr
+
+		cart = deg[row] - deg[col]
+		cart = cart.view(-1, 1) if cart.dim() == 1 else cart
+		pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
+		data.edge_attr = torch.cat([pseudo, cart.type_as(pseudo)], dim=-1)
+
+		return data
+
+	def __repr__(self) -> str:
+		return self.__class__.__name__
 
 class CommAdaptiveModel(AdaptiveModel):
 	def __init__(self, obs_space, config):
@@ -21,15 +39,15 @@ class CommAdaptiveModel(AdaptiveModel):
 		###### GNN ######
 		agent_features_size = self.get_agent_features_size()
 		logger.warning(f"Agent features size: {agent_features_size}")
-		self.n_agents = len(obs_space['all_agents_absolute_position_list'])
-		self.n_leaders = len(obs_space['all_leaders_absolute_position_list']) if 'all_leaders_absolute_position_list' in obs_space else 0
+		self.n_agents = obs_space['all_agents_absolute_position_vector'].shape[0]
+		self.n_leaders = obs_space['all_leaders_absolute_position_vector'].shape[0] if 'all_leaders_absolute_position_vector' in obs_space else 0
 		self.n_agents_and_leaders = self.n_agents + self.n_leaders
 		self.max_num_neighbors = config.get('max_num_neighbors', 32)
 		self.message_size = config.get('message_size', 32)
 		self.comm_range = torch.Tensor([config.get('comm_range', 10.)])
 		self.gnn = GNNBranch(
 			node_features=agent_features_size,
-			edge_features=2, # position
+			edge_features=2+1, # position + orientation
 			out_features=self.message_size,
 			node_embedding=config.get('node_embedding_units', 8),
 			edge_embedding=config.get('edge_embedding_units', 8),
@@ -58,15 +76,16 @@ class CommAdaptiveModel(AdaptiveModel):
 		all_agents_features = torch.stack(list(map(super_forward, x['all_agents_relative_features_list'])), dim=1)
 		main_output = torch.sum(all_agents_features*this_agent_id_mask, dim=1)
 
-		all_agents_positions = torch.stack(x['all_agents_absolute_position_list'], dim=1)
+		all_agents_positions = x['all_agents_absolute_position_vector']
 		if self.n_leaders:
 			all_agents_positions = torch.cat(
 				[
-					torch.stack(x['all_leaders_absolute_position_list'], dim=1), 
+					x['all_leaders_absolute_position_vector'], 
 					all_agents_positions
 				], 
 				dim=1
 			)
+		all_agents_orientations = x['all_agents_absolute_orientation_vector']
 
 		device = all_agents_positions.device
 		batch_size = all_agents_positions.shape[0]
@@ -79,14 +98,16 @@ class CommAdaptiveModel(AdaptiveModel):
 			dim=0
 		).to(device)
 		graphs.pos = all_agents_positions.reshape(-1, all_agents_positions.shape[-1])
+		graphs.deg = all_agents_orientations.reshape(-1, all_agents_orientations.shape[-1])
 		graphs.x = all_agents_features.reshape(-1, all_agents_features.shape[-1])
 		if self.n_leaders:
 			all_agents_types = torch.zeros(batch_size, self.n_agents_and_leaders, 1, device=device)
 			all_agents_types[:, :self.n_leaders] = 1.0
 			all_agents_types = all_agents_types.reshape(-1, all_agents_types.shape[-1])
 			graphs.x = torch.cat([graphs.x, all_agents_types], dim=1)
-		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs.to(device)) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
-		graphs = torch_geometric.transforms.Cartesian(norm=False)(graphs.to(device)) # Saves the relative Cartesian coordinates of linked nodes in its edge attributes (functional name: cartesian).
+		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
+		graphs = torch_geometric.transforms.Cartesian(norm=False)(graphs) # Saves the relative Cartesian coordinates of linked nodes in its edge attributes (functional name: cartesian).
+		graphs = RelativeOrientation()(graphs) # Saves the relative orientations in its edge attributes
 
 		## process graphs
 		gnn_output = self.gnn(graphs.x, graphs.edge_index, graphs.edge_attr)

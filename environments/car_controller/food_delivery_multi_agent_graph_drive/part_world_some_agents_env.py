@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from environments.car_controller.food_delivery_multi_agent_graph_drive.global_view_env import *
+from environments.car_controller.food_delivery_multi_agent_graph_drive.full_world_all_agents_env import *
 
 
-class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
+class PartWorldSomeAgents_Agent(FullWorldAllAgents_GraphDrive):
 
 	def __init__(self, n_of_other_agents, culture, env_config):
 		super().__init__(n_of_other_agents, culture, env_config)
@@ -70,7 +70,7 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
 		source_x, source_y = source_point
-		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, 0))
+		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
 		visible_road_network_junctions = self.road_network.junctions
 		visible_road_network_junctions = filter(lambda j: self.can_see(j.pos), visible_road_network_junctions) #self.visible_road_network_junctions
 		visible_road_network_junctions = filter(lambda j: j.roads_connected, visible_road_network_junctions)
@@ -105,23 +105,19 @@ class PartiallyObservableGraphDriveAgent(GraphDriveAgent):
 		return junctions_view_list, roads_view_list
 
 
-class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
+class PartWorldSomeAgents_GraphDrive(FullWorldAllAgents_GraphDrive):
 
 	def __init__(self, config=None):
 		super().__init__(config)
 		self.agent_list = [
-			PartiallyObservableGraphDriveAgent(self.num_agents-1, self.culture, self.env_config)
+			PartWorldSomeAgents_Agent(self.num_agents-1, self.culture, self.env_config)
 			for _ in range(self.num_agents)
 		]
 		self.action_space = self.agent_list[0].action_space
 		base_space = self.agent_list[0].observation_space
 		self.observation_space = gym.spaces.Dict({
-			'all_agents_absolute_position_list': gym.spaces.Tuple(
-				[gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(2,), dtype=np.float32)]*self.num_agents
-			),
-			# 'all_agents_absolute_orientation_list': gym.spaces.Tuple(
-			# 	[gym.spaces.Box(low=0, high=two_pi, shape=(1,), dtype=np.float32)]*self.num_agents
-			# ),
+			'all_agents_absolute_position_vector': gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.num_agents,2), dtype=np.float32),
+			'all_agents_absolute_orientation_vector': gym.spaces.Box(low=0, high=two_pi, shape=(self.num_agents,1), dtype=np.float32),
 			'all_agents_relative_features_list': gym.spaces.Tuple(
 				[base_space]*self.num_agents
 			),
@@ -136,27 +132,12 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 	def get_empty_state_recursively(_obs_space):
 		if isinstance(_obs_space, gym.spaces.Dict):
 			return {
-				k: PVCommMultiAgentGraphDrive.get_empty_state_recursively(v)
+				k: PartWorldSomeAgents_GraphDrive.get_empty_state_recursively(v)
 				for k,v in _obs_space.spaces.items()
 			}
 		elif isinstance(_obs_space, gym.spaces.Tuple):
-			return list(map(PVCommMultiAgentGraphDrive.get_empty_state_recursively, _obs_space.spaces))
+			return list(map(PartWorldSomeAgents_GraphDrive.get_empty_state_recursively, _obs_space.spaces))
 		return np.zeros(_obs_space.shape, dtype=_obs_space.dtype)
-
-	def get_relative_position(self, this_agent_id, that_agent_id):
-		if this_agent_id==that_agent_id:
-			return (0,0)
-		this_agent = self.agent_list[this_agent_id]
-		source_x, source_y = this_agent.car_point
-		source_orientation = this_agent.car_orientation
-
-		that_agent = self.agent_list[that_agent_id]
-		return shift_and_rotate(*that_agent.car_point, -source_x, -source_y, -source_orientation)
-
-	def is_alive_and_visible(self, this_agent_id, that_agent_id):
-		this_agent = self.agent_list[this_agent_id]
-		that_agent = self.agent_list[that_agent_id]
-		return not that_agent.is_dead and this_agent.can_see(that_agent.car_point)
 
 	def get_this_agent_id_mask(self, this_agent_id):
 		agent_id_mask = self.agent_id_mask_dict.get(this_agent_id,None)
@@ -170,44 +151,27 @@ class PVCommMultiAgentGraphDrive(MultiAgentGraphDrive):
 		if not state_dict:
 			return state_dict
 
-		all_agents_absolute_position_list = [
+		all_agents_absolute_position_vector = np.array([
 			np.array(self.agent_list[that_agent_id].car_point, dtype=np.float32) if that_agent_id in state_dict else self.invisible_position_vec
 			for that_agent_id in range(self.num_agents)
-		]
-		# all_agents_absolute_orientation_list = [
-		# 	np.array(self.agent_list[that_agent_id].car_orientation, dtype=np.float32) if that_agent_id in state_dict else 0
-		# 	for that_agent_id in range(self.num_agents)
-		# ]
+		])
+		all_agents_absolute_orientation_vector = np.array([
+			self.agent_list[that_agent_id].car_orientation if that_agent_id in state_dict else 0.
+			for that_agent_id in range(self.num_agents)
+		], dtype=np.float32)[:, np.newaxis]
 		all_agents_relative_features_list = [
 			state_dict.get(that_agent_id,self.empty_agent_features)
 			for that_agent_id in range(self.num_agents)
 		]
 		return {
 			this_agent_id: {
-				'all_agents_absolute_position_list': all_agents_absolute_position_list,
-				# 'all_agents_absolute_orientation_list': all_agents_absolute_orientation_list,
+				'all_agents_absolute_position_vector': all_agents_absolute_position_vector,
+				'all_agents_absolute_orientation_vector': all_agents_absolute_orientation_vector,
 				'all_agents_relative_features_list': all_agents_relative_features_list,
 				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
 			}
 			for this_agent_id in state_dict.keys()
 		}
-		# new_state_dict = {}
-		# for this_agent_id in state_dict.keys():
-		# 	all_agents_absolute_position_list = []
-		# 	all_agents_relative_features_list = []
-		# 	for that_agent_id in range(self.num_agents):
-		# 		if that_agent_id==this_agent_id or self.is_alive_and_visible(this_agent_id, that_agent_id):
-		# 			all_agents_absolute_position_list.append(np.array(self.get_relative_position(this_agent_id, that_agent_id), dtype=np.float32))
-		# 			all_agents_relative_features_list.append(state_dict[that_agent_id])
-		# 		else:
-		# 			all_agents_absolute_position_list.append(self.invisible_position_vec)
-		# 			all_agents_relative_features_list.append(self.empty_agent_features)
-		# 	new_state_dict[this_agent_id] = {
-		# 		'all_agents_absolute_position_list': all_agents_absolute_position_list,
-		# 		'all_agents_relative_features_list': all_agents_relative_features_list,
-		# 		'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
-		# 	}
-		# return new_state_dict
 
 	def reset(self):
 		return self.build_state_with_comm(super().reset())

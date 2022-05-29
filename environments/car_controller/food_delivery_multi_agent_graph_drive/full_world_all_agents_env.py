@@ -28,7 +28,7 @@ is_source_junction = lambda j: j.is_source
 is_target_junction = lambda j, max_food_per_target: j.is_target and j.food_deliveries < max_food_per_target
 is_relevant_junction = lambda j, max_food_per_target: is_source_junction(j) or is_target_junction(j, max_food_per_target)
 
-class GraphDriveAgent:
+class FullWorldAllAgents_Agent:
 
 	def seed(self, seed=None):
 		# logger.warning(f"Setting random seed to: {seed}")
@@ -42,6 +42,7 @@ class GraphDriveAgent:
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
 		self.reward_fn = eval(f'self.{self.env_config["reward_fn"]}')
+		self.fairness_reward_fn = eval(f'self.{self.env_config["fairness_reward_fn"]}') if self.env_config.get("fairness_reward_fn",None) else lambda x: 0
 		
 		self.obs_road_features = len(culture.properties) if culture else 0  # Number of binary ROAD features in Hard Culture
 		self.obs_car_features = (len(culture.agent_properties) - 1) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
@@ -86,8 +87,8 @@ class GraphDriveAgent:
 				high= 1,
 				shape= (
 					self.n_of_other_agents,
-					2 + self.agent_state_size + self.obs_car_features,
-				), # for each other possible agent give position + state + features
+					2 + 1 + self.agent_state_size + self.obs_car_features,
+				), # for each other possible agent give position + orientation + state + features
 				dtype=np.float32
 			)
 		self.observation_space = gym.spaces.Dict(state_dict)
@@ -157,7 +158,7 @@ class GraphDriveAgent:
 
 	@property
 	def agent_state_size(self):
-		agent_state_size = 6
+		agent_state_size = 5
 		if not self.env_config['force_car_to_stay_on_road']:
 			agent_state_size += 1
 		if self.env_config['blockage_probability']:
@@ -166,7 +167,7 @@ class GraphDriveAgent:
 
 	def get_agent_state(self):
 		agent_state = [
-			self.car_orientation/two_pi, # in [0,1) # needed in multi-agent environments, otherwise relative positions would be meaningless
+			# self.car_orientation/two_pi, # in [0,1) # needed in multi-agent environments, otherwise relative positions would be meaningless
 			self.steering_angle/self.env_config['max_steering_angle'], # normalised steering angle
 			self.speed/self.env_config['max_speed'], # normalised speed
 			self.is_in_junction(self.car_point),
@@ -209,7 +210,7 @@ class GraphDriveAgent:
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
 		source_x, source_y = source_point
-		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, 0))
+		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
 		road_network_junctions = filter(lambda j: j.roads_connected, self.road_network.junctions)
 		road_network_junctions = map(lambda j: {'junction_pos':shift_rotate_normalise_point(j.pos), 'junction':j}, road_network_junctions)
 		sorted_junctions = sorted(road_network_junctions, key=lambda x: x['junction_pos'])
@@ -242,6 +243,7 @@ class GraphDriveAgent:
 			sorted_alive_agents = sorted((
 				(
 					shift_rotate_normalise_point(agent.car_point), 
+					agent.car_orientation/two_pi,
 					agent.get_agent_state(), 
 					(agent.agent_id.binary_features(as_tuple=True) if self.culture else []), 
 					# agent.is_dead
@@ -249,8 +251,8 @@ class GraphDriveAgent:
 				for agent in alive_agent
 			), key=lambda x: x[0])
 			sorted_alive_agents = [
-				(*agent_point, *agent_state, *agent_features)
-				for agent_point, agent_state, agent_features in sorted_alive_agents
+				(*agent_point, agent_orientation, *agent_state, *agent_features)
+				for agent_point, agent_orientation, agent_state, agent_features in sorted_alive_agents
 			]
 			agents_view_list = [
 				np.array(sorted_alive_agents[i], dtype=np.float32) 
@@ -414,27 +416,24 @@ class GraphDriveAgent:
 	def get_car_projection_on_road(self, car_point, closest_road):
 		return poit_to_line_projection(car_point, closest_road.edge)
 
-	def get_fairness_score(self, has_just_delivered_food, has_just_taken_food):
-		####### Facts
-		j = self.closest_junction if self.env_config['allow_uturns_on_edges'] else self.goal_junction
-		if has_just_delivered_food: 
-			just_delivered_to_worst_target = j.food_deliveries == self.road_network.min_food_deliveries or j.food_deliveries-1 == self.road_network.min_food_deliveries
-			return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
-		if self.goal_junction:
-			moving_towards_target_with_food = is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food
-			if moving_towards_target_with_food:
-				delivering_to_worst_target = self.goal_junction.food_deliveries == self.road_network.min_food_deliveries
-				return 'is_fairly_pursuing_a_poor_target' if delivering_to_worst_target else 'is_pursuing_a_rich_target'
-		####### Conjectures
-		if self.goal_junction:
-			is_exploring_fairly = not self.goal_junction.is_visited
-			if is_exploring_fairly:
-				return 'is_exploring_fairly'
-			closest_target_type = self.road_network.get_closest_target_type(self.goal_junction, max_depth=3)
-			if closest_target_type=='worst':
-				return 'is_likely_to_pursue_a_rich_target_in_3_nodes'
-			if closest_target_type=='best':
-				return 'is_likely_to_pursue_a_poor_target_in_3_nodes'
+	def get_fairness_score(self, has_just_delivered_food, has_just_taken_food, visiting_new_junction):
+		if visiting_new_junction:
+			####### Facts
+			if has_just_delivered_food: 
+				just_delivered_to_worst_target = self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries
+				return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
+			####### Conjectures
+			else:
+				# is_exploring_fairly = not self.closest_junction.is_visited
+				# if is_exploring_fairly:
+				# 	return 'is_probably_exploring'
+				if self.has_food:
+					closest_target_type = self.road_network.get_closest_target_type(self.closest_junction, max_depth=3, is_target_fn=lambda x: is_target_junction(x,self.env_config['max_food_per_target']))
+					if closest_target_type:
+						if 'worst' in closest_target_type:
+							return 'is_likely_to_fairly_pursue_a_poor_target_in_3_nodes'
+						if closest_target_type=='best':
+							return 'is_likely_to_pursue_a_rich_target_in_3_nodes'
 		#######
 		# if has_just_taken_food: 
 		# 	return 'fair'
@@ -445,19 +444,16 @@ class GraphDriveAgent:
 		return 'unknown'
 
 	def end_step(self, visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food):
-		# compute perceived reward
 		reward, dead, reward_type = self.reward_fn(visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food)
-		# reward /= self.n_of_other_agents+1
+		how_fair = self.get_fairness_score(has_just_delivered_food, has_just_taken_food, visiting_new_junction)
+		reward += self.fairness_reward_fn(how_fair)
 		self.slowdown_factor = self.get_slowdown_factor()
-		# compute new state (after updating progress)
+
 		state = self.get_state()
-		# update last action/state/reward
-		self.last_reward = reward
-		self.last_reward_type = reward_type
 		info_dict = {
 			'explanation':{
 				'why': reward_type,
-				'how_fair': self.get_fairness_score(has_just_delivered_food, has_just_taken_food),
+				'how_fair': how_fair,
 			},
 			"stats_dict": {
 				"min_food_deliveries": self.road_network.min_food_deliveries,
@@ -466,8 +462,11 @@ class GraphDriveAgent:
 			},
 			# 'discard': self.idle and not reward,
 		}
+
 		self.is_dead = dead
 		self.step += 1
+		self.last_reward = reward
+		self.last_reward_type = reward_type
 		return [state, reward, dead, info_dict]
 			
 	def get_info(self):
@@ -483,10 +482,10 @@ class GraphDriveAgent:
 			return (reward if is_positive else -reward, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
-		#######################################
-		# "Mission completed" rule
-		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
-			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
+		# #######################################
+		# # "Mission completed" rule
+		# if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
+		# 	return null_reward(is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Is colliding" rule
@@ -553,10 +552,10 @@ class GraphDriveAgent:
 			return (1 if is_positive else -1, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
-		#######################################
-		# "Mission completed" rule
-		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
-			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
+		# #######################################
+		# # "Mission completed" rule
+		# if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
+		# 	return null_reward(is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Is colliding" rule
@@ -605,9 +604,14 @@ class GraphDriveAgent:
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')
 
+	def sparse_fairness_reward(self, how_fair):
+		return 1 if 'has_fairly_pursued_a_poor_target' == how_fair else 0
+
+	def frequent_fairness_reward(self, how_fair):
+		return 1 if 'fairly' in how_fair else 0
 
 
-class MultiAgentGraphDrive(MultiAgentEnv):
+class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 	metadata = {'render.modes': ['human', 'rgb_array']}
 	
 	def seed(self, seed=None):
@@ -656,7 +660,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		) if self.env_config["culture_level"] else None
 
 		self.agent_list = [
-			GraphDriveAgent(self.num_agents-1, self.culture, self.env_config)
+			FullWorldAllAgents_Agent(self.num_agents-1, self.culture, self.env_config)
 			for _ in range(self.num_agents)
 		]
 		self.action_space = self.agent_list[0].action_space
@@ -701,7 +705,7 @@ class MultiAgentGraphDrive(MultiAgentEnv):
 		# end_step uses information about all agents, this requires all agents to act first and compute rewards and states after everybody acted
 		for uid,step_info in step_info_dict.items():
 			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step(*step_info)
-		terminal_dict['__all__'] = all(terminal_dict.values())
+		terminal_dict['__all__'] = all(terminal_dict.values()) or self.road_network.min_food_deliveries == self.env_config['max_food_per_target']
 		return state_dict, reward_dict, terminal_dict, info_dict
 			
 	def get_info(self):

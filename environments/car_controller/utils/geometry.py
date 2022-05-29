@@ -6,12 +6,12 @@ from skspatial.objects import Line
 two_pi = 2*np.pi
 pi = np.pi
 		
-def rotate(x,y,theta):
+def rotate(x,y,theta=0):
 	sin_theta = np.sin(theta)
 	cos_theta = np.cos(theta)
 	return (x*cos_theta-y*sin_theta, x*sin_theta+y*cos_theta)
 
-def shift_and_rotate(xv,yv,dx,dy,theta):
+def shift_and_rotate(xv,yv,dx,dy,theta=0):
 	return rotate(xv+dx,yv+dy,theta)
 
 def rotate_and_shift(xv,yv,dx,dy,theta):

@@ -24,7 +24,8 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 		'num_agents': num_agents,
 		'force_car_to_stay_on_road': True,
 		'optimal_steering_angle_on_road': True,
-		'allow_uturns_on_edges': False,
+		'allow_uturns_on_edges': True,
+		'fairness_reward_fn': 'sparse_fairness_reward', # one of the following: None, 'sparse_fairness_reward', 'frequent_fairness_reward'
 		'visibility_radius': VISIBILITY_RADIUS,
 		'max_food_per_target': max_food_per_target,#(num_agents//target_junctions_number)+2,
 		'blockage_probability': None,
@@ -66,7 +67,7 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 
 env_config = get_default_environment_MAGraphDrive_options(32)
 
-env = PVCommMultiAgentGraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **env_config})
+env = FullWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **env_config})
 env.seed(38)
 # env = CescoDriveV0()
 multiagent = isinstance(env, MultiAgentEnv)
