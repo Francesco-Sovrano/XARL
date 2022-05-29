@@ -14,7 +14,7 @@ def rotate(x,y,theta=0):
 def shift_and_rotate(xv,yv,dx,dy,theta=0):
 	return rotate(xv+dx,yv+dy,theta)
 
-def rotate_and_shift(xv,yv,dx,dy,theta):
+def rotate_and_shift(xv,yv,dx,dy,theta=0):
 	(x,y) = rotate(xv,yv,theta)
 	return (x+dx,y+dy)
 

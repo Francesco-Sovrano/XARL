@@ -119,6 +119,7 @@ CONFIG.update({
 	"clustering_scheme": [ # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
 		'Who',
 		'How_Well',
+		'How_Fair',
 		'Why',
 		# 'Where',
 		# 'What',

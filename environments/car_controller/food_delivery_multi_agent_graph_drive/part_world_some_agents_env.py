@@ -2,7 +2,7 @@
 from environments.car_controller.food_delivery_multi_agent_graph_drive.full_world_all_agents_env import *
 
 
-class PartWorldSomeAgents_Agent(FullWorldAllAgents_GraphDrive):
+class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 
 	def __init__(self, n_of_other_agents, culture, env_config):
 		super().__init__(n_of_other_agents, culture, env_config)

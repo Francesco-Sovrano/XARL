@@ -10,17 +10,64 @@ from torch_geometric.transforms import BaseTransform
 logger = logging.getLogger(__name__)
 torch, nn = try_import_torch()
 
+two_pi = 2*np.pi
+pi = np.pi
+		
+def rotate(x,y,theta=0):
+	sin_theta = np.sin(theta)
+	cos_theta = np.cos(theta)
+	return (x*cos_theta-y*sin_theta, x*sin_theta+y*cos_theta)
+
+def shift_and_rotate(xv,yv,dx,dy,theta=0):
+	return rotate(xv+dx,yv+dy,theta)
+
+class RelativePosition(BaseTransform):
+	def __init__(self):
+		pass
+
+	def __call__(self, data):
+		(row, col), pos, deg, pseudo = data.edge_index, data.pos, data.deg, data.edge_attr
+
+		xy = pos[row] - pos[col]
+		sin_theta = torch.sin(-deg[col])
+		cos_theta = torch.cos(-deg[col])
+		x = xy[:,0][:,None]
+		y = xy[:,1][:,None]
+		xy = torch.cat(
+			[
+				x*cos_theta-y*sin_theta,
+				x*sin_theta+y*cos_theta
+			], 
+			dim=-1
+		)
+		
+		xy = xy.view(-1, 1) if xy.dim() == 1 else xy
+		if pseudo is not None:
+			pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
+			data.edge_attr = torch.cat([pseudo, xy.type_as(pseudo)], dim=-1)
+		else:
+			data.edge_attr = xy
+
+		return data
+
+	def __repr__(self) -> str:
+		return self.__class__.__name__
+
 class RelativeOrientation(BaseTransform):
 	def __init__(self):
 		pass
 
 	def __call__(self, data):
-		(row, col), deg, pseudo = data.edge_index, data.deg, data.edge_attr
+		(row, col), orientation, pseudo = data.edge_index, data.deg, data.edge_attr
 
-		cart = deg[row] - deg[col]
-		cart = cart.view(-1, 1) if cart.dim() == 1 else cart
-		pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
-		data.edge_attr = torch.cat([pseudo, cart.type_as(pseudo)], dim=-1)
+		relative_orientation = orientation[row] - orientation[col]
+		relative_orientation = relative_orientation.view(-1, 1) if relative_orientation.dim() == 1 else relative_orientation
+
+		if pseudo is not None:
+			pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
+			data.edge_attr = torch.cat([pseudo, relative_orientation.type_as(pseudo)], dim=-1)
+		else:
+			data.edge_attr = relative_orientation
 
 		return data
 
@@ -106,7 +153,7 @@ class CommAdaptiveModel(AdaptiveModel):
 			all_agents_types = all_agents_types.reshape(-1, all_agents_types.shape[-1])
 			graphs.x = torch.cat([graphs.x, all_agents_types], dim=1)
 		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
-		graphs = torch_geometric.transforms.Cartesian(norm=False)(graphs) # Saves the relative Cartesian coordinates of linked nodes in its edge attributes (functional name: cartesian).
+		graphs = RelativePosition()(graphs) # Saves the relative positions of linked nodes in its edge attributes
 		graphs = RelativeOrientation()(graphs) # Saves the relative orientations in its edge attributes
 
 		## process graphs
