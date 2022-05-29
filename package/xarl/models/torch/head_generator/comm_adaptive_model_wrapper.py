@@ -33,7 +33,7 @@ class RelativePosition(BaseTransform):
 		cos_theta = torch.cos(-deg[col])
 		x = xy[:,0][:,None]
 		y = xy[:,1][:,None]
-		xy = torch.cat(
+		relative_xy = torch.cat(
 			[
 				x*cos_theta-y*sin_theta,
 				x*sin_theta+y*cos_theta
@@ -41,12 +41,12 @@ class RelativePosition(BaseTransform):
 			dim=-1
 		)
 		
-		xy = xy.view(-1, 1) if xy.dim() == 1 else xy
+		relative_xy = relative_xy.view(-1, 1) if relative_xy.dim() == 1 else relative_xy
 		if pseudo is not None:
 			pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
-			data.edge_attr = torch.cat([pseudo, xy.type_as(pseudo)], dim=-1)
+			data.edge_attr = torch.cat([pseudo, relative_xy.type_as(pseudo)], dim=-1)
 		else:
-			data.edge_attr = xy
+			data.edge_attr = relative_xy
 
 		return data
 
@@ -54,13 +54,15 @@ class RelativePosition(BaseTransform):
 		return self.__class__.__name__
 
 class RelativeOrientation(BaseTransform):
-	def __init__(self):
-		pass
+	def __init__(self, norm=False):
+		self.norm = norm
 
 	def __call__(self, data):
 		(row, col), orientation, pseudo = data.edge_index, data.deg, data.edge_attr
 
-		relative_orientation = orientation[row] - orientation[col]
+		relative_orientation = torch.remainder(orientation[row] - orientation[col], 2*np.pi)
+		if self.norm:
+			relative_orientation /= 2*np.pi
 		relative_orientation = relative_orientation.view(-1, 1) if relative_orientation.dim() == 1 else relative_orientation
 
 		if pseudo is not None:
@@ -154,7 +156,7 @@ class CommAdaptiveModel(AdaptiveModel):
 			graphs.x = torch.cat([graphs.x, all_agents_types], dim=1)
 		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
 		graphs = RelativePosition()(graphs) # Saves the relative positions of linked nodes in its edge attributes
-		graphs = RelativeOrientation()(graphs) # Saves the relative orientations in its edge attributes
+		graphs = RelativeOrientation(norm=True)(graphs) # Saves the relative orientations in its edge attributes
 
 		## process graphs
 		gnn_output = self.gnn(graphs.x, graphs.edge_index, graphs.edge_attr)
