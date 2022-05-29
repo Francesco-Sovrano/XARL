@@ -153,7 +153,7 @@ class FullWorldAllAgents_Agent:
 			], dtype=np.float32),
 		}
 		if self.n_of_other_agents > 0:
-			state_dict["fc_other_agents-16"] = np.array(agents_view_list, dtype=np.float32),
+			state_dict["fc_other_agents-16"] = np.array(agents_view_list, dtype=np.float32)
 		return state_dict
 
 	@property

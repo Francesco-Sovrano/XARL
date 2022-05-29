@@ -40,8 +40,8 @@ culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
 	register_env(f"MAGraphDrive-FullWorldAllAgents-{culture_level}", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
 	register_env(f"MAGraphDrive-FullWorldAllAgents-{culture_level}-Sparse", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
-register_env(f"MAGraphDrive-FullWorldAllAgents", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'frequent_reward_no_culture', "culture_level": "Easy", **config}))
-register_env(f"MAGraphDrive-FullWorldAllAgents-Sparse", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'sparse_reward_no_culture', "culture_level": "Easy", **config}))
+register_env(f"MAGraphDrive-FullWorldAllAgents", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **config}))
+register_env(f"MAGraphDrive-FullWorldAllAgents-Sparse", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": None, **config}))
 
 from environments.car_controller.food_delivery_multi_agent_graph_drive.part_world_some_agents_env import PartWorldSomeAgents_GraphDrive
 culture_level_list = ["Easy","Medium","Hard"]
