@@ -22,11 +22,14 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 	assert target_junctions_number
 	return {
 		'num_agents': num_agents,
+		# 'discrete_action_space': True,
+		# 'n_discrete_actions': 10,
 		'force_car_to_stay_on_road': True,
 		'optimal_steering_angle_on_road': True,
-		'allow_uturns_on_edges': True,
+		'allow_uturns_on_edges': False,
 		'fairness_reward_fn': 'sparse_fairness_reward', # one of the following: None, 'sparse_fairness_reward', 'frequent_fairness_reward'
 		'visibility_radius': VISIBILITY_RADIUS,
+		'max_food_per_source': float('inf'),
 		'max_food_per_target': max_food_per_target,#(num_agents//target_junctions_number)+2,
 		'blockage_probability': None,
 		# 'blockage_probability': 0.15,

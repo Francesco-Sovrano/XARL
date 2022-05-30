@@ -22,11 +22,14 @@ VISIBILITY_RADIUS = 10
 CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
+	'discrete_action_space': False,
+	# 'n_discrete_actions': 10,
 	'force_car_to_stay_on_road': True,
 	'optimal_steering_angle_on_road': True,
 	'allow_uturns_on_edges': True,
 	'fairness_reward_fn': 'sparse_fairness_reward', # one of the following: None, 'sparse_fairness_reward', 'frequent_fairness_reward'
 	'visibility_radius': VISIBILITY_RADIUS,
+	'max_food_per_source': float('inf'),
 	'max_food_per_target': 1,
 	'blockage_probability': None,
 	# 'blockage_probability': 0.15,

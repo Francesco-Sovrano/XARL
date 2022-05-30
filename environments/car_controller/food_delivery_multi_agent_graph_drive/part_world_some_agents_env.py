@@ -16,7 +16,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				high= 1,
 				shape= (
 					self.max_n_junctions_in_view,
-					2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
+					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
 				),
 				dtype=np.float32
 			),
@@ -82,9 +82,16 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 			np.array(
 				(
 					*sorted_junctions[i]['junction_pos'], 
-					sorted_junctions[i]['junction'].is_source, 
+					sorted_junctions[i]['junction'].is_source,
+					normalize_food_count(
+						sorted_junctions[i]['junction'].food_refills, 
+						self.env_config['max_food_per_source']
+					) if sorted_junctions[i]['junction'].is_source else -1, 
 					sorted_junctions[i]['junction'].is_target, 
-					get_normalized_food_count(sorted_junctions[i]['junction'],self.env_config['max_food_per_target']) if sorted_junctions[i]['junction'].is_target else -1
+					normalize_food_count(
+						sorted_junctions[i]['junction'].food_deliveries,
+						self.env_config['max_food_per_target']
+					) if sorted_junctions[i]['junction'].is_target else -1
 				), 
 				dtype=np.float32
 			) 

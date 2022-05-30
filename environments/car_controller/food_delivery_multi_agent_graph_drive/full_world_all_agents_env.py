@@ -23,10 +23,9 @@ logger = logging.getLogger(__name__)
 
 # import time
 
-get_normalized_food_count = lambda j, max_food_per_target: np.clip(j.food_deliveries, 0, max_food_per_target)/max_food_per_target
-is_source_junction = lambda j: j.is_source
-is_target_junction = lambda j, max_food_per_target: j.is_target and j.food_deliveries < max_food_per_target
-is_relevant_junction = lambda j, max_food_per_target: is_source_junction(j) or is_target_junction(j, max_food_per_target)
+normalize_food_count = lambda value, max_value: np.clip(value, 0, max_value)/max_value
+is_source_junction = lambda j: j.is_available_source
+is_target_junction = lambda j: j.is_available_target
 
 class FullWorldAllAgents_Agent:
 
@@ -47,18 +46,27 @@ class FullWorldAllAgents_Agent:
 		self.obs_road_features = len(culture.properties) if culture else 0  # Number of binary ROAD features in Hard Culture
 		self.obs_car_features = (len(culture.agent_properties) - 1) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
 		# Spaces
+		self.discrete_action_space = self.env_config['discrete_action_space']
 		self.decides_acceleration = not self.env_config['force_car_to_stay_on_road'] or self.culture
-		if self.decides_acceleration:
-			self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float32)  # steering angle and speed
+		if self.discrete_action_space:
+			self.allowed_steering_angles = np.linspace(-1, 1, self.env_config['n_discrete_actions']).tolist()
+			if not self.decides_acceleration:
+				self.allowed_accelerations = [1]
+			else:
+				self.allowed_accelerations = np.linspace(-1, 1, self.env_config['n_discrete_actions']).tolist()
+			self.action_space = gym.spaces.Discrete(len(self.allowed_steering_angles)*len(self.allowed_accelerations))
 		else:
-			self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)  # steering angle
+			if self.decides_acceleration:
+				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float32)  # steering angle and speed
+			else:
+				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)  # steering angle
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
 				high= 1,
 				shape= (
 					self.env_config['junctions_number'],
-					2 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_food_count
+					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
 				),
 				dtype=np.float32
 			),
@@ -216,13 +224,23 @@ class FullWorldAllAgents_Agent:
 		sorted_junctions = sorted(road_network_junctions, key=lambda x: x['junction_pos'])
 
 		##### Get junctions view
+		# assert self.env_config['max_food_per_source'] == float('inf'), "Rewrite the get_view function (junctions_view_list) if you want to have limited food at sources"
 		junctions_view_list = [
-			np.array((
-				*sorted_junctions[i]['junction_pos'], 
-				sorted_junctions[i]['junction'].is_source, 
-				sorted_junctions[i]['junction'].is_target, 
-				get_normalized_food_count(sorted_junctions[i]['junction'],self.env_config['max_food_per_target']) if sorted_junctions[i]['junction'].is_target else -1
-				), dtype=np.float32
+			np.array(
+				(
+					*sorted_junctions[i]['junction_pos'], 
+					sorted_junctions[i]['junction'].is_source, 
+					normalize_food_count(
+						sorted_junctions[i]['junction'].food_refills, 
+						self.env_config['max_food_per_source']
+					) if sorted_junctions[i]['junction'].is_source else -1,
+					sorted_junctions[i]['junction'].is_target, 
+					normalize_food_count(
+						sorted_junctions[i]['junction'].food_deliveries, 
+						self.env_config['max_food_per_target']
+					) if sorted_junctions[i]['junction'].is_target else -1,
+				), 
+				dtype=np.float32
 			) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction
@@ -322,6 +340,11 @@ class FullWorldAllAgents_Agent:
 			self.distance_to_closest_road = point_to_line_dist(self.car_point, self.closest_road.edge)
 
 	def start_step(self, action_vector):
+		if self.discrete_action_space:
+			action_vector = [
+				self.allowed_steering_angles[action_vector//len(self.allowed_accelerations)],
+				self.allowed_accelerations[(action_vector%len(self.allowed_accelerations))]
+			]
 		# first of all, get the seconds passed from last step
 		self.seconds_per_step = self.get_step_seconds()
 		# compute new steering angle
@@ -389,7 +412,7 @@ class FullWorldAllAgents_Agent:
 					if is_source_junction(self.closest_junction) and not self.has_food:
 						has_just_taken_food = True
 						self.has_food = True
-					elif is_target_junction(self.closest_junction, self.env_config['max_food_per_target']) and self.has_food:
+					elif is_target_junction(self.closest_junction) and self.has_food:
 						self.road_network.deliver_food(self.closest_junction)
 						self.has_food = False
 						has_just_delivered_food = True
@@ -403,13 +426,15 @@ class FullWorldAllAgents_Agent:
 				self.goal_junction = MultiAgentRoadNetwork.get_furthermost_junction(self.closest_junction_list, self.car_point)
 				self.current_road_speed_list = []
 			if not self.env_config['allow_uturns_on_edges']:
-				if is_source_junction(self.goal_junction) and not self.has_food:
-					has_just_taken_food = True
-					self.has_food = True
-				elif is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
-					self.road_network.deliver_food(self.goal_junction)
-					self.has_food = False
-					has_just_delivered_food = True
+				if self.has_food:
+					if is_target_junction(self.goal_junction):
+						self.road_network.deliver_food(self.goal_junction)
+						self.has_food = False
+						has_just_delivered_food = True
+				else:
+					if is_source_junction(self.goal_junction) and self.road_network.acquire_food(self.goal_junction):
+						self.has_food = True
+						has_just_taken_food = True
 		self.current_road_speed_list.append(self.speed)
 		return visiting_new_road, visiting_new_junction, old_goal_junction, old_car_point, has_just_delivered_food, has_just_taken_food
 
@@ -428,7 +453,7 @@ class FullWorldAllAgents_Agent:
 				# if is_exploring_fairly:
 				# 	return 'is_probably_exploring'
 				if self.has_food:
-					closest_target_type = self.road_network.get_closest_target_type(self.closest_junction, max_depth=3, is_target_fn=lambda x: is_target_junction(x,self.env_config['max_food_per_target']))
+					closest_target_type = self.road_network.get_closest_target_type(self.closest_junction, max_depth=3)
 					if closest_target_type:
 						if 'worst' in closest_target_type:
 							return 'is_likely_to_fairly_pursue_a_poor_target_in_3_nodes'
@@ -458,6 +483,8 @@ class FullWorldAllAgents_Agent:
 			"stats_dict": {
 				"min_food_deliveries": self.road_network.min_food_deliveries,
 				"food_deliveries": self.road_network.food_deliveries,
+				"fair_food_deliveries": self.road_network.fair_food_deliveries,
+				"food_refills": self.road_network.food_refills,
 				# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.speed)/(len(self.other_agent_list)+1),
 			},
 			# 'discard': self.idle and not reward,
@@ -538,7 +565,7 @@ class FullWorldAllAgents_Agent:
 
 			#######################################
 			# "Move towards target with food" rule
-			if is_target_junction(self.goal_junction, self.env_config['max_food_per_target']) and self.has_food:
+			if is_target_junction(self.goal_junction) and self.has_food:
 				return step_reward(is_positive=True, is_terminal=False, label='moving_towards_target_with_food')
 		
 		#######################################
@@ -680,6 +707,8 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 			junctions_number=self.env_config['junctions_number'],
 			target_junctions_number=self.env_config['target_junctions_number'],
 			source_junctions_number=self.env_config['source_junctions_number'],
+			max_food_per_source=self.env_config['max_food_per_source'], 
+			max_food_per_target=self.env_config['max_food_per_target'],
 		)
 		starting_point_list = self.road_network.get_random_starting_point_list(n=self.num_agents)
 		for uid,agent in enumerate(self.agent_list):
@@ -733,7 +762,7 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		car2_handle, = ax.plot((0,0), (0,0), color='red', lw=2, label="Is Slow")
 		car3_handle, = ax.plot((0,0), (0,0), color='grey', lw=2, label="Is Dead")
 		def get_junction_color(j):
-			if is_target_junction(j, self.env_config['max_food_per_target']):
+			if is_target_junction(j):
 				return 'red'
 			if is_source_junction(j):
 				return 'green'
@@ -795,7 +824,7 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 					self.env_config['junction_radius'], 
 					color=get_junction_color(junction), 
 					alpha=0.25,
-					label='Target Node' if is_target_junction(junction, self.env_config['max_food_per_target']) else ('Source Node' if is_source_junction(junction) else 'Normal Node')
+					label='Target Node' if is_target_junction(junction) else ('Source Node' if is_source_junction(junction) else 'Normal Node')
 				)
 				for junction in self.road_network.junctions
 			]

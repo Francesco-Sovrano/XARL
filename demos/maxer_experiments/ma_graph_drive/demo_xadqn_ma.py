@@ -10,7 +10,7 @@ import time
 from xarl.utils.workflow import train
 from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 
-from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
+from xarl.agents.xadqn import XADQNTrainer, XADQN_DEFAULT_CONFIG
 from environments import *
 
 SELECT_ENV = "MAGraphDrive-FullWorldSomeAgents"
@@ -18,11 +18,11 @@ CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 VISIBILITY_RADIUS = 10
 
-CONFIG = XASAC_DEFAULT_CONFIG.copy()
+CONFIG = XADQN_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
-	'discrete_action_space': False,
-	# 'n_discrete_actions': 10,
+	'discrete_action_space': True,
+	'n_discrete_actions': 10,
 	'force_car_to_stay_on_road': True,
 	'optimal_steering_angle_on_road': True,
 	'allow_uturns_on_edges': True,
@@ -69,7 +69,7 @@ CONFIG["env_config"] = {
 CONFIG.update({
 	"framework": "torch",
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	# "no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "comm_adaptive_multihead_network",
@@ -84,21 +84,40 @@ CONFIG.update({
 	},
 	# "normalize_actions": False,
 
+	# "model": { # this is for GraphDrive and GridDrive
+	# 	"vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+	# 	"custom_model": "adaptive_multihead_network",
+	# },
+	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
+	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"seed": 42, # This makes experiments reproducible.
 	###########################
 	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
 	"train_batch_size": 2**8, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
-	# "batch_mode": "complete_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
+	# "batch_mode": "truncate_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	###########################
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
-	'buffer_size': 2**15, # Size of the experience buffer. Default 50000
+	'buffer_size': 2**14, # Size of the experience buffer. Default 50000
+	"learning_starts": 2**14, # How many steps of the model to sample before learning starts.
 	"prioritized_replay_alpha": 0.6,
 	"prioritized_replay_beta": 0.4, # The smaller this is, the stronger is over-sampling
 	"prioritized_replay_eps": 1e-6,
-	"learning_starts": 2**15, # How many steps of the model to sample before learning starts.
 	###########################
-	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
-	"tau": 1e-4,
+	# 'lr': .0000625,
+	# 'adam_epsilon': .00015,
+	# 'exploration_config': {
+	# 	'epsilon_timesteps': 200000,
+	# 	'final_epsilon': 0.01,
+	# },
+	# 'timesteps_per_iteration': 10000,
+	###########################
+	# "grad_clip": None, # no need of gradient clipping with huber loss
+	# "dueling": True,
+	# "double_q": True,
+	# "num_atoms": 21,
+	# "v_max": 2**5,
+	# "v_min": -1,
+	"clip_rewards": False,
 	##################################
 	"buffer_options": {
 		'priority_id': 'td_errors', # Which batch column to use for prioritisation. Default is inherited by DQN and it is 'td_errors'. One of the following: rewards, prev_rewards, td_errors.
@@ -152,7 +171,7 @@ CONFIG["callbacks"] = CustomEnvironmentCallbacks
 # Register models
 from ray.rllib.models import ModelCatalog
 from xarl.models import get_model_catalog_dict
-for k,v in get_model_catalog_dict('sac', CONFIG["framework"]).items():
+for k,v in get_model_catalog_dict('dqn', CONFIG["framework"]).items():
 	ModelCatalog.register_custom_model(k, v)
 
 # Setup MARL training strategy: centralised or decentralised
@@ -202,4 +221,4 @@ print('Config:', CONFIG)
 ray.shutdown()
 ray.init(ignore_reinit_error=True, include_dashboard=False)
 
-train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7//100, stop_training_after_n_step=4e7)
+train(XADQNTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7//100, stop_training_after_n_step=4e7)

@@ -3,7 +3,7 @@ from ...grid_drive.lib.road_agent import RoadAgent
 
 class MultiAgentRoadNetwork(RoadNetwork):
 
-	def __init__(self, culture, np_random, map_size=(50, 50), min_junction_distance=None, max_roads_per_junction=8, number_of_agents=5, junctions_number=10, target_junctions_number=5, source_junctions_number=5):
+	def __init__(self, culture, np_random, map_size=(50, 50), min_junction_distance=None, max_roads_per_junction=8, number_of_agents=5, junctions_number=10, target_junctions_number=5, source_junctions_number=5, max_food_per_source=float('inf'), max_food_per_target=10):
 		assert junctions_number-target_junctions_number-source_junctions_number >= 0
 		super().__init__(culture, np_random, map_size=map_size, min_junction_distance=min_junction_distance, max_roads_per_junction=max_roads_per_junction)
 		### Agent
@@ -19,30 +19,52 @@ class MultiAgentRoadNetwork(RoadNetwork):
 		### Junction
 		self.set(junctions_number)
 		for j in self.junctions:
-			j.is_source=False
-			j.is_target=False
+			j.is_source=j.is_available_source=False
+			j.is_target=j.is_available_target=False
 		self.target_junctions = []
 		for j in self.np_random.choice(self.junctions, size=target_junctions_number, replace=False):
-			j.is_target=True
+			j.is_target=j.is_available_target=True
 			j.food_deliveries = 0
 			self.target_junctions.append(j)
 		non_target_junctions = [x for x in self.junctions if not x.is_target]
 		self.source_junctions = []
 		for j in self.np_random.choice(non_target_junctions, size=source_junctions_number, replace=False):
-			j.is_source=True
+			j.is_source=j.is_available_source=True
+			j.food_refills = 0
 			self.source_junctions.append(j)
+		### Constants
+		self.max_food_per_source = max_food_per_source
+		self.max_food_per_target = max_food_per_target
 		### Deliveries
 		self.min_food_deliveries = 0
 		self.food_deliveries = 0
+		self.fair_food_deliveries = 0
+		self.food_refills = 0
 		self.junction_dict = {
 			x.pos: x
 			for x in self.junctions
 		}
 
+	def acquire_food(self, j):
+		if not j.is_available_source:
+			return False
+		j.food_refills += 1
+		self.food_refills += 1
+		if j.food_refills == self.max_food_per_source:
+			j.is_available_source = False
+		return True
+
 	def deliver_food(self, j):
+		if not j.is_available_target:
+			return False
+		if self.min_food_deliveries == j.food_deliveries:
+			self.fair_food_deliveries += 1
 		j.food_deliveries += 1
 		self.food_deliveries += 1
 		self.min_food_deliveries = min(map(lambda x: x.food_deliveries, self.target_junctions))
+		if j.food_deliveries == self.max_food_per_target:
+			j.is_available_target = False
+		return True
 
 	def get_target_type(self, j, is_target_fn):
 		if not is_target_fn(j):
@@ -53,7 +75,7 @@ class MultiAgentRoadNetwork(RoadNetwork):
 
 	def get_closest_target_type(self, start_junction, max_depth=float('inf'), is_target_fn=None):
 		if not is_target_fn:
-			is_target_fn = lambda x: x.is_target
+			is_target_fn = lambda x: x.is_available_target
 		target_type = self.get_target_type(start_junction, is_target_fn)
 		if target_type:
 			return target_type
@@ -90,5 +112,4 @@ class MultiAgentRoadNetwork(RoadNetwork):
 			j.pos
 			# for j in self.road_culture.np_random.choice(self.junctions, size=n, replace=False)
 			for j in self.np_random.choice(self.source_junctions, size=n)
-		]
-		
+		]		
