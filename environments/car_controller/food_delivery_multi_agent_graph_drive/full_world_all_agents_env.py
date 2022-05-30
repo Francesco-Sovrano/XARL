@@ -226,7 +226,7 @@ class FullWorldAllAgents_Agent:
 			) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction
-			for i in range(len(self.road_network.junctions))
+			for i in range(self.env_config['junctions_number'])
 		]
 
 		##### Get roads view
@@ -234,7 +234,7 @@ class FullWorldAllAgents_Agent:
 			np.array(self.get_junction_roads(sorted_junctions[i]['junction'], shift_rotate_normalise_point), dtype=np.float32) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction_roads
-			for i in range(len(self.road_network.junctions))
+			for i in range(self.env_config['junctions_number'])
 		]
 
 		##### Get neighbourhood view
