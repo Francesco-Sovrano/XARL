@@ -61,7 +61,7 @@ class FullWorldAllAgents_Agent:
 			else:
 				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)  # steering angle
 		state_dict = {
-			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
+			"fc_junctions-32": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
 				high= 1,
 				shape= (
@@ -70,7 +70,7 @@ class FullWorldAllAgents_Agent:
 				),
 				dtype=np.float32
 			),
-			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
+			"fc_roads-32": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
 				high= 1,
 				shape= (
@@ -101,9 +101,9 @@ class FullWorldAllAgents_Agent:
 			)
 		self.observation_space = gym.spaces.Dict(state_dict)
 
-		self._empty_junction = np.full(self.observation_space['fc_junctions-16'].shape[1:], -1, dtype=np.float32)
+		self._empty_junction = np.full(self.observation_space['fc_junctions-32'].shape[1:], -1, dtype=np.float32)
 		self._empty_road = (-1,-1,*[-1]*self.obs_road_features)
-		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'].shape[1:], -1, dtype=np.float32)
+		self._empty_junction_roads = np.full(self.observation_space['fc_roads-32'].shape[1:], -1, dtype=np.float32)
 		if self.n_of_other_agents > 0:
 			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], -1, dtype=np.float32)
 
@@ -153,8 +153,8 @@ class FullWorldAllAgents_Agent:
 			car_orientation=self.car_orientation
 		junctions_view_list, roads_view_list, agents_view_list = self.get_view(car_point, car_orientation)
 		state_dict = {
-			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
-			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
+			"fc_junctions-32": np.array(junctions_view_list, dtype=np.float32),
+			"fc_roads-32": np.array(roads_view_list, dtype=np.float32),
 			"fc_this_agent-8": np.array([
 				*self.get_agent_state(),
 				*(self.agent_id.binary_features(as_tuple=True) if self.culture else []), 
@@ -456,9 +456,9 @@ class FullWorldAllAgents_Agent:
 					closest_target_type = self.road_network.get_closest_target_type(self.closest_junction, max_depth=3)
 					if closest_target_type:
 						if 'worst' in closest_target_type:
-							return 'is_likely_to_fairly_pursue_a_poor_target_in_3_nodes'
+							return 'is_likely_to_fairly_pursue_a_poor_target_within_3_nodes'
 						if closest_target_type=='best':
-							return 'is_likely_to_pursue_a_rich_target_in_3_nodes'
+							return 'is_likely_to_pursue_a_rich_target_within_3_nodes'
 		#######
 		# if has_just_taken_food: 
 		# 	return 'fair'

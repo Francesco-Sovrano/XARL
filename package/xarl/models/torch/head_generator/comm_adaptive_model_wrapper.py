@@ -91,16 +91,13 @@ class CommAdaptiveModel(AdaptiveModel):
 		self.n_agents = obs_space['all_agents_absolute_position_vector'].shape[0]
 		self.n_leaders = obs_space['all_leaders_absolute_position_vector'].shape[0] if 'all_leaders_absolute_position_vector' in obs_space else 0
 		self.n_agents_and_leaders = self.n_agents + self.n_leaders
-		self.max_num_neighbors = config.get('max_num_neighbors', 32)
-		self.message_size = config.get('message_size', 32)
+		self.max_num_neighbors = config.get('max_num_neighbors', self.n_agents_and_leaders)
+		self.message_size = config.get('message_size', agent_features_size)
 		self.comm_range = torch.Tensor([config.get('comm_range', 10.)])
 		self.gnn = GNNBranch(
 			node_features=agent_features_size,
 			edge_features=2+1, # position + orientation
 			out_features=self.message_size,
-			node_embedding=config.get('node_embedding_units', 8),
-			edge_embedding=config.get('edge_embedding_units', 8),
-			gnn_embedding=config.get('gnn_embedding_units', 32),
 		)
 		logger.warning(f"Building keras layers for Comm model with {self.n_agents} agents, {self.n_leaders} leaders and communication range {self.comm_range[0]} for maximum {self.max_num_neighbors} neighbours")
 		# self.use_beta = True
@@ -154,13 +151,13 @@ class CommAdaptiveModel(AdaptiveModel):
 			all_agents_types[:, :self.n_leaders] = 1.0
 			all_agents_types = all_agents_types.reshape(-1, all_agents_types.shape[-1])
 			graphs.x = torch.cat([graphs.x, all_agents_types], dim=1)
-		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
-		graphs = RelativePosition()(graphs) # Saves the relative positions of linked nodes in its edge attributes
-		graphs = RelativeOrientation(norm=True)(graphs) # Saves the relative orientations in its edge attributes
+		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs.to(device)) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
+		graphs = RelativePosition()(graphs.to(device)) # Saves the relative positions of linked nodes in its edge attributes
+		graphs = RelativeOrientation(norm=True)(graphs.to(device)) # Saves the relative orientations in its edge attributes
 
 		## process graphs
 		gnn_output = self.gnn(graphs.x, graphs.edge_index, graphs.edge_attr)
-		assert not gnn_output.isnan().any()
+		# assert not gnn_output.isnan().any()
 		gnn_output = gnn_output.view(-1, self.n_agents_and_leaders, self.message_size) # reshape GNN outputs
 		if self.n_leaders:
 			gnn_output = gnn_output[:, self.n_leaders:]

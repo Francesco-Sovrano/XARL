@@ -11,7 +11,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		# min(self.env_config.get('max_n_junctions_in_view',float('inf')), self.env_config['junctions_number'])
 		
 		state_dict = {
-			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
+			"fc_junctions-32": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
 				high= 1,
 				shape= (
@@ -20,7 +20,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				),
 				dtype=np.float32
 			),
-			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
+			"fc_roads-32": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
 				high= 1,
 				shape= (
@@ -49,8 +49,8 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 			car_orientation=self.car_orientation
 		junctions_view_list, roads_view_list = self.get_view(car_point, car_orientation)
 		state_dict = {
-			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
-			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
+			"fc_junctions-32": np.array(junctions_view_list, dtype=np.float32),
+			"fc_roads-32": np.array(roads_view_list, dtype=np.float32),
 			"fc_this_agent-8": np.array([
 				*self.get_agent_state(),
 				*(self.agent_id.binary_features(as_tuple=True) if self.culture else []), 

@@ -26,7 +26,7 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 		# 'n_discrete_actions': 10,
 		'force_car_to_stay_on_road': True,
 		'optimal_steering_angle_on_road': True,
-		'allow_uturns_on_edges': False,
+		'allow_uturns_on_edges': True,
 		'fairness_reward_fn': 'sparse_fairness_reward', # one of the following: None, 'sparse_fairness_reward', 'frequent_fairness_reward'
 		'visibility_radius': VISIBILITY_RADIUS,
 		'max_food_per_source': float('inf'),

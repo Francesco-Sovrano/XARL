@@ -75,27 +75,24 @@ CONFIG.update({
 		"custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
 			"comm_range": VISIBILITY_RADIUS,
-			'max_num_neighbors': 32,
-			'message_size': 64,
-			'node_embedding_units': 16,
-			'edge_embedding_units': 16,
-			'gnn_embedding_units': 64,
+			# 'max_num_neighbors': 32,
+			# 'message_size': 128,
 		},
 	},
 	# "normalize_actions": False,
 
 	"seed": 42, # This makes experiments reproducible.
 	###########################
-	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
-	"train_batch_size": 2**8, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
+	"rollout_fragment_length": 2**8, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
+	"train_batch_size": 2**12, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
 	# "batch_mode": "complete_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	###########################
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
-	'buffer_size': 2**15, # Size of the experience buffer. Default 50000
+	'buffer_size': 2**16, # Size of the experience buffer. Default 50000
 	"prioritized_replay_alpha": 0.6,
 	"prioritized_replay_beta": 0.4, # The smaller this is, the stronger is over-sampling
 	"prioritized_replay_eps": 1e-6,
-	"learning_starts": 2**15, # How many steps of the model to sample before learning starts.
+	"learning_starts": 2**16, # How many steps of the model to sample before learning starts.
 	###########################
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"tau": 1e-4,
@@ -105,7 +102,7 @@ CONFIG.update({
 		'priority_lower_limit': 0, # A value lower than the lowest possible priority. It depends on the priority_id. By default in DQN and DDPG it is td_error 0, while in PPO it is gain None.
 		'priority_aggregation_fn': 'np.mean', # A reduction that takes as input a list of numbers and returns a number representing a batch priority.
 		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
-		'global_size': 2**15, # Default 50000. Maximum number of batches stored in all clusters (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
+		'global_size': 2**16, # Default 50000. Maximum number of batches stored in all clusters (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
 		'prioritization_alpha': 0.6, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'prioritization_importance_beta': 0.4, # To what degree to use importance weights (0 - no corrections, 1 - full correction).
 		'prioritization_importance_eta': 1e-2, # Used only if priority_lower_limit is None. A value > 0 that enables eta-weighting, thus allowing for importance weighting with priorities lower than 0 if beta is > 0. Eta is used to avoid importance weights equal to 0 when the sampled batch is the one with the highest priority. The closer eta is to 0, the closer to 0 would be the importance weight of the highest-priority batch.
@@ -174,25 +171,25 @@ CONFIG["centralised_buffer"] = CENTRALISED_TRAINING
 CONFIG["multiagent"].update({
 	"policies": policy_graphs,
 	"policy_mapping_fn": policy_mapping_fn,
-	# # Optional list of policies to train, or None for all policies.
-	# "policies_to_train": None,
-	# # Optional function that can be used to enhance the local agent
-	# # observations to include more state.
-	# # See rllib/evaluation/observation_function.py for more info.
-	# "observation_fn": None,
-	# # When replay_mode=lockstep, RLlib will replay all the agent
-	# # transitions at a particular timestep together in a batch. This allows
-	# # the policy to implement differentiable shared computations between
-	# # agents it controls at that timestep. When replay_mode=independent,
-	# # transitions are replayed independently per policy.
-	# "replay_mode": "independent",
-	# # Which metric to use as the "batch size" when building a
-	# # MultiAgentBatch. The two supported values are:
-	# # env_steps: Count each time the env is "stepped" (no matter how many
-	# #   multi-agent actions are passed/how many multi-agent observations
-	# #   have been returned in the previous step).
-	# # agent_steps: Count each individual agent step as one step.
-	# "count_steps_by": "env_steps",
+	# Optional list of policies to train, or None for all policies.
+	"policies_to_train": None,
+	# Optional function that can be used to enhance the local agent
+	# observations to include more state.
+	# See rllib/evaluation/observation_function.py for more info.
+	"observation_fn": None,
+	# When replay_mode=lockstep, RLlib will replay all the agent
+	# transitions at a particular timestep together in a batch. This allows
+	# the policy to implement differentiable shared computations between
+	# agents it controls at that timestep. When replay_mode=independent,
+	# transitions are replayed independently per policy.
+	"replay_mode": "independent", # XAER does not support "lockstep", yet
+	# Which metric to use as the "batch size" when building a
+	# MultiAgentBatch. The two supported values are:
+	# env_steps: Count each time the env is "stepped" (no matter how many
+	#   multi-agent actions are passed/how many multi-agent observations
+	#   have been returned in the previous step).
+	# agent_steps: Count each individual agent step as one step.
+	"count_steps_by": "agent_steps", # XAER does not support "env_steps"?
 })
 print('Config:', CONFIG)
 

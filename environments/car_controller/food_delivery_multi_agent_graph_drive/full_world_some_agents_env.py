@@ -8,7 +8,7 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		super().__init__(n_of_other_agents, culture, env_config)
 
 		state_dict = {
-			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
+			"fc_junctions-32": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
 				high= 1,
 				shape= (
@@ -17,7 +17,7 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				),
 				dtype=np.float32
 			),
-			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
+			"fc_roads-32": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
 				high= 1,
 				shape= (
@@ -46,8 +46,8 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 			car_orientation=self.car_orientation
 		junctions_view_list, roads_view_list = self.get_view(car_point, car_orientation)
 		state_dict = {
-			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
-			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
+			"fc_junctions-32": np.array(junctions_view_list, dtype=np.float32),
+			"fc_roads-32": np.array(roads_view_list, dtype=np.float32),
 			"fc_this_agent-8": np.array([
 				*self.get_agent_state(),
 				*(self.agent_id.binary_features(as_tuple=True) if self.culture else []), 

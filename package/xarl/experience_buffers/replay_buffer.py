@@ -31,17 +31,20 @@ def apply_to_batch_once(fn, batch_list):
 
 class MultiAgentBatchWithDefaultAgent(MultiAgentBatch):
 
-	def __init__(self, policy_batches, env_steps, default_agent_id=None):
+	def __init__(self, policy_batches, env_steps, default_agent_id):
 		super().__init__(policy_batches, env_steps)
 		self._default_agent_id = default_agent_id
 
 	def __getitem__(self, key):
+		# print(12, key)
 		data = self.policy_batches[self._default_agent_id]
 		return data[key] if key in data else None
 
 	def __setitem__(self, key, value):
-		for b in self.policy_batches.values():
-			b[key] = value
+		# if key!='infos':
+		# 	print(11, key,value)
+		data = self.policy_batches[self._default_agent_id]
+		data[key] = value
 
 	# @property
 	# def count(self):
@@ -225,6 +228,8 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 				cluster_overview_size,
 				update_replayed_fn,
 			)
+		# if output_batches:
+		# 	print(13, output_batches[0])
 		return output_batches
 
 	def sample_from_buffer(self, buffer_dict, batch_count=1, cluster_overview_size=None, update_replayed_fn=None):

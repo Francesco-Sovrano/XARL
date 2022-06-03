@@ -75,11 +75,8 @@ CONFIG.update({
 		"custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
 			"comm_range": VISIBILITY_RADIUS,
-			'max_num_neighbors': 32,
-			'message_size': 128,
-			'node_embedding_units': 64,
-			'edge_embedding_units': 64,
-			'gnn_embedding_units': 256,
+			# 'max_num_neighbors': 32,
+			# 'message_size': 128,
 		},
 	},
 	# "normalize_actions": False,
@@ -175,25 +172,25 @@ CONFIG["centralised_buffer"] = CENTRALISED_TRAINING
 CONFIG["multiagent"].update({
 	"policies": policy_graphs,
 	"policy_mapping_fn": policy_mapping_fn,
-	# # Optional list of policies to train, or None for all policies.
-	# "policies_to_train": None,
-	# # Optional function that can be used to enhance the local agent
-	# # observations to include more state.
-	# # See rllib/evaluation/observation_function.py for more info.
-	# "observation_fn": None,
-	# # When replay_mode=lockstep, RLlib will replay all the agent
-	# # transitions at a particular timestep together in a batch. This allows
-	# # the policy to implement differentiable shared computations between
-	# # agents it controls at that timestep. When replay_mode=independent,
-	# # transitions are replayed independently per policy.
-	# "replay_mode": "independent",
-	# # Which metric to use as the "batch size" when building a
-	# # MultiAgentBatch. The two supported values are:
-	# # env_steps: Count each time the env is "stepped" (no matter how many
-	# #   multi-agent actions are passed/how many multi-agent observations
-	# #   have been returned in the previous step).
-	# # agent_steps: Count each individual agent step as one step.
-	"count_steps_by": "agent_steps",
+	# Optional list of policies to train, or None for all policies.
+	"policies_to_train": None,
+	# Optional function that can be used to enhance the local agent
+	# observations to include more state.
+	# See rllib/evaluation/observation_function.py for more info.
+	"observation_fn": None,
+	# When replay_mode=lockstep, RLlib will replay all the agent
+	# transitions at a particular timestep together in a batch. This allows
+	# the policy to implement differentiable shared computations between
+	# agents it controls at that timestep. When replay_mode=independent,
+	# transitions are replayed independently per policy.
+	"replay_mode": "independent", # XAER does not support "lockstep", yet
+	# Which metric to use as the "batch size" when building a
+	# MultiAgentBatch. The two supported values are:
+	# env_steps: Count each time the env is "stepped" (no matter how many
+	#   multi-agent actions are passed/how many multi-agent observations
+	#   have been returned in the previous step).
+	# agent_steps: Count each individual agent step as one step.
+	"count_steps_by": "agent_steps", # XAER does not support "env_steps"?
 })
 print('Config:', CONFIG)
 

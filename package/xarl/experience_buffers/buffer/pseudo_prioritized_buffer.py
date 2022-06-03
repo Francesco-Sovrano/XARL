@@ -433,7 +433,10 @@ class PseudoPrioritizedBuffer(Buffer):
 		batch[PRIO_WEIGHTS] = np.full(batch.count, weight, dtype=np.float32)
 
 	def get_batch_priority(self, batch):
-		return self._priority_aggregation_fn(batch[self._priority_id])
+		priority_batch = batch[self._priority_id]
+		if not isinstance(priority_batch,(list,tuple,np.ndarray)):
+			priority_batch = list(priority_batch)
+		return self._priority_aggregation_fn(priority_batch)
 	
 	def update_priority(self, new_batch, idx, type_id=0): # O(log)
 		type_ = self.get_type(type_id)

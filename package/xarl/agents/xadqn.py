@@ -24,7 +24,6 @@ import numpy as np
 
 XADQN_EXTRA_OPTIONS = {
 	# "rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts.
-	# "replay_sequence_length": 1, # The number of contiguous environment steps to replay at once. This may be set to greater than 1 to support recurrent models.
 	# "train_batch_size": 2**8, # Number of transitions per train-batch
 	"learning_starts": 2**14, # How many batches to sample before learning starts. Every batch has size 'rollout_fragment_length' (default is 50).
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
@@ -34,8 +33,8 @@ XADQN_EXTRA_OPTIONS = {
 		'priority_id': 'td_errors', # Which batch column to use for prioritisation. Default is inherited by DQN and it is 'td_errors'. One of the following: rewards, prev_rewards, td_errors.
 		'priority_lower_limit': 0, # A value lower than the lowest possible priority. It depends on the priority_id. By default in DQN and DDPG it is td_error 0, while in PPO it is gain None.
 		'priority_aggregation_fn': 'np.mean', # A reduction that takes as input a list of numbers and returns a number representing a batch priority.
-		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
-		'global_size': 2**14, # Default 50000. Maximum number of batches stored in all clusters (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'replay_sequence_length' (default is 1).
+		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'n_step' (default is 1).
+		'global_size': 2**14, # Default 50000. Maximum number of batches stored in all clusters (which number depends on the clustering scheme) of the experience buffer. Every batch has size 'n_step' (default is 1).
 		'prioritization_alpha': 0.6, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'prioritization_importance_beta': 0.4, # To what degree to use importance weights (0 - no corrections, 1 - full correction).
 		'prioritization_importance_eta': 1e-2, # Used only if priority_lower_limit is None. A value > 0 that enables eta-weighting, thus allowing for importance weighting with priorities lower than 0 if beta is > 0. Eta is used to avoid importance weights equal to 0 when the sampled batch is the one with the highest priority. The closer eta is to 0, the closer to 0 would be the importance weight of the highest-priority batch.
@@ -109,9 +108,9 @@ def xadqn_execution_plan(workers, config, **kwargs):
 	random.seed(config["seed"])
 	np.random.seed(config["seed"])
 	replay_batch_size = config["train_batch_size"]
-	replay_sequence_length = config.get("replay_sequence_length",1)
-	if replay_sequence_length and replay_sequence_length > 1:
-		replay_batch_size = int(max(1, replay_batch_size // replay_sequence_length))
+	sample_batch_size = config.get("n_step",1)
+	if sample_batch_size and sample_batch_size > 1:
+		replay_batch_size = int(max(1, replay_batch_size // sample_batch_size))
 	local_replay_buffer, clustering_scheme = get_clustered_replay_buffer(config)
 	local_worker = workers.local_worker()
 
@@ -131,7 +130,7 @@ def xadqn_execution_plan(workers, config, **kwargs):
 	# next() on store_op drives this.
 	store_fn = StoreToReplayBuffer(local_buffer=local_replay_buffer)
 	def store_batch(batch):
-		for rollout_fragment in assign_types(batch, clustering_scheme, replay_sequence_length, with_episode_type=config["cluster_with_episode_type"], training_step=local_replay_buffer.get_train_steps()):
+		for rollout_fragment in assign_types(batch, clustering_scheme, sample_batch_size, with_episode_type=config["cluster_with_episode_type"], training_step=local_replay_buffer.get_train_steps()):
 			store_fn(rollout_fragment)
 		return batch
 	store_op = rollouts.for_each(store_batch)
@@ -154,7 +153,7 @@ def xadqn_execution_plan(workers, config, **kwargs):
 		# IMPORTANT: split train-batch into replay-batches, using batch_uid, before updating priorities
 		policy_batch_list = []
 		for policy_id, batch in samples.policy_batches.items():
-			if replay_sequence_length > 1 and config["batch_mode"] == "complete_episodes":
+			if sample_batch_size > 1 and config["batch_mode"] == "complete_episodes":
 				sub_batch_indexes = [
 					i
 					for i,infos in enumerate(batch['infos'])
@@ -165,7 +164,7 @@ def xadqn_execution_plan(workers, config, **kwargs):
 					for j in range(len(sub_batch_indexes)-1)
 				)
 			else:
-				sub_batch_iter = batch.timeslices(replay_sequence_length)
+				sub_batch_iter = batch.timeslices(sample_batch_size)
 			sub_batch_iter = unique_everseen(sub_batch_iter, key=get_batch_uid)
 			for i,sub_batch in enumerate(sub_batch_iter):
 				if i >= len(policy_batch_list):
