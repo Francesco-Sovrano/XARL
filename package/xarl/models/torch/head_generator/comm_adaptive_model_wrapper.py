@@ -91,7 +91,7 @@ class CommAdaptiveModel(AdaptiveModel):
 		self.n_agents = obs_space['all_agents_absolute_position_vector'].shape[0]
 		self.n_leaders = obs_space['all_leaders_absolute_position_vector'].shape[0] if 'all_leaders_absolute_position_vector' in obs_space else 0
 		self.n_agents_and_leaders = self.n_agents + self.n_leaders
-		self.max_num_neighbors = config.get('max_num_neighbors', self.n_agents_and_leaders)
+		self.max_num_neighbors = config.get('max_num_neighbors', self.n_agents_and_leaders-1)
 		self.message_size = config.get('message_size', agent_features_size)
 		self.comm_range = torch.Tensor([config.get('comm_range', 10.)])
 		self.gnn = GNNBranch(

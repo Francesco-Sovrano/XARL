@@ -12,11 +12,6 @@ tensorflow==2.4.1
 tensorflow_probability==0.12.2
 
 torch==1.11.0
-torch-scatter #-f https://data.pyg.org/whl/torch-1.11.0+cpu.html
-torch-sparse #-f https://data.pyg.org/whl/torch-1.11.0+cpu.html
-torch-cluster #-f https://data.pyg.org/whl/torch-1.11.0+cpu.html
-torch-spline-conv #-f https://data.pyg.org/whl/torch-1.11.0+cpu.html
-torch-geometric #-f https://data.pyg.org/whl/torch-1.11.0+cpu.html
 
-ray[rllib]==1.12.0
+ray[rllib]==1.12.1
 pandas

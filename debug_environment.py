@@ -68,7 +68,7 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 		'max_normalised_speed': 120,
 	}
 
-env_config = get_default_environment_MAGraphDrive_options(32)
+env_config = get_default_environment_MAGraphDrive_options(4)
 
 env = FullWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **env_config})
 env.seed(38)

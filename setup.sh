@@ -26,22 +26,25 @@ pip install -r environments/car_controller/requirements.txt
 # echo 'Installing env GFootball..'
 # pip install -r environments/gfootball/requirements.txt
 
-echo 'Installing env PettingZoo..'
-pip install -r environments/petting_zoo/requirements.txt
+# echo 'Installing env PettingZoo..'
+# pip install -r environments/petting_zoo/requirements.txt
 
-echo 'Installing env PRIMAL..'
-pip install -r environments/primal/requirements.txt
-cd environments/primal/od_mstar3
-python3 setup.py build_ext --inplace
-rm -r build
-cd ../../..
-cd environments/primal/astarlib3
-python3 setup.py build_ext --inplace
-rm -r build
-cd ../../..
+# echo 'Installing env PRIMAL..'
+# pip install -r environments/primal/requirements.txt
+# cd environments/primal/od_mstar3
+# python3 setup.py build_ext --inplace
+# rm -r build
+# cd ../../..
+# cd environments/primal/astarlib3
+# python3 setup.py build_ext --inplace
+# rm -r build
+# cd ../../..
 
 echo 'Installing XARL..'
 pip install -e ./package # cmake is needed
+pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.11.0+cpu.html
 
-# echo 'Fixing environments rendering'
+echo 'Fixing environments rendering'
 pip install pyglet==1.5.11 # fix for rendering environments
+echo 'Fixing protobuf'
+pip install protobuf==3.20.* # https://github.com/protocolbuffers/protobuf/issues/10051

@@ -2,7 +2,11 @@ from ray.rllib.agents.sac.sac_torch_model import SACTorchModel
 import gym
 import numpy as np
 from ray.rllib.utils.framework import try_import_torch
+import os
+
 torch, nn = try_import_torch()
+torch.set_num_threads(os.cpu_count())
+# torch.set_num_interop_threads(os.cpu_count())
 
 class TorchAdaptiveMultiHeadNet:
 

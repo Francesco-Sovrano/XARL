@@ -13,7 +13,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
 # import json
 
-def test(tester_class, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=5):
+def test(tester_class, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3):
 	"""Tests and renders a previously trained model"""
 	# test_config = config.copy()
 	# test_config['explore'] = False

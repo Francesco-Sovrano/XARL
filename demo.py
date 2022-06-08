@@ -1,6 +1,7 @@
 # Read this guide for how to use this script: https://medium.com/distributed-computing-with-ray/intro-to-rllib-example-environments-3a113f532c70
 import os
 os.environ["TUNE_RESULT_DIR"] = 'tmp/ray_results'
+os.environ["OMP_NUM_THREADS"] = str(os.cpu_count())
 import json
 import ray
 from xarl.utils.workflow import train
@@ -114,6 +115,11 @@ print('Config:', CONFIG)
 ####################################################################################
 
 ray.shutdown()
-ray.init(ignore_reinit_error=True, include_dashboard=False)
+ray.init(
+	ignore_reinit_error=True, 
+	include_dashboard=False, 
+	log_to_driver=False, 
+	num_cpus=os.cpu_count(),
+)
 
 train(TRAINER, CONFIG, ENVIRONMENT, test_every_n_step=TEST_EVERY_N_STEP, stop_training_after_n_step=STOP_TRAINING_AFTER_N_STEP)
