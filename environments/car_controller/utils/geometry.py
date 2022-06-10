@@ -7,12 +7,29 @@ two_pi = 2*np.pi
 pi = np.pi
 		
 def rotate(x,y,theta=0):
-	sin_theta = np.sin(theta)
-	cos_theta = np.cos(theta)
+	sin_theta = np.sin(-theta)
+	cos_theta = np.cos(-theta)
 	return (x*cos_theta-y*sin_theta, x*sin_theta+y*cos_theta)
 
-def shift_and_rotate(xv,yv,dx,dy,theta=0):
-	return rotate(xv+dx,yv+dy,theta)
+def shift_and_rotate(v,d,theta=0):
+	return rotate(v[0]-d[0],v[1]-d[1],theta)
+
+def shift_and_rotate_vector(pos_vector, source_point, source_orientation):
+	source_point = np.array(source_point, dtype=np.float32)
+	sin_theta = np.sin(-source_orientation)
+	cos_theta = np.cos(-source_orientation)
+
+	xy = pos_vector - source_point
+	
+	x = xy[:,0][:,None]
+	y = xy[:,1][:,None]
+	return np.concatenate(
+		[
+			x*cos_theta-y*sin_theta,
+			x*sin_theta+y*cos_theta
+		], 
+		axis=-1
+	)
 
 def rotate_and_shift(xv,yv,dx,dy,theta=0):
 	(x,y) = rotate(xv,yv,theta)

@@ -323,23 +323,20 @@ class CescoDriveV0(gym.Env):
 		source_goal = self.get_goal(source_position)
 		# print(source_position, source_goal)
 		control_points = np.zeros((1,self.control_points_per_step,2), dtype=np.float32)
-		source_x, source_y = source_point
 		control_distance = (source_goal-source_position)/self.control_points_per_step
 		# add control points
 		for i in range(self.control_points_per_step):
-			cp_x, cp_y = self.get_point_from_position(source_position + (i+1)*control_distance)
-			cp_x, cp_y = shift_and_rotate(cp_x, cp_y, -source_x, -source_y, -source_orientation) # get control point with coordinates relative to source point
-			control_points[0][i][0] = cp_x
-			control_points[0][i][1] = cp_y
+			cp = self.get_point_from_position(source_position + (i+1)*control_distance)
+			cp = shift_and_rotate(cp, source_point, source_orientation) # get control point with coordinates relative to source point
+			control_points[0][i] = cp
 		return control_points
 		
 	def get_control_obstacles(self, car_point, car_orientation, obstacles):
-		car_x, car_y = car_point
 		control_obstacles = []
 		for (j, obstacle) in enumerate(obstacles):
 			obstacle_point, obstacle_radius = obstacle
 			if euclidean_distance(obstacle_point,car_point) <= self.horizon_distance+obstacle_radius:
-				ro_x, ro_y = shift_and_rotate(obstacle_point[0], obstacle_point[1], -car_x, -car_y, -car_orientation) # get control point with coordinates relative to car point
+				ro_x, ro_y = shift_and_rotate(obstacle_point, car_point, car_orientation) # get control point with coordinates relative to car point
 				control_obstacles.append((ro_x, ro_y, obstacle_radius))
 		# sort obstacles by euclidean distance from closer to most distant
 		if len(control_obstacles) > 0:

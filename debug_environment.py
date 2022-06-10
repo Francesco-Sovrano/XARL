@@ -6,7 +6,7 @@ import sys
 import os
 from environments import *
 
-HORIZON = 2**6
+HORIZON = 2**8
 VISIBILITY_RADIUS = 10
 
 PLOT_EPISODE = True
@@ -129,7 +129,7 @@ def run_one_episode(env, name):
 			state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
 			state = state_dict
 			sum_reward += sum(reward_dict.values())
-			print(f'step {step} took {time.time()-t:.2f} seconds')
+			print(f'step {step} took {time.time()-t:.3f} seconds')
 			if PLOT_EPISODE:
 				file_list.append(print_screen(episode_dir, step))
 			env.render()
@@ -142,7 +142,7 @@ def run_one_episode(env, name):
 			action = env.action_space.sample()
 			state, reward, done, info = env.step(action)
 			sum_reward += reward
-			print(f'step {step} took {time.time()-t:.2f} seconds')
+			print(f'step {step} took {time.time()-t:.3f} seconds')
 			if PLOT_EPISODE:
 				file_list.append(print_screen(OUTPUT_DIR, step))
 			env.render()

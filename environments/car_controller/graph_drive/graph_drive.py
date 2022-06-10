@@ -156,8 +156,7 @@ class GraphDrive(gym.Env):
 		return (np.clip(p[0]/GraphDrive.map_size[0],-1,1), np.clip(p[1]/GraphDrive.map_size[1],-1,1))
 
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
-		source_x, source_y = source_point
-		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
+		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(x, source_point, source_orientation))
 		j1, j2 = self.closest_junction_list
 		# Get road view
 		road_points = ( # 2x2

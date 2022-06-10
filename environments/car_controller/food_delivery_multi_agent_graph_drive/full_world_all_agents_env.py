@@ -40,6 +40,7 @@ class FullWorldAllAgents_Agent:
 		self.culture = culture
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
+		self.max_relative_coordinates = 2*np.array(self.env_config['map_size'], dtype=np.float32)
 		self.reward_fn = eval(f'self.{self.env_config["reward_fn"]}')
 		self.fairness_reward_fn = eval(f'self.{self.env_config["fairness_reward_fn"]}') if self.env_config.get("fairness_reward_fn",None) else lambda x: 0
 		
@@ -137,7 +138,6 @@ class FullWorldAllAgents_Agent:
 		self.is_dead = False
 		self.has_food = True
 		# self.steps_in_junction = 0
-		self.junction_roads_dict = {}
 		self.step = 1
 		self.idle = False
 
@@ -145,11 +145,6 @@ class FullWorldAllAgents_Agent:
 		self.visiting_new_junction = False
 		self.has_just_taken_food = False
 		self.has_just_delivered_food = False
-
-	@property
-	def normalised_speed(self):
-		# return (self.speed-self.env_config['min_speed']*0.9)/(self.env_config['max_speed']-self.env_config['min_speed']*0.9) # in (0,1]
-		return self.speed/self.env_config['max_speed'] # in (0,1]
 
 	def get_state(self, car_point=None, car_orientation=None):
 		if car_point is None:
@@ -171,7 +166,7 @@ class FullWorldAllAgents_Agent:
 
 	@property
 	def agent_state_size(self):
-		agent_state_size = 5
+		agent_state_size = 6
 		if not self.env_config['force_car_to_stay_on_road']:
 			agent_state_size += 1
 		if self.env_config['blockage_probability']:
@@ -179,6 +174,7 @@ class FullWorldAllAgents_Agent:
 		return agent_state_size
 
 	def get_agent_state(self):
+		step_gain = 1/max(1,np.log(self.step)) # in [1,0)
 		agent_state = [
 			# self.car_orientation/two_pi, # in [0,1) # needed in multi-agent environments, otherwise relative positions would be meaningless
 			self.steering_angle/self.env_config['max_steering_angle'], # normalised steering angle
@@ -186,15 +182,13 @@ class FullWorldAllAgents_Agent:
 			self.is_in_junction(self.car_point),
 			self.has_food,
 			self.is_dead,
+			step_gain,
 		]
 		if not self.env_config['force_car_to_stay_on_road']:
 			agent_state.append(min(1, self.distance_to_closest_road/self.env_config['max_distance_to_path']))
 		if self.env_config['blockage_probability']:
 			agent_state.append(self.slowdown_factor)
 		return agent_state
-
-	def normalize_point(self, p):
-		return (np.clip(p[0]/self.env_config['map_size'][0],-1,1), np.clip(p[1]/self.env_config['map_size'][1],-1,1))
 
 	def colliding_with_other_agent(self, old_car_point, car_point):
 		if not self.env_config['agent_collision_radius']:
@@ -204,46 +198,57 @@ class FullWorldAllAgents_Agent:
 				return True
 		return False
 
-	def get_junction_roads(self, j, shift_rotate_normalise_point_fn):
-		junction_road_list = self.junction_roads_dict.get(j.pos, None)
-		if junction_road_list is None:
-			roads = (
-				(
-					# road.normalised_slope, # in [0,1] # completely wrong if using relative position, this slope is absolute
-					*shift_rotate_normalise_point_fn(road.start.pos if j.pos!=road.start.pos else road.end.pos), # in [0,1]
-					*(road.binary_features(as_tuple=True) if self.culture else []), # in [0,1]
-				)
+	def get_junction_roads(self, j, source_point, source_orientation):
+		road_pos_vector = np.array([
+			road.start.pos if j.pos!=road.start.pos else road.end.pos
+			for road in j.roads_connected
+		], dtype=np.float32)
+		relative_road_pos_vector = shift_and_rotate_vector(road_pos_vector, source_point, source_orientation) / self.max_relative_coordinates
+		sorted_relative_road_pos_vector = np.sort(relative_road_pos_vector)
+		if self.culture:
+			road_feature_vector = np.array([
+				road.binary_features(as_tuple=True) # in [0,1]
 				for road in j.roads_connected
-			)
-			sorted_roads = sorted(roads, key=lambda x:x[0])
-			missing_roads = [self._empty_road]*(self.env_config['max_roads_per_junction']-len(j.roads_connected))
-			junction_road_list = self.junction_roads_dict[j.pos] = sorted_roads+missing_roads
-		return junction_road_list
+			], dtype=np.float32)
+			junction_road_vector = np.concatenate(
+				[
+					sorted_relative_road_pos_vector,
+					road_feature_vector
+				], 
+				axis=-1
+			)#.tolist()
+		else:
+			junction_road_vector = sorted_relative_road_pos_vector#.tolist()
+		
+		missing_roads = [self._empty_road]*(self.env_config['max_roads_per_junction']-len(j.roads_connected))
+		if missing_roads:
+			junction_road_vector = np.concatenate([junction_road_vector, missing_roads], axis=0)
+		return junction_road_vector
 
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
-		source_x, source_y = source_point
-		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
-		road_network_junctions = filter(lambda j: j.roads_connected, self.road_network.junctions)
-		road_network_junctions = map(lambda j: {'junction_pos':shift_rotate_normalise_point(j.pos), 'junction':j}, road_network_junctions)
-		sorted_junctions = sorted(road_network_junctions, key=lambda x: x['junction_pos'])
+		j_list = list(filter(lambda j: j.roads_connected, self.road_network.junctions))
+		jpos_vector = np.array([j.pos for j in j_list])
+		relative_jpos_vector = shift_and_rotate_vector(jpos_vector, source_point, source_orientation) / self.max_relative_coordinates
+		
+		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),j_list), key=lambda x: x[0])
 
 		##### Get junctions view
 		# assert self.env_config['max_food_per_source'] == float('inf'), "Rewrite the get_view function (junctions_view_list) if you want to have limited food at sources"
 		junctions_view_list = [
 			np.array(
 				(
-					*sorted_junctions[i]['junction_pos'], 
-					sorted_junctions[i]['junction'].is_source, 
+					*sorted_junctions[i][0], 
+					sorted_junctions[i][1].is_source, 
 					normalize_food_count(
-						sorted_junctions[i]['junction'].food_refills, 
+						sorted_junctions[i][1].food_refills, 
 						self.env_config['max_food_per_source']
-					) if sorted_junctions[i]['junction'].is_source else -1,
-					sorted_junctions[i]['junction'].is_target, 
+					) if sorted_junctions[i][1].is_source else -1,
+					sorted_junctions[i][1].is_target, 
 					normalize_food_count(
-						sorted_junctions[i]['junction'].food_deliveries, 
+						sorted_junctions[i][1].food_deliveries, 
 						self.env_config['max_food_per_target']
-					) if sorted_junctions[i]['junction'].is_target else -1,
+					) if sorted_junctions[i][1].is_target else -1,
 				), 
 				dtype=np.float32
 			) 
@@ -254,7 +259,7 @@ class FullWorldAllAgents_Agent:
 
 		##### Get roads view
 		roads_view_list = [
-			np.array(self.get_junction_roads(sorted_junctions[i]['junction'], shift_rotate_normalise_point), dtype=np.float32) 
+			self.get_junction_roads(sorted_junctions[i][1], source_point, source_orientation)
 			if i < len(sorted_junctions) else 
 			self._empty_junction_roads
 			for i in range(self.env_config['junctions_number'])
@@ -265,7 +270,7 @@ class FullWorldAllAgents_Agent:
 			alive_agent = [x for x in self.other_agent_list if not x.is_dead]
 			sorted_alive_agents = sorted((
 				(
-					shift_rotate_normalise_point(agent.car_point), 
+					shift_and_rotate(agent.car_point, source_point, source_orientation) / self.max_relative_coordinates,
 					agent.car_orientation/two_pi,
 					agent.get_agent_state(), 
 					(agent.agent_id.binary_features(as_tuple=True) if self.culture else []), 
@@ -428,8 +433,8 @@ class FullWorldAllAgents_Agent:
 				#########
 				self.last_closest_junction = None
 				self.last_closest_road = self.closest_road # keep track of the current road
-				self.source_junction = MultiAgentRoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
 				self.goal_junction = MultiAgentRoadNetwork.get_furthermost_junction(self.closest_junction_list, self.car_point)
+				self.source_junction = self.closest_junction
 				self.current_road_speed_list = []
 			if not self.env_config['allow_uturns_on_edges']:
 				if self.has_food:
@@ -608,17 +613,17 @@ class FullWorldAllAgents_Agent:
 				just_delivered_to_worst_target = self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries
 				return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
 			####### Conjectures
-			else:
-				# is_exploring_fairly = not self.closest_junction.is_visited
-				# if is_exploring_fairly:
-				# 	return 'is_probably_exploring'
-				if self.has_food:
-					closest_target_type = self.road_network.get_closest_target_type(self.closest_junction, max_depth=3)
-					if closest_target_type:
-						if 'worst' in closest_target_type:
-							return 'is_likely_to_fairly_pursue_a_poor_target_within_3_nodes'
-						if closest_target_type=='best':
-							return 'is_likely_to_pursue_a_rich_target_within_3_nodes'
+			# else:
+			# 	# is_exploring_fairly = not self.closest_junction.is_visited
+			# 	# if is_exploring_fairly:
+			# 	# 	return 'is_probably_exploring'
+			# 	if self.has_food:
+			# 		closest_target_type = self.road_network.get_closest_target_type(self.closest_junction, max_depth=3)
+			# 		if closest_target_type:
+			# 			if 'worst' in closest_target_type:
+			# 				return 'is_likely_to_fairly_pursue_a_poor_target_within_3_nodes'
+			# 			if closest_target_type=='best':
+			# 				return 'is_likely_to_pursue_a_rich_target_within_3_nodes'
 		#######
 		# if self.has_just_taken_food: 
 		# 	return 'fair'
@@ -891,8 +896,8 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		if mode == 'rgb_array':
 			return img
 		elif mode == 'human':
-			from gym.envs.classic_control import rendering
 			if self.viewer is None:
+				from gym.envs.classic_control import rendering
 				self.viewer = rendering.SimpleImageViewer()
 			self.viewer.imshow(img)
 			return self.viewer.isopen

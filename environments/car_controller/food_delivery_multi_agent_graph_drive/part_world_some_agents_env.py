@@ -69,29 +69,31 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
 		# s = time.time()
-		source_x, source_y = source_point
-		shift_rotate_normalise_point = lambda x: self.normalize_point(shift_and_rotate(*x, -source_x, -source_y, -source_orientation))
 		visible_road_network_junctions = self.road_network.junctions
 		visible_road_network_junctions = filter(lambda j: self.can_see(j.pos), visible_road_network_junctions) #self.visible_road_network_junctions
 		visible_road_network_junctions = filter(lambda j: j.roads_connected, visible_road_network_junctions)
-		visible_road_network_junctions = map(lambda j: {'junction_pos':shift_rotate_normalise_point(j.pos), 'junction':j}, visible_road_network_junctions)
-		sorted_junctions = sorted(visible_road_network_junctions, key=lambda x: x['junction_pos'])
+		visible_road_network_junctions = list(visible_road_network_junctions)
+
+		jpos_vector = np.array([j.pos for j in visible_road_network_junctions])
+		relative_jpos_vector = shift_and_rotate_vector(jpos_vector, source_point, source_orientation) / self.max_relative_coordinates
+		
+		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),visible_road_network_junctions), key=lambda x: x[0])
 
 		##### Get junctions view
 		junctions_view_list = [
 			np.array(
 				(
-					*sorted_junctions[i]['junction_pos'], 
-					sorted_junctions[i]['junction'].is_source,
+					*sorted_junctions[i][0], 
+					sorted_junctions[i][1].is_source,
 					normalize_food_count(
-						sorted_junctions[i]['junction'].food_refills, 
+						sorted_junctions[i][1].food_refills, 
 						self.env_config['max_food_per_source']
-					) if sorted_junctions[i]['junction'].is_source else -1, 
-					sorted_junctions[i]['junction'].is_target, 
+					) if sorted_junctions[i][1].is_source else -1, 
+					sorted_junctions[i][1].is_target, 
 					normalize_food_count(
-						sorted_junctions[i]['junction'].food_deliveries,
+						sorted_junctions[i][1].food_deliveries,
 						self.env_config['max_food_per_target']
-					) if sorted_junctions[i]['junction'].is_target else -1
+					) if sorted_junctions[i][1].is_target else -1
 				), 
 				dtype=np.float32
 			) 
@@ -102,7 +104,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 
 		##### Get roads view
 		roads_view_list = [
-			np.array(self.get_junction_roads(sorted_junctions[i]['junction'], shift_rotate_normalise_point), dtype=np.float32) 
+			self.get_junction_roads(sorted_junctions[i][1], source_point, source_orientation) 
 			if i < len(sorted_junctions) else 
 			self._empty_junction_roads
 			for i in range(self.max_n_junctions_in_view)
@@ -159,9 +161,9 @@ class PartWorldSomeAgents_GraphDrive(FullWorldAllAgents_GraphDrive):
 			return state_dict
 
 		all_agents_absolute_position_vector = np.array([
-			np.array(self.agent_list[that_agent_id].car_point, dtype=np.float32) if that_agent_id in state_dict else self.invisible_position_vec
+			self.agent_list[that_agent_id].car_point if that_agent_id in state_dict else self.invisible_position_vec
 			for that_agent_id in range(self.num_agents)
-		])
+		], dtype=np.float32)
 		all_agents_absolute_orientation_vector = np.array([
 			self.agent_list[that_agent_id].car_orientation if that_agent_id in state_dict else 0.
 			for that_agent_id in range(self.num_agents)
