@@ -50,8 +50,8 @@ model_catalog_dict['torch'] = {
         "comm_adaptive_multihead_network": TorchAdaptiveMultiHeadDDPG.init(CommAdaptiveModel),
     },
     'sac': {
-        "adaptive_multihead_network": TorchAdaptiveMultiHeadSAC.init(AdaptiveModel),
-        "comm_adaptive_multihead_network": TorchAdaptiveMultiHeadSAC.init(CommAdaptiveModel),
+        "adaptive_multihead_network": TorchAdaptiveMultiHeadSAC.init(AdaptiveModel,AdaptiveModel),
+        "comm_adaptive_multihead_network": TorchAdaptiveMultiHeadSAC.init(CommAdaptiveModel,CommAdaptiveModel),
     },
     # 'ppo': {
     #     "adaptive_multihead_network": TorchAdaptiveMultiHeadSAC.init(AdaptiveModel),

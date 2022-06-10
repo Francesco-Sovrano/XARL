@@ -101,11 +101,11 @@ class FullWorldAllAgents_Agent:
 			)
 		self.observation_space = gym.spaces.Dict(state_dict)
 
-		self._empty_junction = np.full(self.observation_space['fc_junctions-16'].shape[1:], -1, dtype=np.float32)
-		self._empty_road = (-1,-1,*[-1]*self.obs_road_features)
-		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'].shape[1:], -1, dtype=np.float32)
+		self._empty_junction = np.full(self.observation_space['fc_junctions-16'].shape[1:], 0, dtype=np.float32)
+		self._empty_road = (0,0,*[0]*self.obs_road_features)
+		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'].shape[1:], 0, dtype=np.float32)
 		if self.n_of_other_agents > 0:
-			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], -1, dtype=np.float32)
+			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], 0, dtype=np.float32)
 
 	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
@@ -487,10 +487,10 @@ class FullWorldAllAgents_Agent:
 			return (r if is_positive else -r, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
-		#######################################
-		# "Mission completed" rule
-		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
-			return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
+		# #######################################
+		# # "Mission completed" rule
+		# if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
+		# 	return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Is colliding" rule
@@ -549,10 +549,10 @@ class FullWorldAllAgents_Agent:
 			return (r if is_positive else -r, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
-		#######################################
-		# "Mission completed" rule
-		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
-			return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
+		# #######################################
+		# # "Mission completed" rule
+		# if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
+		# 	return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Is colliding" rule
@@ -731,7 +731,7 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		# end_step uses information about all agents, this requires all agents to act first and compute rewards and states after everybody acted
 		for uid,step_info in step_info_dict.items():
 			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step(*step_info)
-		terminal_dict['__all__'] = all(terminal_dict.values()) #or self.road_network.min_food_deliveries == self.env_config['max_food_per_target']
+		terminal_dict['__all__'] = all(terminal_dict.values()) or self.road_network.min_food_deliveries == self.env_config['max_food_per_target']
 		return state_dict, reward_dict, terminal_dict, info_dict
 			
 	def get_info(self):

@@ -97,6 +97,8 @@ class CommAdaptiveModel(AdaptiveModel):
 		self.gnn = GNNBranch(
 			node_features=agent_features_size,
 			edge_features=2+1, # position + orientation
+			node_embedding=agent_features_size,
+			edge_embedding=8,
 			out_features=self.message_size,
 		)
 		logger.warning(f"Building keras layers for Comm model with {self.n_agents} agents, {self.n_leaders} leaders and communication range {self.comm_range[0]} for maximum {self.max_num_neighbors} neighbours")
