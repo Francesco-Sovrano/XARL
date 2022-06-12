@@ -68,16 +68,16 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		return euclidean_distance(p, self.car_point) <= self.env_config['visibility_radius']
 
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
-		# s = time.time()
 		visible_road_network_junctions = self.road_network.junctions
 		visible_road_network_junctions = filter(lambda j: self.can_see(j.pos), visible_road_network_junctions) #self.visible_road_network_junctions
-		visible_road_network_junctions = filter(lambda j: j.roads_connected, visible_road_network_junctions)
+		# visible_road_network_junctions = filter(lambda j: j.roads_connected, visible_road_network_junctions)
 		visible_road_network_junctions = list(visible_road_network_junctions)
 
-		jpos_vector = np.array([j.pos for j in visible_road_network_junctions])
-		relative_jpos_vector = shift_and_rotate_vector(jpos_vector, source_point, source_orientation) / self.max_relative_coordinates
-		
-		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),visible_road_network_junctions), key=lambda x: x[0])
+		if visible_road_network_junctions:
+			relative_jpos_vector = shift_and_rotate_vector([j.pos for j in visible_road_network_junctions], source_point, source_orientation) / self.max_relative_coordinates
+			sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),visible_road_network_junctions), key=lambda x: x[0])
+		else:
+			sorted_junctions = []
 
 		##### Get junctions view
 		junctions_view_list = [
@@ -109,8 +109,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 			self._empty_junction_roads
 			for i in range(self.max_n_junctions_in_view)
 		]
-
-		# print('seconds',time.time()-s)
+		
 		return junctions_view_list, roads_view_list
 
 

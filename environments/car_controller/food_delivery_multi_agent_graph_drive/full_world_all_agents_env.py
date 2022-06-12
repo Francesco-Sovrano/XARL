@@ -130,7 +130,6 @@ class FullWorldAllAgents_Agent:
 		self.last_closest_junction = None
 		self.source_junction = None
 		self.goal_junction = None
-		self.current_road_speed_list = []
 		# init concat variables
 		self.last_reward = 0
 		self.last_reward_type = 'move_forward'
@@ -199,40 +198,44 @@ class FullWorldAllAgents_Agent:
 		return False
 
 	def get_junction_roads(self, j, source_point, source_orientation):
-		road_pos_vector = np.array([
-			road.start.pos if j.pos!=road.start.pos else road.end.pos
-			for road in j.roads_connected
-		], dtype=np.float32)
-		relative_road_pos_vector = shift_and_rotate_vector(road_pos_vector, source_point, source_orientation) / self.max_relative_coordinates
-		sorted_relative_road_pos_vector = np.sort(relative_road_pos_vector)
-		if self.culture:
-			road_feature_vector = np.array([
-				road.binary_features(as_tuple=True) # in [0,1]
+		relative_road_pos_vector = shift_and_rotate_vector(
+			[
+				road.start.pos if j.pos!=road.start.pos else road.end.pos
 				for road in j.roads_connected
-			], dtype=np.float32)
-			junction_road_vector = np.concatenate(
+			], 
+			source_point, 
+			source_orientation
+		)
+		relative_road_pos_vector /= self.max_relative_coordinates
+		if self.culture:
+			road_feature_vector = np.array(
 				[
-					sorted_relative_road_pos_vector,
+					road.binary_features(as_tuple=True) # in [0,1]
+					for road in j.roads_connected
+				], 
+				dtype=np.float32
+			)
+			junction_road_list = np.concatenate(
+				[
+					relative_road_pos_vector,
 					road_feature_vector
 				], 
 				axis=-1
-			)#.tolist()
+			).tolist()
 		else:
-			junction_road_vector = sorted_relative_road_pos_vector#.tolist()
+			junction_road_list = relative_road_pos_vector.tolist()
+		junction_road_list.sort(key=lambda x: x[:2])
 		
 		missing_roads = [self._empty_road]*(self.env_config['max_roads_per_junction']-len(j.roads_connected))
-		if missing_roads:
-			junction_road_vector = np.concatenate([junction_road_vector, missing_roads], axis=0)
-		return junction_road_vector
+		return junction_road_list + missing_roads
 
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
-		# s = time.time()
-		j_list = list(filter(lambda j: j.roads_connected, self.road_network.junctions))
-		jpos_vector = np.array([j.pos for j in j_list])
-		relative_jpos_vector = shift_and_rotate_vector(jpos_vector, source_point, source_orientation) / self.max_relative_coordinates
-		
-		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),j_list), key=lambda x: x[0])
-
+		relative_jpos_vector = shift_and_rotate_vector(
+			[j.pos for j in self.road_network.junctions], 
+			source_point, 
+			source_orientation
+		) / self.max_relative_coordinates
+		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),self.road_network.junctions), key=lambda x: x[0])
 		##### Get junctions view
 		# assert self.env_config['max_food_per_source'] == float('inf'), "Rewrite the get_view function (junctions_view_list) if you want to have limited food at sources"
 		junctions_view_list = [
@@ -435,7 +438,6 @@ class FullWorldAllAgents_Agent:
 				self.last_closest_road = self.closest_road # keep track of the current road
 				self.goal_junction = MultiAgentRoadNetwork.get_furthermost_junction(self.closest_junction_list, self.car_point)
 				self.source_junction = self.closest_junction
-				self.current_road_speed_list = []
 			if not self.env_config['allow_uturns_on_edges']:
 				if self.has_food:
 					if is_target_junction(self.goal_junction) and self.road_network.deliver_food(self.goal_junction):
@@ -445,7 +447,6 @@ class FullWorldAllAgents_Agent:
 					if is_source_junction(self.goal_junction) and self.road_network.acquire_food(self.goal_junction):
 						self.has_food = True
 						self.has_just_taken_food = True
-		self.current_road_speed_list.append(self.speed)
 		return old_goal_junction, old_car_point
 
 	def get_car_projection_on_road(self, car_point, closest_road):

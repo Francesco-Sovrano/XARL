@@ -59,13 +59,8 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		return euclidean_distance(p, self.car_point) <= self.env_config['visibility_radius']
 
 	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
-		# s = time.time()
-		j_list = list(filter(lambda j: j.roads_connected, self.road_network.junctions))
-		jpos_vector = np.array([j.pos for j in j_list])
-		relative_jpos_vector = shift_and_rotate_vector(jpos_vector, source_point, source_orientation) / self.max_relative_coordinates
-		
-		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),j_list), key=lambda x: x[0])
-
+		relative_jpos_vector = shift_and_rotate_vector([j.pos for j in self.road_network.junctions], source_point, source_orientation) / self.max_relative_coordinates
+		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),self.road_network.junctions), key=lambda x: x[0])
 		##### Get junctions view
 		junctions_view_list = [
 			np.array(
@@ -97,7 +92,6 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 			for i in range(self.env_config['junctions_number'])
 		]
 
-		# print('seconds',time.time()-s)
 		return junctions_view_list, roads_view_list
 
 

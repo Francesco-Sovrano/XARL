@@ -9,7 +9,7 @@ from environments import *
 HORIZON = 2**8
 VISIBILITY_RADIUS = 10
 
-PLOT_EPISODE = True
+PLOT_EPISODE = False
 if PLOT_EPISODE:
 	OUTPUT_DIR = './demo_episode'
 	os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -68,7 +68,7 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 		'max_normalised_speed': 120,
 	}
 
-env_config = get_default_environment_MAGraphDrive_options(4)
+env_config = get_default_environment_MAGraphDrive_options(16)
 
 env = FullWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **env_config})
 env.seed(38)
@@ -108,8 +108,9 @@ def print_screen(screens_directory, step):
 	return filename
 
 def run_one_episode(env, name):
-	episode_dir = os.path.join(OUTPUT_DIR, name)
-	os.makedirs(episode_dir, exist_ok=True)
+	if PLOT_EPISODE:
+		episode_dir = os.path.join(OUTPUT_DIR, name)
+		os.makedirs(episode_dir, exist_ok=True)
 	state = env.reset()
 	step = 0
 	sum_reward = 0

@@ -1,7 +1,7 @@
 # Read this guide for how to use this script: https://medium.com/distributed-computing-with-ray/intro-to-rllib-example-environments-3a113f532c70
 import os
 os.environ["TUNE_RESULT_DIR"] = 'tmp/ray_results'
-os.environ["OMP_NUM_THREADS"] = str(os.cpu_count())
+# os.environ["OMP_NUM_THREADS"] = str(os.cpu_count())
 import json
 import ray
 from xarl.utils.workflow import train

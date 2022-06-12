@@ -210,6 +210,7 @@ class RoadNetwork:
 				if self.road_culture:
 					road.set_culture(self.road_culture)
 					self.road_culture.initialise_random_road(road, self.np_random)
+		self.junctions = list(filter(lambda x: x.roads_connected, self.junctions))
 		starting_index = self.np_random.choice(len(random_planar_graph['spanning_tree']), 1)[0]
 		starting_point = random_planar_graph['spanning_tree'][starting_index][0]
 		return starting_point

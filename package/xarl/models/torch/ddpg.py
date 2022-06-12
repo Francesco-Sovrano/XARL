@@ -3,7 +3,7 @@ from ray.rllib.utils.framework import try_import_torch
 import os
 
 torch, nn = try_import_torch()
-torch.set_num_threads(os.cpu_count())
+# torch.set_num_threads(os.cpu_count())
 # torch.set_num_interop_threads(os.cpu_count())
 
 class TorchAdaptiveMultiHeadDDPG:
