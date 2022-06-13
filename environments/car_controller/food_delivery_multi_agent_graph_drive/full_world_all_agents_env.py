@@ -806,7 +806,7 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 			ax.text(
 				x=agent.car_point[0],
 				y=agent.car_point[1]+0.5,
-				s=agent.last_reward, 
+				s=f"{agent.last_reward:.2f}",
 			)
 		#######################
 		for uid,agent in enumerate(self.agent_list): # [Debug info]

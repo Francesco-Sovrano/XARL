@@ -6,22 +6,26 @@ from skspatial.objects import Line
 two_pi = 2*np.pi
 pi = np.pi
 		
-def rotate(x,y,theta=0):
+def rotate(x,y,theta):
 	sin_theta = np.sin(-theta)
 	cos_theta = np.cos(-theta)
 	return (x*cos_theta-y*sin_theta, x*sin_theta+y*cos_theta)
 
 def shift_and_rotate(v,d,theta=0):
-	return rotate(v[0]-d[0],v[1]-d[1],theta)
+	if theta:
+		return rotate(v[0]-d[0],v[1]-d[1],theta)
+	return (v[0]-d[0],v[1]-d[1])
 
 def shift_and_rotate_vector(pos_vector, source_point, source_orientation):
 	if not isinstance(pos_vector, np.ndarray):
 		pos_vector = np.array(pos_vector, dtype=np.float32)
 	if not isinstance(source_point, np.ndarray):
 		source_point = np.array(source_point, dtype=np.float32)
+	xy = pos_vector - source_point
+	if not source_orientation:
+		return xy
 	sin_theta = np.sin(-source_orientation)
 	cos_theta = np.cos(-source_orientation)
-	xy = pos_vector - source_point
 	x = xy[:,0][:,None]
 	y = xy[:,1][:,None]
 	return np.concatenate(
