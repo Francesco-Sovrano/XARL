@@ -15,6 +15,14 @@ from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.view_requirement import ViewRequirement
 from ray.rllib.execution.train_ops import TrainOneStep, UpdateTargetNetwork, TrainTFMultiGPU
 from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
+from ray.rllib.execution.common import (
+    AGENT_STEPS_SAMPLED_COUNTER,
+    STEPS_SAMPLED_COUNTER,
+    SAMPLE_TIMER,
+    GRAD_WAIT_TIMER,
+    _check_sample_batch_type,
+    _get_shared_metrics,
+)
 
 from xarl.experience_buffers.replay_ops import StoreToReplayBuffer, Replay, get_clustered_replay_buffer, assign_types, add_buffer_metrics, clean_batch
 from xarl.experience_buffers.replay_buffer import get_batch_infos, get_batch_uid
@@ -69,6 +77,7 @@ XADQN_EXTRA_OPTIONS = {
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 	"centralised_buffer": True, # for MARL
 	"replay_integral_multi_agent_batches": False, # for MARL, set this to True for MADDPG and QMIX
+	"batch_dropout_rate": 0, # Probability of dropping a state transition before adding it to the experience buffer. Set this to any value greater than zero to randomly drop state transitions
 }
 # The combination of update_insertion_time_when_sampling==True and prioritized_drop_probability==0 helps mantaining in the buffer only those batches with the most up-to-date priorities.
 XADQN_DEFAULT_CONFIG = DQNTrainer.merge_trainer_configs(
@@ -130,8 +139,11 @@ def xadqn_execution_plan(workers, config, **kwargs):
 	# next() on store_op drives this.
 	store_fn = StoreToReplayBuffer(local_buffer=local_replay_buffer)
 	def store_batch(batch):
-		for rollout_fragment in assign_types(batch, clustering_scheme, sample_batch_size, with_episode_type=config["cluster_with_episode_type"], training_step=local_replay_buffer.get_train_steps()):
-			store_fn(rollout_fragment)
+		total_buffer_additions = sum(map(
+			store_fn, 
+			assign_types(batch, clustering_scheme, sample_batch_size, with_episode_type=config["cluster_with_episode_type"], training_step=local_replay_buffer.get_train_steps())
+		))
+		# _get_shared_metrics().counters[STEPS_SAMPLED_COUNTER] -= batch.count-total_buffer_additions
 		return batch
 	store_op = rollouts.for_each(store_batch)
 

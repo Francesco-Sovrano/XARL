@@ -25,6 +25,7 @@ def get_clustered_replay_buffer(config):
 		ratio_of_samples_from_unclustered_buffer=ratio_of_samples_from_unclustered_buffer,
 		centralised_buffer=config["centralised_buffer"],
 		replay_integral_multi_agent_batches=config["replay_integral_multi_agent_batches"],
+		batch_dropout_rate=config["batch_dropout_rate"],
 	)
 	clustering_scheme = ClusterManager(clustering_scheme_type, config["clustering_scheme_options"])
 	return local_replay_buffer, clustering_scheme
@@ -113,8 +114,7 @@ class StoreToReplayBuffer:
 		self.local_actor = local_buffer
 		
 	def __call__(self, batch: SampleBatchType):
-		self.local_actor.add_batch(batch)
-		return batch
+		return self.local_actor.add_batch(batch)
 
 def Replay(local_buffer, replay_batch_size=1, cluster_overview_size=None, update_replayed_fn=None):
 	def gen_replay(_):

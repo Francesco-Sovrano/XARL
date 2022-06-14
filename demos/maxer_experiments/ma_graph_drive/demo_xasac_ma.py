@@ -70,7 +70,7 @@ CONFIG["env_config"] = {
 CONFIG.update({
 	"framework": "torch",
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
-	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	# "no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "comm_adaptive_multihead_network",
@@ -80,6 +80,7 @@ CONFIG.update({
 			# 'message_size': 128,
 		},
 	},
+	"batch_dropout_rate": 0.5, # Probability of dropping a state transition before adding it to the experience buffer. Set this to any value greater than zero to randomly drop state transitions
 	# "normalize_actions": False,
 
 	"seed": 42, # This makes experiments reproducible.
@@ -93,7 +94,7 @@ CONFIG.update({
 	"prioritized_replay_alpha": 0.6,
 	"prioritized_replay_beta": 0.4, # The smaller this is, the stronger is over-sampling
 	"prioritized_replay_eps": 1e-6,
-	"learning_starts": 2**16, # How many steps of the model to sample before learning starts.
+	"learning_starts": 2**14, # How many steps of the model to sample before learning starts.
 	###########################
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDrive requires a longer horizon.
 	"tau": 1e-4,
@@ -190,7 +191,7 @@ CONFIG["multiagent"].update({
 	#   multi-agent actions are passed/how many multi-agent observations
 	#   have been returned in the previous step).
 	# agent_steps: Count each individual agent step as one step.
-	"count_steps_by": "agent_steps", # XAER does not support "env_steps"?
+	# "count_steps_by": "agent_steps", # XAER does not support "env_steps"?
 })
 print('Config:', CONFIG)
 

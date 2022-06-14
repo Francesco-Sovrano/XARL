@@ -85,6 +85,7 @@ XAPPO_EXTRA_OPTIONS = {
 	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 	"centralised_buffer": True, # for MARL
 	"replay_integral_multi_agent_batches": False, # for MARL, set this to True for MADDPG and QMIX
+	"batch_dropout_rate": 0, # Probability of dropping a state transition before adding it to the experience buffer. Set this to any value greater than zero to randomly drop state transitions
 }
 # The combination of update_insertion_time_when_sampling==True and prioritized_drop_probability==0 helps mantaining in the buffer only those batches with the most up-to-date priorities.
 XAPPO_DEFAULT_CONFIG = APPOTrainer.merge_trainer_configs(

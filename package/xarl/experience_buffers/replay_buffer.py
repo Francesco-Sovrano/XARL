@@ -85,13 +85,16 @@ class SimpleReplayBuffer:
 
 	def add_batch(self, sample_batch):
 		if discard_batch(sample_batch):
-			return
+			return 0
+		# if self.batch_dropout_rate and np.random.random() < self.batch_dropout_rate:
+		# 	return 0
 		if self.num_slots > 0:
 			if len(self.replay_batches) < self.num_slots:
 				self.replay_batches.append(sample_batch)
 			else:
 				self.replay_batches[self.replay_index] = sample_batch
 				self.replay_index = (self.replay_index+1)%self.num_slots
+		return 1
 
 	def replay(self, batch_count=1):
 		return random.sample(self.replay_batches, batch_count)
@@ -111,6 +114,7 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		ratio_of_samples_from_unclustered_buffer=0,
 		centralised_buffer=True,
 		replay_integral_multi_agent_batches=False,
+		batch_dropout_rate=0,
 	):
 		logger.warning(f'Building LocalReplayBuffer with centralised_buffer = {centralised_buffer}')
 		self.prioritized_replay = prioritized_replay
@@ -121,6 +125,7 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		self.buffer_size = dummy_buffer.global_size
 		self.is_weighting_expected_values = dummy_buffer.is_weighting_expected_values()
 		self.replay_starts = learning_starts
+		self.batch_dropout_rate = batch_dropout_rate
 		self._buffer_lock = ReadWriteLock()
 		self._cluster_selection_policy = cluster_selection_policy
 		
@@ -146,12 +151,14 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		# Handle everything as if multiagent
 		if not isinstance(batch, MultiAgentBatch):
 			batch = MultiAgentBatch({DEFAULT_POLICY_ID: batch}, batch.count)
-		self.num_added += len(batch.policy_batches)
+		added_batches = 0
 		with self.add_batch_timer:
 			self._buffer_lock.acquire_write()
 			for policy_id in batch.policy_batches.keys():
 				sub_batch = MultiAgentBatchWithDefaultAgent.from_multi_agent_batch(batch, policy_id)
 				if discard_batch(sub_batch):
+					continue
+				if self.batch_dropout_rate and np.random.random() < self.batch_dropout_rate:
 					continue
 				buffer_id = DEFAULT_POLICY_ID if self.centralised_buffer else policy_id
 				batch_type = get_batch_infos(sub_batch)["batch_type"]
@@ -191,6 +198,7 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 					# Make a deep copy of infos so that for every sub_type the infos dictionary is different
 					sub_batch[SampleBatch.INFOS] = copy.deepcopy(sub_batch[SampleBatch.INFOS])
 					self.replay_buffers[buffer_id].add(batch=sub_batch, type_id=sub_type, update_prioritisation_weights=update_prioritisation_weights)
+					added_batches += 1
 					if self.buffer_of_recent_elements is not None:
 						# Make a deep copy so the replay buffer doesn't pin plasma memory.
 						sub_batch = MultiAgentBatchWithDefaultAgent.from_multi_agent_batch(batch.copy(), policy_id)
@@ -198,7 +206,8 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 						sub_batch[SampleBatch.INFOS] = copy.deepcopy(sub_batch[SampleBatch.INFOS])
 						self.buffer_of_recent_elements[buffer_id].add(batch=sub_batch, update_prioritisation_weights=update_prioritisation_weights)
 			self._buffer_lock.release_write()
-		return batch
+		self.num_added += added_batches
+		return added_batches
 
 	def can_replay(self):
 		return self.num_added >= self.replay_starts

@@ -273,7 +273,7 @@ class FullWorldAllAgents_Agent:
 			alive_agent = [x for x in self.other_agent_list if not x.is_dead]
 			sorted_alive_agents = sorted((
 				(
-					shift_and_rotate(agent.car_point, source_point, source_orientation) / self.max_relative_coordinates,
+					shift_and_rotate_vector([agent.car_point], source_point, source_orientation)[0] / self.max_relative_coordinates,
 					agent.car_orientation/two_pi,
 					agent.get_agent_state(), 
 					(agent.agent_id.binary_features(as_tuple=True) if self.culture else []), 
@@ -362,6 +362,7 @@ class FullWorldAllAgents_Agent:
 		self.seconds_per_step = self.get_step_seconds()
 		# compute new steering angle
 		##################################
+		self.idle = False
 		if self.env_config['optimal_steering_angle_on_road'] and self.closest_road and self.goal_junction:
 			road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else self.closest_road.edge[::-1]
 			if self.env_config['allow_uturns_on_edges']:
@@ -376,7 +377,6 @@ class FullWorldAllAgents_Agent:
 			self.steering_angle = 0
 		else:
 			self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
-			# self.idle = False
 		##################################
 		# compute new acceleration and speed
 		##################################
@@ -471,7 +471,7 @@ class FullWorldAllAgents_Agent:
 				"food_refills": self.road_network.food_refills,
 				# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.speed)/(len(self.other_agent_list)+1),
 			},
-			# 'discard': self.idle and not reward,
+			'discard': self.idle and not reward,
 		}
 
 		self.is_dead = dead
@@ -498,10 +498,11 @@ class FullWorldAllAgents_Agent:
 		# if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
 		# 	return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
+		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Is colliding" rule
+			if self.colliding_with_other_agent(old_car_point, self.car_point):
+				return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
 
 		#######################################
 		# "Has delivered food to target" rule
@@ -513,21 +514,13 @@ class FullWorldAllAgents_Agent:
 		if self.has_just_taken_food:
 			return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
 
-		#######################################
-		# "Is in junction" rule
-		if self.is_in_junction(self.car_point):
-			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
-			return null_reward(is_terminal=False, label='is_in_junction')
-		assert self.goal_junction
-
-		# #######################################
-		# # "No U-Turning outside junction" rule
-		# space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		# if space_traveled_towards_goal < 0:
-		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-
 		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Is in junction" rule
+			if self.is_in_junction(self.car_point):
+				# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+				# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+				return null_reward(is_terminal=False, label='is_in_junction')
 			#######################################
 			# "Stay on the road" rule
 			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
@@ -560,10 +553,11 @@ class FullWorldAllAgents_Agent:
 		# if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
 		# 	return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
-		#######################################
-		# "Is colliding" rule
-		if self.colliding_with_other_agent(old_car_point, self.car_point):
-			return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
+		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Is colliding" rule
+			if self.colliding_with_other_agent(old_car_point, self.car_point):
+				return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
 
 		#######################################
 		# "Has delivered food to target" rule
@@ -575,21 +569,13 @@ class FullWorldAllAgents_Agent:
 		if self.has_just_taken_food:
 			return null_reward(is_terminal=False, label='has_just_taken_food_from_source')
 
-		#######################################
-		# "Is in junction" rule
-		if self.is_in_junction(self.car_point):
-			# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-			# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
-			return null_reward(is_terminal=False, label='is_in_junction')
-		assert self.goal_junction
-
-		# #######################################
-		# # "No U-Turning outside junction" rule
-		# space_traveled_towards_goal = euclidean_distance(self.goal_junction.pos, old_car_point) - euclidean_distance(self.goal_junction.pos, self.car_point) if self.goal_junction is not None else 0
-		# if space_traveled_towards_goal < 0:
-		# 	return unitary_reward(is_positive=False, is_terminal=True, label='u_turning_outside_junction')
-
 		if not self.env_config['force_car_to_stay_on_road']:
+			#######################################
+			# "Is in junction" rule
+			if self.is_in_junction(self.car_point):
+				# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
+				# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
+				return null_reward(is_terminal=False, label='is_in_junction')
 			#######################################
 			# "Stay on the road" rule
 			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
@@ -608,23 +594,23 @@ class FullWorldAllAgents_Agent:
 		return null_reward(is_terminal=False, label='moving_forward')
 
 	def get_fairness_score(self):
-		if self.visiting_new_junction:
-			####### Facts
-			if self.has_just_delivered_food: 
-				just_delivered_to_worst_target = self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries
-				return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
-			####### Conjectures
-			# else:
-			# 	# is_exploring_fairly = not self.closest_junction.is_visited
-			# 	# if is_exploring_fairly:
-			# 	# 	return 'is_probably_exploring'
-			# 	if self.has_food:
-			# 		closest_target_type = self.road_network.get_closest_target_type(self.closest_junction, max_depth=3)
-			# 		if closest_target_type:
-			# 			if 'worst' in closest_target_type:
-			# 				return 'is_likely_to_fairly_pursue_a_poor_target_within_3_nodes'
-			# 			if closest_target_type=='best':
-			# 				return 'is_likely_to_pursue_a_rich_target_within_3_nodes'
+		####### Facts
+		if self.has_just_delivered_food: 
+			j = self.closest_junction if self.env_config['allow_uturns_on_edges'] else self.goal_junction
+			just_delivered_to_worst_target = j.food_deliveries == self.road_network.min_food_deliveries or j.food_deliveries-1 == self.road_network.min_food_deliveries
+			return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
+		####### Conjectures
+		# elif self.visiting_new_junction:
+		# 	# is_exploring_fairly = not self.closest_junction.is_visited
+		# 	# if is_exploring_fairly:
+		# 	# 	return 'is_probably_exploring'
+		# 	if self.has_food:
+		# 		closest_target_type = self.road_network.get_closest_target_type(self.closest_junction, max_depth=3)
+		# 		if closest_target_type:
+		# 			if 'worst' in closest_target_type:
+		# 				return 'is_likely_to_fairly_pursue_a_poor_target_within_3_nodes'
+		# 			if closest_target_type=='best':
+		# 				return 'is_likely_to_pursue_a_rich_target_within_3_nodes'
 		#######
 		# if self.has_just_taken_food: 
 		# 	return 'fair'
@@ -667,7 +653,7 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		assert self.env_config['min_junction_distance'] > 2*self.env_config['junction_radius'], f"min_junction_distance has to be greater than {2*self.env_config['junction_radius']} but it is {self.env_config['min_junction_distance']}"
 		assert self.env_config['max_speed']*self.env_config['mean_seconds_per_step'] < self.env_config['min_junction_distance'], f"max_speed*mean_seconds_per_step has to be lower than {self.env_config['min_junction_distance']} but it is {self.env_config['max_speed']*self.env_config['mean_seconds_per_step']}"
 
-		logger.warning(f'Setting environment with reward_fn <{self.env_config["reward_fn"]}> and culture_level <{self.env_config["culture_level"]}>')
+		logger.warning(f'Setting environment with reward_fn <{self.env_config["reward_fn"]}>, culture_level <{self.env_config["culture_level"]}> and fairness_reward_fn <{self.env_config["fairness_reward_fn"]}>')
 		self.culture = eval(f'{self.env_config["culture_level"]}RoadCulture')(
 			road_options={
 				'motorway': 1/2,
