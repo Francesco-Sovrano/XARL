@@ -97,7 +97,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 			done_dict['__all__'] = False
 			# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
 			file_list = [print_screen(screens_directory, step)]
-			while not done_dict['__all__']:
+			while not done_dict['__all__'] and step < config['horizon']:
 				step += 1
 				# action = env.action_space.sample()
 				action_dict = {
@@ -123,7 +123,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 			done = False
 			state = np.squeeze(env.reset())
 			file_list = [print_screen(screens_directory, step)]
-			while not done:
+			while not done and step < config['horizon']:
 				step += 1
 				# action = env.action_space.sample()
 				action = agent.compute_action(state, full_fetch=True, explore=False)

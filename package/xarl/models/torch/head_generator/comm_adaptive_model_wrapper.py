@@ -92,15 +92,14 @@ class CommAdaptiveModel(AdaptiveModel):
 		self.n_leaders = obs_space['all_leaders_absolute_position_vector'].shape[0] if 'all_leaders_absolute_position_vector' in obs_space else 0
 		self.n_agents_and_leaders = self.n_agents + self.n_leaders
 		self.max_num_neighbors = config.get('max_num_neighbors', self.n_agents_and_leaders-1)
-		self.out_features = config.get('out_features', agent_features_size)
+		self.message_size = config.get('message_size', agent_features_size)
 		self.comm_range = torch.Tensor([config.get('comm_range', 10.)])
 		self.gnn = GNNBranch(
 			node_features=agent_features_size,
 			edge_features=2+1, # position + orientation
-			out_features=self.out_features,
-			node_embedding=config.get('node_embedding_units', agent_features_size//2),
-			edge_embedding=config.get('edge_embedding_units', agent_features_size//2),
-			gnn_embedding=config.get('gnn_embedding_units', agent_features_size),
+			node_embedding=agent_features_size,
+			edge_embedding=8,
+			out_features=self.message_size,
 		)
 		logger.warning(f"Building keras layers for Comm model with {self.n_agents} agents, {self.n_leaders} leaders and communication range {self.comm_range[0]} for maximum {self.max_num_neighbors} neighbours")
 		# self.use_beta = True
@@ -161,7 +160,7 @@ class CommAdaptiveModel(AdaptiveModel):
 		## process graphs
 		gnn_output = self.gnn(graphs.x, graphs.edge_index, graphs.edge_attr)
 		assert not gnn_output.isnan().any()
-		gnn_output = gnn_output.view(-1, self.n_agents_and_leaders, self.out_features) # reshape GNN outputs
+		gnn_output = gnn_output.view(-1, self.n_agents_and_leaders, self.message_size) # reshape GNN outputs
 		if self.n_leaders:
 			gnn_output = gnn_output[:, self.n_leaders:]
 		message_from_others = torch.sum(gnn_output*this_agent_id_mask, dim=1)

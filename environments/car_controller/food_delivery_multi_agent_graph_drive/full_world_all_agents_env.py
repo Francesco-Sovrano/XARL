@@ -108,6 +108,10 @@ class FullWorldAllAgents_Agent:
 		if self.n_of_other_agents > 0:
 			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], 0, dtype=np.float32)
 
+	@property
+	def step_gain(self):
+		return 1/max(1,np.log(self.step)) # in (0,1]
+
 	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
 		self.road_network = road_network
@@ -173,15 +177,14 @@ class FullWorldAllAgents_Agent:
 		return agent_state_size
 
 	def get_agent_state(self):
-		step_gain = 1/max(1,np.log(self.step)) # in [1,0)
 		agent_state = [
 			# self.car_orientation/two_pi, # in [0,1) # needed in multi-agent environments, otherwise relative positions would be meaningless
-			self.steering_angle/self.env_config['max_steering_angle'], # normalised steering angle
-			self.speed/self.env_config['max_speed'], # normalised speed
+			self.steering_angle/self.env_config['max_steering_angle'], # normalised steering angle # in [0,1]
+			self.speed/self.env_config['max_speed'], # normalised speed # in [0,1]
 			self.is_in_junction(self.car_point),
 			self.has_food,
 			self.is_dead,
-			step_gain,
+			self.step_gain, # in (0,1]
 		]
 		if not self.env_config['force_car_to_stay_on_road']:
 			agent_state.append(min(1, self.distance_to_closest_road/self.env_config['max_distance_to_path']))
@@ -489,7 +492,7 @@ class FullWorldAllAgents_Agent:
 		def unitary_reward(is_positive, is_terminal, label):
 			return (1 if is_positive else -1, is_terminal, label)
 		def cost_reward(is_positive, is_terminal, label):
-			r = 1/max(1,np.log(self.step))
+			r = self.step_gain # in (0,1]
 			return (r if is_positive else -r, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
@@ -514,13 +517,12 @@ class FullWorldAllAgents_Agent:
 		if self.has_just_taken_food:
 			return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
 
+		#######################################
+		# "Is in junction" rule
+		if self.is_in_junction(self.car_point):
+			return null_reward(is_terminal=False, label='is_in_junction')
+
 		if not self.env_config['force_car_to_stay_on_road']:
-			#######################################
-			# "Is in junction" rule
-			if self.is_in_junction(self.car_point):
-				# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-				# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
-				return null_reward(is_terminal=False, label='is_in_junction')
 			#######################################
 			# "Stay on the road" rule
 			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
@@ -544,7 +546,7 @@ class FullWorldAllAgents_Agent:
 		def unitary_reward(is_positive, is_terminal, label):
 			return (1 if is_positive else -1, is_terminal, label)
 		def cost_reward(is_positive, is_terminal, label):
-			r = 1/max(1,np.log(self.step))
+			r = self.step_gain # in (0,1]
 			return (r if is_positive else -r, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
@@ -569,13 +571,12 @@ class FullWorldAllAgents_Agent:
 		if self.has_just_taken_food:
 			return null_reward(is_terminal=False, label='has_just_taken_food_from_source')
 
+		#######################################
+		# "Is in junction" rule
+		if self.is_in_junction(self.car_point):
+			return null_reward(is_terminal=False, label='is_in_junction')
+
 		if not self.env_config['force_car_to_stay_on_road']:
-			#######################################
-			# "Is in junction" rule
-			if self.is_in_junction(self.car_point):
-				# if self.steps_in_junction > self.env_config['max_steps_in_junction']:
-				# 	return unitary_reward(is_positive=False, is_terminal=True, label='too_many_steps_in_junction')
-				return null_reward(is_terminal=False, label='is_in_junction')
 			#######################################
 			# "Stay on the road" rule
 			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
