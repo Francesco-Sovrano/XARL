@@ -14,7 +14,7 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
 
-SELECT_ENV = "MAGraphDrive-FullWorldSomeAgents"
+SELECT_ENV = "MAGraphDrive-PartWorldSomeAgents"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 VISIBILITY_RADIUS = 10

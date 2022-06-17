@@ -31,7 +31,7 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				low= -1,
 				high= 1,
 				shape= (
-					self.agent_state_size + self.obs_car_features,
+					self.agent_state_size,
 				),
 				dtype=np.float32
 			),
@@ -39,60 +39,30 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		self.observation_space = gym.spaces.Dict(state_dict)
 		# self._visible_road_network_junctions = None
 
+	def get_visible_junctions(self, source_point, source_orientation):
+		relative_jpos_vector = shift_and_rotate_vector([j.pos for j in self.road_network.junctions], source_point, source_orientation) / self.max_relative_coordinates
+		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),self.road_network.junctions), key=lambda x: x[0])
+		return sorted_junctions
+
 	def get_state(self, car_point=None, car_orientation=None):
 		if car_point is None:
 			car_point=self.car_point
 		if car_orientation is None:
 			car_orientation=self.car_orientation
-		junctions_view_list, roads_view_list = self.get_view(car_point, car_orientation)
+		
+		sorted_junctions = self.get_visible_junctions(car_point, car_orientation)
+		junctions_view_list = self.get_junction_view_list(sorted_junctions, car_point, car_orientation, self.env_config['junctions_number'])
+		roads_view_list = self.get_roads_view_list(sorted_junctions, car_point, car_orientation, self.env_config['junctions_number'])
+		agent_feature_list = self.get_agent_feature_list()
 		state_dict = {
 			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
 			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
-			"fc_this_agent-8": np.array([
-				*self.get_agent_state(),
-				*(self.agent_id.binary_features(as_tuple=True) if self.culture else []), 
-			], dtype=np.float32),
+			"fc_this_agent-8": np.array(agent_feature_list, dtype=np.float32),
 		}
 		return state_dict
 
 	def can_see(self, p):
 		return euclidean_distance(p, self.car_point) <= self.env_config['visibility_radius']
-
-	def get_view(self, source_point, source_orientation): # source_orientation is in radians, source_point is in meters, source_position is quantity of past splines
-		relative_jpos_vector = shift_and_rotate_vector([j.pos for j in self.road_network.junctions], source_point, source_orientation) / self.max_relative_coordinates
-		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),self.road_network.junctions), key=lambda x: x[0])
-		##### Get junctions view
-		junctions_view_list = [
-			np.array(
-				(
-					*sorted_junctions[i][0], 
-					sorted_junctions[i][1].is_source, 
-					normalize_food_count(
-						sorted_junctions[i][1].food_refills, 
-						self.env_config['max_food_per_source']
-					) if sorted_junctions[i][1].is_source else -1,
-					sorted_junctions[i][1].is_target, 
-					normalize_food_count(
-						sorted_junctions[i][1].food_deliveries, 
-						self.env_config['max_food_per_target']
-					) if sorted_junctions[i][1].is_target else -1
-				), 
-				dtype=np.float32
-			) 
-			if i < len(sorted_junctions) else 
-			self._empty_junction
-			for i in range(self.env_config['junctions_number'])
-		]
-
-		##### Get roads view
-		roads_view_list = [
-			self.get_junction_roads(sorted_junctions[i][1], source_point, source_orientation)
-			if i < len(sorted_junctions) else 
-			self._empty_junction_roads
-			for i in range(self.env_config['junctions_number'])
-		]
-
-		return junctions_view_list, roads_view_list
 
 
 class FullWorldSomeAgents_GraphDrive(FullWorldAllAgents_GraphDrive):
@@ -127,7 +97,7 @@ class FullWorldSomeAgents_GraphDrive(FullWorldAllAgents_GraphDrive):
 			}
 		elif isinstance(_obs_space, gym.spaces.Tuple):
 			return list(map(FullWorldSomeAgents_GraphDrive.get_empty_state_recursively, _obs_space.spaces))
-		return np.zeros(_obs_space.shape, dtype=_obs_space.dtype)
+		return np.full(_obs_space.shape, EMPTY_FEATURE_PLACEHOLDER, dtype=_obs_space.dtype)
 
 	def get_this_agent_id_mask(self, this_agent_id):
 		agent_id_mask = self.agent_id_mask_dict.get(this_agent_id,None)

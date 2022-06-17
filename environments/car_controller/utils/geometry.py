@@ -6,39 +6,48 @@ from skspatial.objects import Line
 two_pi = 2*np.pi
 pi = np.pi
 		
-def rotate(x,y,theta):
-	sin_theta = np.sin(-theta)
-	cos_theta = np.cos(-theta)
-	return (x*cos_theta-y*sin_theta, x*sin_theta+y*cos_theta)
-
-def shift_and_rotate(v,d,theta=0):
-	if theta:
-		return rotate(v[0]-d[0],v[1]-d[1],theta)
-	return (v[0]-d[0],v[1]-d[1])
+def rotate_vector(xy,theta):
+	if not theta:
+		return xy
+	xy_shape = xy.shape
+	assert xy_shape[-1]==2
+	if len(xy_shape) > 2:
+		xy.reshape((-1,2))
+	sin_theta = np.sin(theta)
+	cos_theta = np.cos(theta)
+	if len(xy_shape) > 1:
+		x = xy[:,0][:,None]
+		y = xy[:,1][:,None]
+	else:
+		x,y = xy
+	xy = [
+		x*cos_theta-y*sin_theta,
+		x*sin_theta+y*cos_theta
+	]
+	if len(xy_shape) > 1:
+		xy = np.concatenate(xy, axis=-1)
+	if len(xy_shape) > 2:
+		xy = xy.reshape(xy_shape)
+	return xy
 
 def shift_and_rotate_vector(pos_vector, source_point, source_orientation):
 	if not isinstance(pos_vector, np.ndarray):
 		pos_vector = np.array(pos_vector, dtype=np.float32)
 	if not isinstance(source_point, np.ndarray):
 		source_point = np.array(source_point, dtype=np.float32)
-	xy = pos_vector - source_point
-	if not source_orientation:
-		return xy
-	sin_theta = np.sin(-source_orientation)
-	cos_theta = np.cos(-source_orientation)
-	x = xy[:,0][:,None]
-	y = xy[:,1][:,None]
-	return np.concatenate(
-		[
-			x*cos_theta-y*sin_theta,
-			x*sin_theta+y*cos_theta
-		], 
-		axis=-1
-	)
+	return rotate_vector(pos_vector-source_point,-source_orientation)
 
-def rotate_and_shift(xv,yv,dx,dy,theta=0):
-	(x,y) = rotate(xv,yv,theta)
-	return (x+dx,y+dy)
+def rotate_and_shift_vector(pos_vector, source_point, source_orientation):
+	if not isinstance(pos_vector, np.ndarray):
+		pos_vector = np.array(pos_vector, dtype=np.float32)
+	if not isinstance(source_point, np.ndarray):
+		source_point = np.array(source_point, dtype=np.float32)
+	return rotate_vector(pos_vector,source_orientation) + source_point
+
+# a=[[1,-1],[2,2],[3,0]]
+# b=[2,1]
+# c=shift_and_rotate_vector(a,b,np.pi)
+# print(c, '-', rotate_and_shift_vector(c,b,np.pi))
 
 def generate_random_polynomial(np_random=None):
 	if np_random is None:
