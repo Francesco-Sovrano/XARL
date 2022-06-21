@@ -158,25 +158,29 @@ class RoadNetwork:
 		closest_junctions = [self.junction_dict[road_start],self.junction_dict[road_end]]
 		return distance_to_closest_road, closest_road, closest_junctions
 
-	def get_closest_junction_by_point(self, source_point):
+	def get_closest_junction_by_point(self, source_point, junction_set=None):
+		if junction_set is None:
+			junction_set = self.junctions
 		return min(
 			(
 				(
 					euclidean_distance(junction.pos,source_point),
 					junction
 				)
-				for junction in self.junctions
+				for junction in junction_set
 			), key=lambda x:x[0]
 		)
 	
-	def get_closest_road_by_point(self, source_point):
+	def get_closest_road_by_point(self, source_point, road_set=None):
+		if road_set is None:
+			road_set = self.roads
 		return min(
 			(
 				(
 					point_to_line_dist(source_point,road.edge),
 					road
 				)
-				for road in self.roads
+				for road in road_set
 			), key=lambda x:x[0]
 		)
 

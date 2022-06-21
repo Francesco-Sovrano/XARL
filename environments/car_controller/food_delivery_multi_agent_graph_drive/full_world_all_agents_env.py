@@ -3,6 +3,7 @@ import gym
 from gym.utils import seeding
 import numpy as np
 import json
+from more_itertools import unique_everseen
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
 from matplotlib import use as matplotlib_use
@@ -49,19 +50,19 @@ class FullWorldAllAgents_Agent:
 		self.obs_car_features = (len(culture.agent_properties) - 1) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
 		# Spaces
 		self.discrete_action_space = self.env_config['discrete_action_space']
-		self.decides_acceleration = not self.env_config['force_car_to_stay_on_road'] or self.culture
+		self.decides_speed = self.culture
 		if self.discrete_action_space:
-			self.allowed_steering_angles = np.linspace(-1, 1, self.env_config['n_discrete_actions']).tolist()
-			if not self.decides_acceleration:
-				self.allowed_accelerations = [1]
+			self.allowed_orientations = np.linspace(-1, 1, self.env_config['n_discrete_actions']).tolist()
+			if not self.decides_speed:
+				self.allowed_speeds = [1]
 			else:
-				self.allowed_accelerations = np.linspace(-1, 1, self.env_config['n_discrete_actions']).tolist()
-			self.action_space = gym.spaces.Discrete(len(self.allowed_steering_angles)*len(self.allowed_accelerations))
+				self.allowed_speeds = np.linspace(-1, 1, self.env_config['n_discrete_actions']).tolist()
+			self.action_space = gym.spaces.Discrete(len(self.allowed_orientations)*len(self.allowed_speeds))
 		else:
-			if self.decides_acceleration:
-				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float32)  # steering angle and speed
+			if self.decides_speed:
+				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float32)
 			else:
-				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)  # steering angle
+				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
@@ -83,7 +84,7 @@ class FullWorldAllAgents_Agent:
 				dtype=np.float32
 			),
 			"fc_this_agent-8": gym.spaces.Box( # Agent features
-				low= -1,
+				low= 0,
 				high= 1,
 				shape= (
 					self.agent_state_size,
@@ -109,41 +110,32 @@ class FullWorldAllAgents_Agent:
 		if self.n_of_other_agents > 0:
 			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
 
-	@property
-	def step_gain(self):
-		return 1/max(1,np.log(self.step)) # in (0,1]
-
 	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
 		self.road_network = road_network
 		self.other_agent_list = other_agent_list
-		self.seconds_per_step = self.get_step_seconds()
-		self.slowdown_factor = self.get_slowdown_factor()
 		# car position
 		self.car_point = car_point
-		self.car_orientation = np.mod(self.np_random.random()*two_pi, two_pi) # in [0,2*pi)
-		self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point)
-		self.closest_junction = MultiAgentRoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
-		# steering angle & speed
-		self.steering_angle = 0
-		self.speed = self.env_config['min_speed'] #+ (self.env_config['max_speed']-self.env_config['min_speed'])*self.np_random.random() # in [min_speed,max_speed]
-		# self.speed = self.env_config['min_speed']+(self.env_config['max_speed']-self.env_config['min_speed'])*(70/120) # for testing
+		self.car_orientation = (self.np_random.random()*two_pi) % two_pi # in [0,2*pi)
+		self.closest_junction = self.road_network.junction_dict[car_point]
+		self.closest_road = None
+		# speed
+		self.car_speed = self.env_config['min_speed'] if self.decides_speed else self.env_config['max_speed']
 		if self.culture:
-			self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
-
+			self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.car_speed))
+		#####
 		self.last_closest_road = None
 		self.last_closest_junction = None
 		self.source_junction = None
 		self.goal_junction = None
 		# init concat variables
-		self.last_reward = 0
-		self.last_reward_type = 'move_forward'
 		self.last_action_mask = None
 		self.is_dead = False
 		self.has_food = True
 		# self.steps_in_junction = 0
 		self.step = 1
 		# self.idle = False
+		self.last_reward = None
 
 		self.visiting_new_road = False
 		self.visiting_new_junction = False
@@ -172,10 +164,8 @@ class FullWorldAllAgents_Agent:
 
 	@property
 	def agent_state_size(self):
-		agent_state_size = 6
-		if not self.env_config['force_car_to_stay_on_road']:
-			agent_state_size += 1
-		if self.env_config['blockage_probability']:
+		agent_state_size = 3
+		if self.decides_speed:
 			agent_state_size += 1
 		if self.culture:
 			agent_state_size += self.obs_car_features
@@ -183,30 +173,26 @@ class FullWorldAllAgents_Agent:
 
 	def get_agent_feature_list(self):
 		agent_state = [
-			# self.car_orientation/two_pi, # in [0,1) # needed in multi-agent environments, otherwise relative positions would be meaningless
-			self.steering_angle/self.env_config['max_steering_angle'], # normalised steering angle # in [0,1]
-			self.speed/self.env_config['max_speed'], # normalised speed # in [0,1]
 			self.is_in_junction(self.car_point),
 			self.has_food,
 			self.is_dead,
-			self.step_gain, # in (0,1]
+			# self.car_orientation/two_pi,
+			# self.step_gain, # in (0,1]
 		]
-		if not self.env_config['force_car_to_stay_on_road']:
-			agent_state.append(min(1, self.distance_to_closest_road/self.env_config['max_distance_to_path']))
-		if self.env_config['blockage_probability']:
-			agent_state.append(self.slowdown_factor)
+		if self.decides_speed:
+			agent_state.append(self.car_speed/self.env_config['max_speed']) # normalised speed # in [0,1]
 		if self.culture:
 			agent_state += self.agent_id.binary_features(as_tuple=True)
 		return agent_state
 
-	def colliding_with_other_agent(self, old_car_point, car_point):
-		if not self.env_config['agent_collision_radius']:
-			return False
-		for agent in self.other_agent_list:
-			if segment_collide_circle(segment=(old_car_point, car_point), circle=(agent.car_point,self.env_config['agent_collision_radius'])):
-				return True
-		return False
+	@property
+	def step_gain(self):
+		return 1/max(1,np.log(self.step)) # in (0,1]
 
+	@property
+	def step_seconds(self):
+		return self.np_random.exponential(scale=self.env_config['mean_seconds_per_step']) if self.env_config['random_seconds_per_step'] else self.env_config['mean_seconds_per_step']
+	
 	def get_junction_roads(self, j, source_point, source_orientation):
 		relative_road_pos_vector = shift_and_rotate_vector(
 			[
@@ -282,14 +268,17 @@ class FullWorldAllAgents_Agent:
 	def get_neighbourhood_view(self, source_point, source_orientation):
 		if self.other_agent_list:
 			alive_agent = [x for x in self.other_agent_list if not x.is_dead]
-			sorted_alive_agents = sorted((
+			sorted_alive_agents = sorted(
 				(
-					shift_and_rotate_vector(agent.car_point, source_point, source_orientation) / self.max_relative_coordinates,
-					agent.car_orientation/two_pi,
-					agent.get_agent_feature_list(), 
-				)
-				for agent in alive_agent
-			), key=lambda x: x[0])
+					(
+						(shift_and_rotate_vector(agent.car_point, source_point, source_orientation) / self.max_relative_coordinates).tolist(),
+						agent.car_orientation/two_pi,
+						agent.get_agent_feature_list(), 
+					)
+					for agent in alive_agent
+				), 
+				key=lambda x: x[0]
+			)
 			sorted_alive_agents = [
 				(*agent_point, agent_orientation, *agent_state)
 				for agent_point, agent_orientation, agent_state in sorted_alive_agents
@@ -304,132 +293,119 @@ class FullWorldAllAgents_Agent:
 			agents_view_list = None
 		return agents_view_list
 
-	def move(self, point, orientation, steering_angle, speed, add_noise=False):
-		# https://towardsdatascience.com/how-self-driving-cars-steer-c8e4b5b55d7f?gi=90391432aad7
-		# Add noise
-		if add_noise:
-			steering_angle += (2*self.np_random.random()-1)*self.env_config['max_steering_noise_angle']
-			steering_angle = np.clip(steering_angle, -self.env_config['max_steering_angle'], self.env_config['max_steering_angle']) # |steering_angle| <= max_steering_angle, ALWAYS
-			speed += (2*self.np_random.random()-1)*self.env_config['max_speed_noise']
-		#### Ackerman Steering: Forward Kinematic for Car-Like vehicles #### https://www.xarg.org/book/kinematics/ackerman-steering/
-		if steering_angle:
-			turning_radius = self.env_config['wheelbase']/np.tan(steering_angle)
-			# Max taylor approximation error of the tangent simplification is about 3° at 30° steering lock
-			# turning_radius = self.env_config['wheelbase']/steering_angle
-			angular_velocity = speed/turning_radius
-			# get normalized new orientation
-			new_orientation = np.mod(orientation + angular_velocity*self.seconds_per_step, two_pi) # in [0,2*pi)
-		else:
-			new_orientation = orientation
-		# Move point
-		x, y = point
-		dir_x, dir_y = get_heading_vector(angle=new_orientation, space=speed*self.seconds_per_step)
-		new_point = (x+dir_x, y+dir_y)
-		return new_point, new_orientation
-
-	def get_steering_angle_from_action(self, action): # action is in [-1,1]
-		return action*self.env_config['max_steering_angle'] # in [-max_steering_angle, max_steering_angle]
-		
-	def get_acceleration_from_action(self, action): # action is in [-1,1]
-		return action*(self.env_config['max_acceleration'] if action >= 0 else self.env_config['max_deceleration']) # in [-max_deceleration, max_acceleration]
-		
-	def accelerate(self, speed, acceleration):
-		# use seconds_per_step instead of mean_seconds_per_step, because this way the algorithm is able to explore more states and train better
-		# return np.clip(speed + acceleration*self.env_config['mean_seconds_per_step'], self.env_config['min_speed'], self.env_config['max_speed'])
-		return np.clip(speed + acceleration*self.seconds_per_step, self.env_config['min_speed'], self.env_config['max_speed'])
-		
-	def is_in_junction(self, car_point, radius=None):
+	def is_in_junction(self, point, radius=None):
 		if radius is None:
 			radius = self.env_config['junction_radius']
-		return euclidean_distance(self.closest_junction.pos, car_point) <= radius
+		return euclidean_distance(self.closest_junction.pos, point) <= radius
 
-	def get_step_seconds(self):
-		return self.np_random.exponential(scale=self.env_config['mean_seconds_per_step']) if self.env_config['random_seconds_per_step'] is True else self.env_config['mean_seconds_per_step']
+	def is_on_road(self, point, max_distance=None):
+		if max_distance is None:
+			max_distance = self.env_config['max_distance_to_path']
+		return point_to_line_dist(point, self.closest_road.edge) <= max_distance
 
-	def get_slowdown_factor(self):
-		if not self.env_config['blockage_probability']:
-			return 0
-		if not self.np_random.choice(a=[False,True], p=[1-self.env_config['blockage_probability'],self.env_config['blockage_probability']]):
-			return 0
-		return self.np_random.uniform(self.env_config['min_blockage_ratio'], self.env_config['max_blockage_ratio'])
+	def move_car(self, max_space):
+		x,y = self.car_point
+		dx,dy = get_heading_vector(
+			angle=self.car_orientation, 
+			space=min(self.car_speed*self.step_seconds, max_space)
+		)
+		return (x+dx, y+dy)
 
-	def compute_distance_to_closest_road(self):
-		if self.goal_junction is None:
-			self.distance_to_closest_road, self.closest_road, self.closest_junction_list = self.road_network.get_closest_road_and_junctions(self.car_point, self.closest_junction_list)
-		else:
-			self.distance_to_closest_road = point_to_line_dist(self.car_point, self.closest_road.edge)
+	@property
+	def neighbouring_junctions_iter(self):
+		j_pos_set_iter = unique_everseen((
+			j_pos
+			for road in self.closest_junction.roads_connected 
+			for j_pos in road.edge
+		))
+		return (
+			self.road_network.junction_dict[j_pos]
+			for j_pos in j_pos_set_iter
+		)
 
 	def start_step(self, action_vector):
-		if self.discrete_action_space:
-			action_vector = [
-				self.allowed_steering_angles[action_vector//len(self.allowed_accelerations)],
-				self.allowed_accelerations[(action_vector%len(self.allowed_accelerations))]
-			]
-		# first of all, get the seconds passed from last step
-		self.seconds_per_step = self.get_step_seconds()
-		# compute new steering angle
 		##################################
-		# self.idle = False
-		if self.env_config['optimal_steering_angle_on_road'] and not self.is_in_junction(self.car_point):
+		## Get actions
+		##################################
+		if self.discrete_action_space:
+			action_vector = (
+				self.allowed_orientations[action_vector//len(self.allowed_speeds)],
+				self.allowed_speeds[(action_vector%len(self.allowed_speeds))]
+			)
+		##################################
+		## Compute new orientation
+		##################################
+		orientation_action = action_vector[0]
+		# Optimal orientation on road
+		if self.goal_junction: # is on road
 			road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else self.closest_road.edge[::-1]
 			if self.env_config['allow_uturns_on_edges']:
-				if self.get_steering_angle_from_action(action=action_vector[0]) < 0:
+				if orientation_action < 0: # invert direction; u-turn
 					road_edge = road_edge[::-1]
 					tmp = self.goal_junction
 					self.goal_junction = self.source_junction
 					self.source_junction = tmp
-			# else:
-			# 	self.idle = True
 			self.car_orientation = get_slope_radians(*road_edge)%two_pi # in [0, 2*pi)
-			self.steering_angle = 0
+		else: # is in junction
+			self.car_orientation = (self.car_orientation+(orientation_action+1)*pi)%two_pi
+		##################################
+		## Compute new speed
+		##################################
+		if self.decides_speed:
+			speed_action = action_vector[1]
+			self.car_speed = np.clip((speed_action+1)/2, self.env_config['min_speed'], self.env_config['max_speed'])
+			if self.culture:
+				self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.car_speed))
+		##################################
+		## Move car
+		##################################
+		distance_to_goal = euclidean_distance(self.car_point, self.goal_junction.pos) if self.goal_junction else float('inf')
+		self.car_point = self.move_car(max_space=distance_to_goal)
+		##################################
+		## Get closest junction and road
+		##################################
+		old_closest_junction = self.closest_junction
+		is_in_junction = self.is_in_junction(self.car_point) # This is correct because during reset cars are always spawn in a junction
+		if not is_in_junction:
+			if not self.closest_road:
+				road_set = self.closest_junction.roads_connected if not self.env_config['random_seconds_per_step'] else unique_everseen((r for j in self.neighbouring_junctions_iter for r in j.roads_connected), key=lambda x:x.edge) # self.closest_junction.roads_connected is correct because we are asserting that self.env_config['max_speed']*self.env_config['mean_seconds_per_step'] < self.env_config['min_junction_distance']
+				_,self.closest_road = self.road_network.get_closest_road_by_point(self.car_point, road_set)
 		else:
-			self.steering_angle = self.get_steering_angle_from_action(action=action_vector[0])
+			self.closest_road = None
+		if self.closest_road:
+			junction_set = (self.road_network.junction_dict[self.closest_road.edge[0]],self.road_network.junction_dict[self.closest_road.edge[1]])
+			_,self.closest_junction = self.road_network.get_closest_junction_by_point(self.car_point, junction_set)
+		# else:
+		# 	_,self.closest_junction = self.road_network.get_closest_junction_by_point(self.car_point, self.neighbouring_junctions_iter)
 		##################################
-		# compute new acceleration and speed
+		## Adjust car position
 		##################################
-		self.speed = self.accelerate(
-			speed=self.speed, 
-			acceleration=self.get_acceleration_from_action(action=action_vector[1] if self.decides_acceleration else 1)
-		)
-		if self.culture:
-			self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.speed))
-		# move car
-		old_car_point = self.car_point
-		old_goal_junction = self.goal_junction
+		# Force car to stay on a road or a junction
+		if not is_in_junction and not self.is_on_road(self.car_point): # go back
+			self.closest_junction = old_closest_junction
+			self.closest_road = None
+			self.car_point = self.closest_junction.pos
+			is_in_junction = True
+		##################################
+		## Update the environment
+		##################################
 		self.visiting_new_road = False
 		self.visiting_new_junction = False
 		self.has_just_taken_food = False
 		self.has_just_delivered_food = False
-
-		self.car_point, self.car_orientation = self.move(
-			point=self.car_point, 
-			orientation=self.car_orientation, 
-			steering_angle=self.steering_angle, 
-			speed=self.speed*(1-self.slowdown_factor),
-			add_noise=True
-		)
-		self.compute_distance_to_closest_road()
-		if self.env_config['force_car_to_stay_on_road']:
-			if not self.is_in_junction(self.car_point) and self.distance_to_closest_road >= self.env_config['max_distance_to_path']: # go back
-				self.car_point = old_car_point
-				self.speed = 0
-				self.compute_distance_to_closest_road()
-		self.closest_junction = MultiAgentRoadNetwork.get_closest_junction(self.closest_junction_list, self.car_point)
-		# if a new road is visited, add the old one to the set of visited ones
-		if self.is_in_junction(self.car_point):
+		if is_in_junction:
 			# self.steps_in_junction += 1
-			if self.last_closest_road is not None: # if closest_road is not the first visited road
+			self.visiting_new_junction = self.closest_junction != self.last_closest_junction
+			if self.visiting_new_junction: # visiting a new junction
+				if self.last_closest_road is not None: # if closest_road is not the first visited road
+					self.last_closest_road.is_visited_by(self.agent_id, True) # set the old road as visited
 				self.closest_junction.is_visited_by(self.agent_id, True) # set the current junction as visited
-				self.last_closest_road.is_visited_by(self.agent_id, True) # set the old road as visited
-			if self.closest_junction != self.last_closest_junction:
-				self.visiting_new_junction = True
 				#########
 				self.source_junction = None
 				self.goal_junction = None
 				self.last_closest_road = None
 				self.last_closest_junction = self.closest_junction
 				#########
-				# if self.env_config['allow_uturns_on_edges']:
 				if self.has_food:
 					if is_target_junction(self.closest_junction) and self.road_network.deliver_food(self.closest_junction):
 						self.has_food = False
@@ -439,32 +415,17 @@ class FullWorldAllAgents_Agent:
 						self.has_food = True
 						self.has_just_taken_food = True
 		else:
-			if self.last_closest_road != self.closest_road: # not in junction and visiting a new road
-				self.visiting_new_road = True
-				#########
+			self.visiting_new_road = self.last_closest_road != self.closest_road		
+			if self.visiting_new_road: # not in junction and visiting a new road
 				self.last_closest_junction = None
 				self.last_closest_road = self.closest_road # keep track of the current road
-				self.goal_junction = MultiAgentRoadNetwork.get_furthermost_junction(self.closest_junction_list, self.car_point)
+				self.goal_junction = self.road_network.junction_dict[self.closest_road.edge[0] if self.closest_road.edge[1] == self.closest_junction.pos else self.closest_road.edge[1]]
 				self.source_junction = self.closest_junction
-			# if not self.env_config['allow_uturns_on_edges']:
-			# 	if self.has_food:
-			# 		if is_target_junction(self.goal_junction) and self.road_network.deliver_food(self.goal_junction):
-			# 			self.has_food = False
-			# 			self.has_just_delivered_food = True
-			# 	else:
-			# 		if is_source_junction(self.goal_junction) and self.road_network.acquire_food(self.goal_junction):
-			# 			self.has_food = True
-			# 			self.has_just_taken_food = True
-		return old_goal_junction, old_car_point
 
-	def get_car_projection_on_road(self, car_point, closest_road):
-		return poit_to_line_projection(car_point, closest_road.edge)
-
-	def end_step(self, old_goal_junction, old_car_point):
-		reward, dead, reward_type = self.reward_fn(old_goal_junction, old_car_point)
+	def end_step(self):
+		reward, dead, reward_type = self.reward_fn()
 		how_fair = self.get_fairness_score()
 		reward += self.fairness_reward_fn(how_fair)
-		self.slowdown_factor = self.get_slowdown_factor()
 
 		state = self.get_state()
 		info_dict = {
@@ -477,7 +438,7 @@ class FullWorldAllAgents_Agent:
 				"food_deliveries": self.road_network.food_deliveries,
 				"fair_food_deliveries": self.road_network.fair_food_deliveries,
 				"food_refills": self.road_network.food_refills,
-				# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.speed)/(len(self.other_agent_list)+1),
+				# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.car_speed)/(len(self.other_agent_list)+1),
 			},
 			# 'discard': self.idle and not reward,
 		}
@@ -485,13 +446,12 @@ class FullWorldAllAgents_Agent:
 		self.is_dead = dead
 		self.step += 1
 		self.last_reward = reward
-		self.last_reward_type = reward_type
 		return [state, reward, dead, info_dict]
 			
 	def get_info(self):
-		return f"speed={self.speed}, steering_angle={self.steering_angle}, orientation={self.car_orientation}"
+		return f"speed={self.car_speed}, orientation={self.car_orientation}"
 
-	def frequent_reward_default(self, old_goal_junction, old_car_point):
+	def frequent_reward_default(self):
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
@@ -500,12 +460,6 @@ class FullWorldAllAgents_Agent:
 			r = self.step_gain # in (0,1]
 			return (r if is_positive else -r, is_terminal, label)
 		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-		if not self.env_config['force_car_to_stay_on_road']:
-			#######################################
-			# "Is colliding" rule
-			if self.colliding_with_other_agent(old_car_point, self.car_point):
-				return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
 
 		#######################################
 		# "Has delivered food to target" rule
@@ -522,12 +476,6 @@ class FullWorldAllAgents_Agent:
 		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
 
-		if not self.env_config['force_car_to_stay_on_road']:
-			#######################################
-			# "Stay on the road" rule
-			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-				return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
-
 		if self.culture:
 			#######################################
 			# "Follow regulation" rule. # Run dialogue against culture.
@@ -540,7 +488,7 @@ class FullWorldAllAgents_Agent:
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')
 
-	def sparse_reward_default(self, old_goal_junction, old_car_point):
+	def sparse_reward_default(self):
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
@@ -553,13 +501,7 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Mission completed" rule
 		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
-			return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
-
-		if not self.env_config['force_car_to_stay_on_road']:
-			#######################################
-			# "Is colliding" rule
-			if self.colliding_with_other_agent(old_car_point, self.car_point):
-				return unitary_reward(is_positive=False, is_terminal=True, label='has_collided_another_agent')
+			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Has delivered food to target" rule
@@ -575,12 +517,6 @@ class FullWorldAllAgents_Agent:
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
-
-		if not self.env_config['force_car_to_stay_on_road']:
-			#######################################
-			# "Stay on the road" rule
-			if self.distance_to_closest_road >= self.env_config['max_distance_to_path']:
-				return unitary_reward(is_positive=False, is_terminal=True, label='not_staying_on_the_road')
 
 		if self.culture:
 			#######################################
@@ -627,7 +563,6 @@ class FullWorldAllAgents_Agent:
 	def frequent_fairness_reward(self, how_fair):
 		return 1 if 'fairly' in how_fair else 0
 
-
 class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 	metadata = {'render.modes': ['human', 'rgb_array']}
 	
@@ -646,8 +581,6 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		self.num_agents = config.get('num_agents',1)
 		self.viewer = None
 
-		self.env_config['max_steering_angle'] = np.deg2rad(self.env_config['max_steering_degree'])
-		self.env_config['max_steering_noise_angle'] = np.deg2rad(self.env_config['max_steering_noise_degree'])
 		self.env_config['map_size'] = (self.env_config['max_dimension'], self.env_config['max_dimension'])
 		self.env_config['min_junction_distance'] = 2.5*self.env_config['junction_radius']
 
@@ -716,14 +649,12 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		return initial_state_dict
 
 	def step(self, action_dict):
-		state_dict, reward_dict, terminal_dict, info_dict = {}, {}, {}, {}
-		step_info_dict = {
-			uid: self.agent_list[uid].start_step(action)
-			for uid,action in action_dict.items()
-		}
+		for uid,action in action_dict.items():
+			self.agent_list[uid].start_step(action)
 		# end_step uses information about all agents, this requires all agents to act first and compute rewards and states after everybody acted
-		for uid,step_info in step_info_dict.items():
-			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step(*step_info)
+		state_dict, reward_dict, terminal_dict, info_dict = {}, {}, {}, {}
+		for uid in action_dict.keys():
+			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step()
 		terminal_dict['__all__'] = all(terminal_dict.values()) or self.road_network.min_food_deliveries == self.env_config['max_food_per_target']
 		return state_dict, reward_dict, terminal_dict, info_dict
 			
@@ -743,22 +674,26 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		def get_car_color(a):
 			if a.is_dead:
 				return 'grey'
-			if a.slowdown_factor:
-				return 'red'
 			if a.has_food:
 				return 'green'
 			return colour_to_hex("Gold")
 		car1_handle, = ax.plot((0,0), (0,0), color='green', lw=2, label="Has Food")
-		car2_handle, = ax.plot((0,0), (0,0), color='red', lw=2, label="Is Slow")
 		car3_handle, = ax.plot((0,0), (0,0), color='grey', lw=2, label="Is Dead")
+
+		goal_junction_set = set((agent.goal_junction.pos for agent in self.agent_list if agent.goal_junction))
 		def get_junction_color(j):
 			if is_target_junction(j):
 				return 'red'
 			if is_source_junction(j):
 				return 'green'
+			if j.pos in goal_junction_set:
+				return 'blue'
+			# if j.pos in closest_junction_set:
+			# 	return 'blue'
 			return 'grey'
-		junction1_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=0.5, label='Target Node')
-		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=0.5, label='Source Node')
+		junction1_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=1, label='Target Node')
+		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=1, label='Source Node')
+		junction3_handle = ax.scatter(*next(iter(goal_junction_set)), marker='o', color='blue', alpha=1, label='Goal Node')
 		
 		# [Car]
 		#######################
@@ -781,7 +716,7 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 				agent.car_point, 
 				1, 
 				color=get_car_color(agent), 
-				alpha=0.5,
+				alpha=1,
 			)
 			for uid,agent in enumerate(self.agent_list)
 		]
@@ -816,7 +751,7 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 			heading_vector_handle = ax.plot(
 				[car_x, car_x+dir_x],[car_y, car_y+dir_y], 
 				color=get_car_color(agent), 
-				alpha=0.5, 
+				alpha=1, 
 				# label='Heading Vector'
 			)
 		#######################
@@ -827,7 +762,7 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 					junction.pos, 
 					self.env_config['junction_radius'], 
 					color=get_junction_color(junction), 
-					alpha=0.25,
+					alpha=.5,
 					label='Target Node' if is_target_junction(junction) else ('Source Node' if is_source_junction(junction) else 'Normal Node')
 				)
 				for junction in self.road_network.junctions
@@ -837,19 +772,38 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 			for junction in self.road_network.target_junctions:
 				ax.annotate(
 					junction.food_deliveries, 
+					(junction.pos[0],junction.pos[1]+0.5), 
+					color='black', 
+					# weight='bold', 
+					fontsize=12, 
+					ha='center', 
+					va='center'
+				)
+			closest_junction_set = unique_everseen((agent.closest_junction for agent in self.agent_list), key=lambda x:x.pos)
+			for junction in filter(lambda x: not x.is_target, closest_junction_set):
+				ax.annotate(
+					'#', 
 					junction.pos, 
 					color='black', 
-					weight='bold', 
-					fontsize=10, 
+					# weight='bold', 
+					fontsize=12, 
 					ha='center', 
 					va='center'
 				)
 
 		# [Roads]
+		closest_road_set = set((agent.closest_road.edge for agent in self.agent_list if agent.closest_road))
 		for road in self.road_network.roads:
 			road_pos = list(zip(*(road.start.pos, road.end.pos)))
-			line_style = '-'
-			path_handle = ax.plot(road_pos[0], road_pos[1], color='black', ls=line_style, lw=2, alpha=0.5, label="Road")
+			line_style = '--' if road.edge in closest_road_set else '-'
+			path_handle = ax.plot(
+				road_pos[0], road_pos[1], 
+				color='black', 
+				ls=line_style, 
+				lw=2, 
+				alpha=.5, 
+				label="Road"
+			)
 
 		# Adjust ax limits in order to get the same scale factor on both x and y
 		a,b = ax.get_xlim()
@@ -858,19 +812,8 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		ax.set_xlim([a,a+max_length])
 		ax.set_ylim([c,c+max_length])
 		# Build legend
-		handles = [car1_handle, car2_handle, car3_handle, junction1_handle, junction2_handle]
+		handles = [car1_handle, car3_handle, junction1_handle, junction2_handle, junction3_handle]
 		ax.legend(handles=handles)
-		# # Draw plot
-		# figure.suptitle(' '.join([
-		# 	# f'[Angle]{np.rad2deg(self.steering_angle):.2f}°', 
-		# 	# f'[Orient.]{np.rad2deg(self.car_orientation):.2f}°', 
-		# 	# f'[Speed]{self.speed:.2f} m/s', 
-		# 	# '\n',
-		# 	f'[Step]{self._step}', 
-		# 	# f'[Old]{self.closest_road.is_visited_by(self.agent_id)}', 
-		# 	# f'[Car]{self.agent_id.binary_features()}', 
-		# 	# f'[Reward]{self.last_reward:.2f}',
-		# ]))
 		# figure.tight_layout()
 		canvas.draw()
 		# Save plot into RGB array

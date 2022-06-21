@@ -101,6 +101,11 @@ class CommAdaptiveModel(AdaptiveModel):
 			edge_embedding=8,
 			out_features=self.message_size,
 		)
+		self.post_proc = torch.nn.Sequential(
+			torch.nn.LayerNorm(agent_features_size + self.message_size),
+			# torch.nn.Linear(agent_features_size + self.message_size, self.message_size),
+			# torch.nn.LeakyReLU(),
+		)
 		logger.warning(f"Building keras layers for Comm model with {self.n_agents} agents, {self.n_leaders} leaders and communication range {self.comm_range[0]} for maximum {self.max_num_neighbors} neighbours")
 		# self.use_beta = True
 
@@ -168,4 +173,5 @@ class CommAdaptiveModel(AdaptiveModel):
 		## build output
 		# output = message_from_others
 		output = torch.cat([main_output, message_from_others], dim=1)
+		output = self.post_proc(output)
 		return output

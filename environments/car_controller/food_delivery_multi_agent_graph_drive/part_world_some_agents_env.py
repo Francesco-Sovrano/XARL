@@ -31,7 +31,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				dtype=np.float32
 			),
 			"fc_this_agent-8": gym.spaces.Box( # Agent features
-				low= -1,
+				low= 0,
 				high= 1,
 				shape= (
 					self.agent_state_size,

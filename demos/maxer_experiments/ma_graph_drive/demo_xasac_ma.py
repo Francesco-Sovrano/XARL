@@ -24,18 +24,11 @@ CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'discrete_action_space': False,
 	# 'n_discrete_actions': 10,
-	'force_car_to_stay_on_road': True,
-	'optimal_steering_angle_on_road': True,
 	'allow_uturns_on_edges': True,
 	'fairness_reward_fn': 'sparse_fairness_reward', # one of the following: None, 'sparse_fairness_reward', 'frequent_fairness_reward'
 	'visibility_radius': VISIBILITY_RADIUS,
 	'max_food_per_source': float('inf'),
 	'max_food_per_target': 1,
-	'blockage_probability': None,
-	# 'blockage_probability': 0.15,
-	# 'min_blockage_ratio': 0.1,
-	# 'max_blockage_ratio': 0.5,
-	'agent_collision_radius': None,
 	'target_junctions_number': 1+NUM_AGENTS//2,
 	'source_junctions_number': 2,
 	################################
@@ -48,23 +41,9 @@ CONFIG["env_config"] = {
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
 	'mean_seconds_per_step': 0.5, # in average, a step every n seconds
 	################################
-	# track = 0.4 # meters # https://en.wikipedia.org/wiki/Axle_track
-	'wheelbase': 0.15, # meters # https://en.wikipedia.org/wiki/Wheelbase
 	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
 	'min_speed': 0.2, # m/s
 	'max_speed': 1.2, # m/s
-	# the fastest car has max_acceleration 9.25 m/s^2 (https://en.wikipedia.org/wiki/List_of_fastest_production_cars_by_acceleration)
-	# the slowest car has max_acceleration 0.7 m/s^2 (http://automdb.com/max_acceleration)
-	'max_acceleration': 1, # m/s^2
-	# the best car has max_deceleration 29.43 m/s^2 (https://www.quora.com/What-can-be-the-maximum-deceleration-during-braking-a-car?share=1)
-	# a normal car has max_deceleration 7.1 m/s^2 (http://www.batesville.k12.in.us/Physics/PhyNet/Mechanics/Kinematics/BrakingDistData.html)
-	'max_deceleration': 7, # m/s^2
-	'max_steering_degree': 45,
-	# min_speed_lower_limit = 0.7 # m/s # used together with max_speed to get the random speed upper limit
-	# max_speed_noise = 0.25 # m/s
-	# max_steering_noise_degree = 2
-	'max_speed_noise': 0, # m/s
-	'max_steering_noise_degree': 0,
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
@@ -73,11 +52,10 @@ CONFIG.update({
 	# "no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
+		# "custom_model": "adaptive_multihead_network",
 		"custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
 			"comm_range": VISIBILITY_RADIUS,
-			# 'max_num_neighbors': 32,
-			# 'message_size': 128,
 		},
 	},
 	"batch_dropout_rate": 0.5, # Probability of dropping a state transition before adding it to the experience buffer. Set this to any value greater than zero to randomly drop state transitions
