@@ -142,6 +142,28 @@ class FullWorldAllAgents_Agent:
 		self.has_just_taken_food = False
 		self.has_just_delivered_food = False
 
+	@property
+	def agent_state_size(self):
+		agent_state_size = 4
+		if self.decides_speed:
+			agent_state_size += 1
+		if self.culture:
+			agent_state_size += self.obs_car_features
+		return agent_state_size
+
+	def get_agent_feature_list(self):
+		agent_state = [
+			self.is_in_junction(self.car_point),
+			self.has_food,
+			self.is_dead,
+			self.step_gain, # in (0,1]
+		]
+		if self.decides_speed:
+			agent_state.append(self.car_speed/self.env_config['max_speed']) # normalised speed # in [0,1]
+		if self.culture:
+			agent_state += self.agent_id.binary_features(as_tuple=True)
+		return agent_state
+
 	def get_state(self, car_point=None, car_orientation=None):
 		if car_point is None:
 			car_point=self.car_point
@@ -161,29 +183,6 @@ class FullWorldAllAgents_Agent:
 			agent_neighbourhood_view = self.get_neighbourhood_view(car_point, car_orientation)
 			state_dict["fc_other_agents-16"] = np.array(agent_neighbourhood_view, dtype=np.float32)
 		return state_dict
-
-	@property
-	def agent_state_size(self):
-		agent_state_size = 3
-		if self.decides_speed:
-			agent_state_size += 1
-		if self.culture:
-			agent_state_size += self.obs_car_features
-		return agent_state_size
-
-	def get_agent_feature_list(self):
-		agent_state = [
-			self.is_in_junction(self.car_point),
-			self.has_food,
-			self.is_dead,
-			# self.car_orientation/two_pi,
-			# self.step_gain, # in (0,1]
-		]
-		if self.decides_speed:
-			agent_state.append(self.car_speed/self.env_config['max_speed']) # normalised speed # in [0,1]
-		if self.culture:
-			agent_state += self.agent_id.binary_features(as_tuple=True)
-		return agent_state
 
 	@property
 	def step_gain(self):
@@ -464,12 +463,12 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Has delivered food to target" rule
 		if self.has_just_delivered_food:
-			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+			return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
 
 		#######################################
 		# "Has taken food from source" rule
 		if self.has_just_taken_food:
-			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+			return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
 
 		#######################################
 		# "Is in junction" rule
@@ -501,7 +500,7 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Mission completed" rule
 		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
-			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
+			return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Has delivered food to target" rule
