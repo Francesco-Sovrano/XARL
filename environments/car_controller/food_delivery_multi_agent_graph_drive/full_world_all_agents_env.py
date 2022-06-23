@@ -692,7 +692,8 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 			return 'grey'
 		junction1_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=1, label='Target Node')
 		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=1, label='Source Node')
-		junction3_handle = ax.scatter(*next(iter(goal_junction_set)), marker='o', color='blue', alpha=1, label='Goal Node')
+		if goal_junction_set:
+			junction3_handle = ax.scatter(*next(iter(goal_junction_set)), marker='o', color='blue', alpha=1, label='Goal Node')
 		
 		# [Car]
 		#######################
@@ -811,7 +812,9 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 		ax.set_xlim([a,a+max_length])
 		ax.set_ylim([c,c+max_length])
 		# Build legend
-		handles = [car1_handle, car3_handle, junction1_handle, junction2_handle, junction3_handle]
+		handles = [car1_handle, car3_handle, junction1_handle, junction2_handle]
+		if goal_junction_set:
+			handles.append(junction3_handle)
 		ax.legend(handles=handles)
 		# figure.tight_layout()
 		canvas.draw()
