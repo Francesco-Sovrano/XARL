@@ -468,7 +468,8 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Has taken food from source" rule
 		if self.has_just_taken_food:
-			return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+			return null_reward(is_terminal=False, label='has_just_taken_food_from_source')
 
 		#######################################
 		# "Is in junction" rule
