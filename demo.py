@@ -55,13 +55,14 @@ import sys
 ALG_NAME = sys.argv[1]
 CONFIG, TRAINER = get_algorithm_by_name(ALG_NAME)
 ENVIRONMENT = sys.argv[2]
-TEST_EVERY_N_STEP = int(float(sys.argv[3]))
-STOP_TRAINING_AFTER_N_STEP = int(float(sys.argv[4]))
-CENTRALISED_TRAINING = sys.argv[5].lower() == 'true'
-NUM_AGENTS = int(float(sys.argv[6]))
-if len(sys.argv) > 7:
+EXPERIMENT = None if sys.argv[3].lower()=='none' else sys.argv[3]
+TEST_EVERY_N_STEP = int(float(sys.argv[4]))
+STOP_TRAINING_AFTER_N_STEP = int(float(sys.argv[5]))
+CENTRALISED_TRAINING = sys.argv[6].lower() == 'true'
+NUM_AGENTS = int(float(sys.argv[7]))
+if len(sys.argv) > 8:
 	print('Updating options..')
-	OPTIONS = json.loads(' '.join(sys.argv[7:]))
+	OPTIONS = json.loads(' '.join(sys.argv[8:]))
 	print('Old options:', CONFIG)
 	print('New options:', json.dumps(OPTIONS, indent=4))
 	CONFIG.update(OPTIONS)
@@ -107,4 +108,4 @@ ray.init(
 	num_cpus=os.cpu_count(),
 )
 
-train(TRAINER, CONFIG, ENVIRONMENT, test_every_n_step=TEST_EVERY_N_STEP, stop_training_after_n_step=STOP_TRAINING_AFTER_N_STEP)
+train(TRAINER, CONFIG, ENVIRONMENT, experiment=EXPERIMENT, test_every_n_step=TEST_EVERY_N_STEP, stop_training_after_n_step=STOP_TRAINING_AFTER_N_STEP)

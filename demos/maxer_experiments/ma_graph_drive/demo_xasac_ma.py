@@ -22,8 +22,7 @@ VISIBILITY_RADIUS = 10
 CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
-	'discrete_action_space': False,
-	# 'n_discrete_actions': 10,
+	'n_discrete_actions': None,
 	'allow_uturns_on_edges': True,
 	'fairness_reward_fn': 'sparse_fairness_reward', # one of the following: None, 'sparse_fairness_reward', 'frequent_fairness_reward'
 	'visibility_radius': VISIBILITY_RADIUS,

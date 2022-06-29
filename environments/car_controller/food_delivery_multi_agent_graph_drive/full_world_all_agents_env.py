@@ -49,7 +49,7 @@ class FullWorldAllAgents_Agent:
 		self.obs_road_features = len(culture.properties) if culture else 0  # Number of binary ROAD features in Hard Culture
 		self.obs_car_features = (len(culture.agent_properties) - 1) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
 		# Spaces
-		self.discrete_action_space = self.env_config['discrete_action_space']
+		self.discrete_action_space = self.env_config.get('n_discrete_actions',None)
 		self.decides_speed = self.culture
 		if self.discrete_action_space:
 			self.allowed_orientations = np.linspace(-1, 1, self.env_config['n_discrete_actions']).tolist()
@@ -537,17 +537,17 @@ class FullWorldAllAgents_Agent:
 			just_delivered_to_worst_target = j.food_deliveries == self.road_network.min_food_deliveries or j.food_deliveries-1 == self.road_network.min_food_deliveries
 			return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
 		####### Conjectures
-		elif self.visiting_new_junction:
-			# is_exploring_fairly = not j.is_visited
-			# if is_exploring_fairly:
-			# 	return 'is_probably_exploring'
-			if self.has_food:
-				closest_target_type = self.road_network.get_closest_target_type(j, max_depth=3)
-				if closest_target_type:
-					if 'worst' in closest_target_type:
-						return 'is_likely_to_fairly_pursue_a_poor_target_within_3_nodes'
-					if closest_target_type=='best':
-						return 'is_likely_to_pursue_a_rich_target_within_3_nodes'
+		# elif self.visiting_new_junction:
+		# 	# is_exploring_fairly = not j.is_visited
+		# 	# if is_exploring_fairly:
+		# 	# 	return 'is_probably_exploring'
+		# 	if self.has_food:
+		# 		closest_target_type = self.road_network.get_closest_target_type(j, max_depth=3)
+		# 		if closest_target_type:
+		# 			if 'worst' in closest_target_type:
+		# 				return 'is_likely_to_fairly_pursue_a_poor_target_within_3_nodes'
+		# 			if closest_target_type=='best':
+		# 				return 'is_likely_to_pursue_a_rich_target_within_3_nodes'
 		#######
 		# if self.has_just_taken_food: 
 		# 	return 'fair'

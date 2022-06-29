@@ -9,9 +9,40 @@ from io import StringIO
 from contextlib import closing
 from ray.rllib.env.wrappers.atari_wrappers import wrap_deepmind, is_atari
 from ray.rllib.utils.deprecation import DEPRECATED_VALUE
+from ray.tune.result import DEFAULT_RESULTS_DIR
+from ray.tune.logger import Logger, UnifiedLogger
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
+import tempfile
 # import json
+
+def find_last_checkpoint_in_directory(directory):
+	checkpoint_list = [
+		(int(subdir[0].split('_')[-1]), subdir[0])
+		for subdir in os.walk(directory)
+		if 'checkpoint' in subdir[0]
+	]
+	if not checkpoint_list:
+		return None
+	checkpoint_dir = max(checkpoint_list,key=lambda x: x[0])[1]
+	for filename in os.listdir(checkpoint_dir):
+		file_path = os.path.join(checkpoint_dir, filename)
+		if os.path.isfile(file_path):
+			if '.' not in filename:
+				return file_path
+	return None
+
+def get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment_id):
+	if experiment_id is None:
+		return None, None
+	# timestr = datetime.today().strftime("%Y-%m-%d_%H-%M-%S")
+	logdir_prefix = "{}_{}_{}".format(trainer_class.__name__, environment_class, experiment_id)
+	logdir = os.path.join(DEFAULT_RESULTS_DIR,logdir_prefix) #tempfile.mkdtemp(prefix=logdir_prefix, dir=DEFAULT_RESULTS_DIR)
+	if not os.path.exists(logdir):
+		os.makedirs(logdir)
+	logger_creator_fn = lambda config: UnifiedLogger(config, logdir, loggers=None)
+	checkpoint = find_last_checkpoint_in_directory(logdir)
+	return checkpoint, logger_creator_fn
 
 def test(tester_class, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3):
 	"""Tests and renders a previously trained model"""
@@ -20,6 +51,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 	agent = tester_class(config, env=environment_class)
 	if checkpoint is None:
 		raise ValueError(f"A previously trained checkpoint must be provided for algorithm {alg}")
+	print(f'Testing with checkpoint: {checkpoint}')
 	agent.restore(checkpoint)
 
 	checkpoint_directory = os.path.dirname(checkpoint)
@@ -155,9 +187,13 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 				# Remove unzipped GIF
 				os.remove(gif_filename)
 
-def train(trainer_class, config, environment_class, test_every_n_step=None, stop_training_after_n_step=None, log=True):
+def train(trainer_class, config, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True):
+	checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment_id)
 	# Configure RLlib to train a policy using the given environment and trainer
-	agent = trainer_class(config, env=environment_class)
+	agent = trainer_class(config, env=environment_class, logger_creator=logger_creator_fn)
+	if checkpoint:
+		print(f'Loading checkpoint: {checkpoint}')
+		agent.restore(checkpoint)
 	# Inspect the trained policy and model, to see the results of training in detail
 	policy = agent.get_policy()
 	if not policy:
@@ -180,36 +216,6 @@ def train(trainer_class, config, environment_class, test_every_n_step=None, stop
 			print(f'obs_space of agent with ID {i}:')
 			print(model.obs_space)
 			print('#'*10)
-		# if hasattr(model, 'base_model'):
-		# 	print('#'*10)
-		# 	print(f'base_model of agent with ID {i}:')
-		# 	print(model.base_model.summary())
-		# 	print('#'*10)
-		# if hasattr(model, 'q_value_head'):
-		# 	print('#'*10)
-		# 	print(f'q_value_head of agent with ID {i}:')
-		# 	print(model.q_value_head.summary())
-		# 	print('#'*10)
-		# if hasattr(model, 'heads_model'):
-		# 	print('#'*10)
-		# 	print(f'heads_model of agent with ID {i}:')
-		# 	print(model.heads_model.summary())
-		# 	print('#'*10)
-		# if hasattr(model, 'action_model'):
-		# 	print('#'*10)
-		# 	print(f'action_model of agent with ID {i}:')
-		# 	print(model.action_model.summary())
-		# 	print('#'*10)
-		# if hasattr(model, 'q_net'):
-		# 	print('#'*10)
-		# 	print(f'q_net of agent with ID {i}:')
-		# 	print(model.q_net.summary())
-		# 	print('#'*10)
-		# if hasattr(model, 'twin_q_net'):
-		# 	print('#'*10)
-		# 	print(f'twin_q_net of agent with ID {i}:')
-		# 	print(model.twin_q_net.summary())
-		# 	print('#'*10)
 	# Start training
 	n = 0
 	sample_steps = 0

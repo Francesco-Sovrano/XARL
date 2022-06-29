@@ -22,8 +22,7 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 	assert target_junctions_number
 	return {
 		'num_agents': num_agents,
-		'discrete_action_space': False,
-		# 'n_discrete_actions': 20,
+		'n_discrete_actions': None,
 		'force_car_to_stay_on_road': True,
 		'optimal_orientation_on_road': True,
 		'allow_uturns_on_edges': False,
