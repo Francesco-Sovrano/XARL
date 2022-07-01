@@ -39,22 +39,28 @@ from environments.car_controller.food_delivery_multi_agent_graph_drive.full_worl
 culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
 	register_env(f"MAGraphDrive-FullWorldAllAgents-{culture_level}", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
+	register_env(f"MAGraphDrive-FullWorldAllAgents-{culture_level}-MoreFrequent", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'more_frequent_reward_default', "culture_level": culture_level, **config}))
 	register_env(f"MAGraphDrive-FullWorldAllAgents-{culture_level}-Sparse", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
 register_env(f"MAGraphDrive-FullWorldAllAgents", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **config}))
+register_env(f"MAGraphDrive-FullWorldAllAgents-MoreFrequent", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'more_frequent_reward_default', "culture_level": None, **config}))
 register_env(f"MAGraphDrive-FullWorldAllAgents-Sparse", lambda config: FullWorldAllAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": None, **config}))
 
 from environments.car_controller.food_delivery_multi_agent_graph_drive.part_world_some_agents_env import PartWorldSomeAgents_GraphDrive
 culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
 	register_env(f"MAGraphDrive-PartWorldSomeAgents-{culture_level}", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
+	register_env(f"MAGraphDrive-PartWorldSomeAgents-{culture_level}-MoreFrequent", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'more_frequent_reward_default', "culture_level": culture_level, **config}))
 	register_env(f"MAGraphDrive-PartWorldSomeAgents-{culture_level}-Sparse", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
 register_env(f"MAGraphDrive-PartWorldSomeAgents", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **config}))
+register_env(f"MAGraphDrive-PartWorldSomeAgents-MoreFrequent", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'more_frequent_reward_default', "culture_level": None, **config}))
 register_env(f"MAGraphDrive-PartWorldSomeAgents-Sparse", lambda config: PartWorldSomeAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": None, **config}))
 
 from environments.car_controller.food_delivery_multi_agent_graph_drive.full_world_some_agents_env import FullWorldSomeAgents_GraphDrive
 culture_level_list = ["Easy","Medium","Hard"]
 for culture_level in culture_level_list:
 	register_env(f"MAGraphDrive-FullWorldSomeAgents-{culture_level}", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": culture_level, **config}))
+	register_env(f"MAGraphDrive-FullWorldSomeAgents-{culture_level}-MoreFrequent", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'more_frequent_reward_default', "culture_level": culture_level, **config}))
 	register_env(f"MAGraphDrive-FullWorldSomeAgents-{culture_level}-Sparse", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": culture_level, **config}))
 register_env(f"MAGraphDrive-FullWorldSomeAgents", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **config}))
+register_env(f"MAGraphDrive-FullWorldSomeAgents-MoreFrequent", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'more_frequent_reward_default', "culture_level": None, **config}))
 register_env(f"MAGraphDrive-FullWorldSomeAgents-Sparse", lambda config: FullWorldSomeAgents_GraphDrive({"reward_fn": 'sparse_reward_default', "culture_level": None, **config}))

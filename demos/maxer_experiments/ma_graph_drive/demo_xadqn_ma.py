@@ -24,7 +24,7 @@ CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'n_discrete_actions': 36,
 	'allow_uturns_on_edges': True,
-	'fairness_reward_fn': 'sparse_fairness_reward', # one of the following: None, 'sparse_fairness_reward', 'frequent_fairness_reward'
+	'fairness_reward_fn': 'simple', # one of the following: None, 'simple', 'engineered'
 	'visibility_radius': VISIBILITY_RADIUS,
 	'max_food_per_source': float('inf'),
 	'max_food_per_target': 1,

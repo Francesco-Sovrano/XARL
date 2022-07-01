@@ -42,9 +42,10 @@ class FullWorldAllAgents_Agent:
 		self.culture = culture
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
+		self.max_depth_searching_for_closest_target = self.env_config.get('max_depth_searching_for_closest_target',3)
 		self.max_relative_coordinates = 2*np.array(self.env_config['map_size'], dtype=np.float32)
 		self.reward_fn = eval(f'self.{self.env_config["reward_fn"]}')
-		self.fairness_reward_fn = eval(f'self.{self.env_config["fairness_reward_fn"]}') if self.env_config.get("fairness_reward_fn",None) else lambda x: 0
+		self.fairness_reward_fn = eval(f'self.{self.env_config["fairness_reward_fn"]}_fairness_reward') if self.env_config.get("fairness_reward_fn",None) else lambda x: 0
 		
 		self.obs_road_features = len(culture.properties) if culture else 0  # Number of binary ROAD features in Hard Culture
 		self.obs_car_features = (len(culture.agent_properties) - 1) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
@@ -117,6 +118,7 @@ class FullWorldAllAgents_Agent:
 		# car position
 		self.car_point = car_point
 		self.car_orientation = (self.np_random.random()*two_pi) % two_pi # in [0,2*pi)
+		self.previous_closest_junction = None
 		self.closest_junction = self.road_network.junction_dict[car_point]
 		self.closest_road = None
 		# speed
@@ -141,6 +143,9 @@ class FullWorldAllAgents_Agent:
 		self.visiting_new_junction = False
 		self.has_just_taken_food = False
 		self.has_just_delivered_food = False
+
+	def can_see(self, p):
+		return True
 
 	@property
 	def agent_state_size(self):
@@ -363,6 +368,7 @@ class FullWorldAllAgents_Agent:
 		##################################
 		## Get closest junction and road
 		##################################
+		old_previous_closest_junction = self.previous_closest_junction
 		old_closest_junction = self.closest_junction
 		is_in_junction = self.is_in_junction(self.car_point) # This is correct because during reset cars are always spawn in a junction
 		if not is_in_junction:
@@ -374,6 +380,8 @@ class FullWorldAllAgents_Agent:
 		if self.closest_road:
 			junction_set = (self.road_network.junction_dict[self.closest_road.edge[0]],self.road_network.junction_dict[self.closest_road.edge[1]])
 			_,self.closest_junction = self.road_network.get_closest_junction_by_point(self.car_point, junction_set)
+			if old_closest_junction != self.closest_junction:
+				self.previous_closest_junction = old_closest_junction
 		# else:
 		# 	_,self.closest_junction = self.road_network.get_closest_junction_by_point(self.car_point, self.neighbouring_junctions_iter)
 		##################################
@@ -381,6 +389,7 @@ class FullWorldAllAgents_Agent:
 		##################################
 		# Force car to stay on a road or a junction
 		if not is_in_junction and not self.is_on_road(self.car_point): # go back
+			self.previous_closest_junction = old_previous_closest_junction
 			self.closest_junction = old_closest_junction
 			self.closest_road = None
 			self.car_point = self.closest_junction.pos
@@ -463,13 +472,53 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Has delivered food to target" rule
 		if self.has_just_delivered_food:
-			return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
 
 		#######################################
 		# "Has taken food from source" rule
 		if self.has_just_taken_food:
 			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
 			return null_reward(is_terminal=False, label='has_just_taken_food_from_source')
+
+		#######################################
+		# "Is in junction" rule
+		if self.is_in_junction(self.car_point):
+			return null_reward(is_terminal=False, label='is_in_junction')
+
+		if self.culture:
+			#######################################
+			# "Follow regulation" rule. # Run dialogue against culture.
+			# Assign normalised speed to agent properties before running dialogues.
+			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
+			if not following_regulation:
+				return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+
+		#######################################
+		# "Move forward" rule
+		return null_reward(is_terminal=False, label='moving_forward')
+
+	def more_frequent_reward_default(self):
+		def null_reward(is_terminal, label):
+			return (0, is_terminal, label)
+		def unitary_reward(is_positive, is_terminal, label):
+			return (1 if is_positive else -1, is_terminal, label)
+		def cost_reward(is_positive, is_terminal, label):
+			r = self.step_gain # in (0,1]
+			return (r if is_positive else -r, is_terminal, label)
+		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
+
+		#######################################
+		# "Has delivered food to target" rule
+		if self.has_just_delivered_food:
+			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+
+		#######################################
+		# "Has taken food from source" rule
+		if self.has_just_taken_food:
+			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
 
 		#######################################
 		# "Is in junction" rule
@@ -501,7 +550,8 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Mission completed" rule
 		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
-			return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
+			# return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
+			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Has delivered food to target" rule
@@ -532,22 +582,33 @@ class FullWorldAllAgents_Agent:
 
 	def get_fairness_score(self):
 		####### Facts
-		j = self.closest_junction #if self.env_config['allow_uturns_on_edges'] else self.goal_junction
 		if self.has_just_delivered_food: 
-			just_delivered_to_worst_target = j.food_deliveries == self.road_network.min_food_deliveries or j.food_deliveries-1 == self.road_network.min_food_deliveries
+			just_delivered_to_worst_target = self.closest_junction.food_deliveries == self.road_network.min_food_deliveries or self.closest_junction.food_deliveries-1 == self.road_network.min_food_deliveries
 			return 'has_fairly_pursued_a_poor_target' if just_delivered_to_worst_target else 'has_pursued_a_rich_target'
 		####### Conjectures
-		# elif self.visiting_new_junction:
-		# 	# is_exploring_fairly = not j.is_visited
-		# 	# if is_exploring_fairly:
-		# 	# 	return 'is_probably_exploring'
-		# 	if self.has_food:
-		# 		closest_target_type = self.road_network.get_closest_target_type(j, max_depth=3)
-		# 		if closest_target_type:
-		# 			if 'worst' in closest_target_type:
-		# 				return 'is_likely_to_fairly_pursue_a_poor_target_within_3_nodes'
-		# 			if closest_target_type=='best':
-		# 				return 'is_likely_to_pursue_a_rich_target_within_3_nodes'
+		elif self.visiting_new_junction:
+			# is_exploring_fairly = not self.closest_junction.is_visited
+			# if is_exploring_fairly:
+			# 	return 'is_probably_exploring'
+			if self.has_food:
+				is_visible_target = lambda x: x.is_available_target and (self.can_see(x.pos) or any((a.can_see(x.pos) for a in self.other_agent_list)))
+				self.taget_distance_dict = self.road_network.get_closest_target_type(
+					self.closest_junction, 
+					max_depth=self.max_depth_searching_for_closest_target,
+					is_target_fn=is_visible_target,
+				)
+				if self.previous_closest_junction:
+					old_taget_distance_dict = self.road_network.get_closest_target_type(
+						self.previous_closest_junction, 
+						max_depth=self.max_depth_searching_for_closest_target,
+						is_target_fn=is_visible_target,
+					)
+					if self.taget_distance_dict['poor_target_distance'] < old_taget_distance_dict['poor_target_distance']:
+						return 'is_likely_to_fairly_pursue_a_poor_target'
+					if self.taget_distance_dict['poor_target_distance'] > old_taget_distance_dict['poor_target_distance']:
+						return 'is_unlikely_to_fairly_pursue_a_poor_target'
+					if self.taget_distance_dict['rich_target_distance'] < old_taget_distance_dict['rich_target_distance']:
+						return 'is_likely_to_pursue_a_rich_target'
 		#######
 		# if self.has_just_taken_food: 
 		# 	return 'fair'
@@ -557,11 +618,26 @@ class FullWorldAllAgents_Agent:
 		#######
 		return 'unknown'
 
-	def sparse_fairness_reward(self, how_fair):
+	def simple_fairness_reward(self, how_fair):
 		return 1 if 'has_fairly_pursued_a_poor_target' == how_fair else 0
 
-	def frequent_fairness_reward(self, how_fair):
-		return 1 if 'fairly' in how_fair else 0
+	def engineered_fairness_reward(self, how_fair):
+		if 'has_fairly_pursued_a_poor_target' == how_fair:
+			return 1
+		if 'is_likely_to_fairly_pursue_a_poor_target' == how_fair:
+			return (1/(self.taget_distance_dict['poor_target_distance']+1))#/(self.n_of_other_agents+1)
+		if 'is_unlikely_to_fairly_pursue_a_poor_target' == how_fair:
+			return -(1/self.taget_distance_dict['poor_target_distance'])#/(self.n_of_other_agents+1)
+		return 0
+
+	def unitary_engineered_fairness_reward(self, how_fair):
+		if 'has_fairly_pursued_a_poor_target' == how_fair:
+			return 1
+		if 'is_likely_to_fairly_pursue_a_poor_target' == how_fair:
+			return 1
+		if 'is_unlikely_to_fairly_pursue_a_poor_target' == how_fair:
+			return -1
+		return 0
 
 class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 	metadata = {'render.modes': ['human', 'rgb_array']}
@@ -727,8 +803,8 @@ class FullWorldAllAgents_GraphDrive(MultiAgentEnv):
 			if not agent.last_reward:
 				continue
 			ax.text(
-				x=agent.car_point[0],
-				y=agent.car_point[1]+0.5,
+				x=agent.car_point[0]+1,
+				y=agent.car_point[1]+1,
 				s=f"{agent.last_reward:.2f}",
 			)
 		#######################

@@ -188,7 +188,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 				os.remove(gif_filename)
 
 def train(trainer_class, config, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True):
-	checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment_id)
+	checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment)
 	# Configure RLlib to train a policy using the given environment and trainer
 	agent = trainer_class(config, env=environment_class, logger_creator=logger_creator_fn)
 	if checkpoint:

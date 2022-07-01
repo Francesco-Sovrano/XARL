@@ -70,15 +70,15 @@ class MultiAgentRoadNetwork(RoadNetwork):
 		if not is_target_fn(j):
 			return None
 		if j.food_deliveries == self.min_food_deliveries:
-			return 'worst'
-		return 'best'
+			return 'poor'
+		return 'rich'
 
 	def get_closest_target_type(self, start_junction, max_depth=float('inf'), is_target_fn=None):
 		if not is_target_fn:
 			is_target_fn = lambda x: x.is_available_target
-		target_type = self.get_target_type(start_junction, is_target_fn)
-		if target_type:
-			return target_type
+		# target_type = self.get_target_type(start_junction, is_target_fn)
+		# if target_type:
+		# 	return target_type, 0
 		visited_junction_set = set()
 		junction_list = [start_junction]
 		depth = 1
@@ -91,21 +91,41 @@ class MultiAgentRoadNetwork(RoadNetwork):
 				for road in junction.roads_connected:
 					other_junction = self.junction_dict[road.end.pos if road.start.pos == junction.pos else road.start.pos]
 					target_type = self.get_target_type(other_junction, is_target_fn)
-					if target_type == 'worst':
+					if target_type == 'poor':
 						least_advantaged_target_list.append(other_junction)
-					elif target_type == 'best':
+					elif target_type == 'rich':
 						advantaged_target_list.append(other_junction)
 					elif other_junction.pos not in visited_junction_set:
 						other_junction_list.append(other_junction)
 				if least_advantaged_target_list and advantaged_target_list:
-					return 'best_n_worst'
+					return {
+						'poor_target_distance': depth,
+						'poor_target': least_advantaged_target_list[0],
+						'rich_target_distance': depth,
+						'rich_target': advantaged_target_list[0],
+					}
 				if least_advantaged_target_list:
-					return 'worst'
+					return {
+						'poor_target_distance': depth,
+						'poor_target': least_advantaged_target_list[0],
+						'rich_target_distance': max_depth+1,
+						'rich_target': None,
+					}
 				if advantaged_target_list:
-					return 'best'
+					return {
+						'poor_target_distance': max_depth+1,
+						'poor_target': None,
+						'rich_target_distance': depth,
+						'rich_target': advantaged_target_list[0],
+					}
 			junction_list = other_junction_list
 			depth += 1
-		return None
+		return {
+			'poor_target_distance': max_depth+1,
+			'poor_target': None,
+			'rich_target_distance': max_depth+1,
+			'rich_target': None,
+		}
 
 	def get_random_starting_point_list(self, n=1):
 		return [
