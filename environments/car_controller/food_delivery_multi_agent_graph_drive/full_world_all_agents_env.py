@@ -472,13 +472,11 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Has delivered food to target" rule
 		if self.has_just_delivered_food:
-			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
-			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+			return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
 
 		#######################################
 		# "Has taken food from source" rule
 		if self.has_just_taken_food:
-			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
 			return null_reward(is_terminal=False, label='has_just_taken_food_from_source')
 
 		#######################################
@@ -511,14 +509,12 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Has delivered food to target" rule
 		if self.has_just_delivered_food:
-			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
-			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
+			return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_food_to_target')
 
 		#######################################
 		# "Has taken food from source" rule
 		if self.has_just_taken_food:
-			# return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
-			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
+			return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_food_from_source')
 
 		#######################################
 		# "Is in junction" rule
@@ -550,8 +546,7 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Mission completed" rule
 		if self.road_network.min_food_deliveries == self.env_config['max_food_per_target']:
-			# return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
-			return unitary_reward(is_positive=True, is_terminal=True, label='mission_completed')
+			return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
 		#######################################
 		# "Has delivered food to target" rule
