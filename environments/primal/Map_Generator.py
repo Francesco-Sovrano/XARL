@@ -1,8 +1,7 @@
 import numpy as np
 import random
 import sys
-from environments.primal.Env_Builder import World
-
+from .Env_Builder import World
 
 def isConnected(world0):
     sys.setrecursionlimit(10000)
@@ -32,7 +31,6 @@ def isConnected(world0):
     else:
         return True
 
-
 def GetConnectedRegion(world, regions_dict, x, y):
     sys.setrecursionlimit(1000000)
     '''returns a list of tuples of connected squares to the given tile
@@ -59,7 +57,6 @@ def GetConnectedRegion(world, regions_dict, x, y):
         work_list.append((i, j - 1))
     regions_dict[(x, y)] = visited
     return visited
-
 
 def maze_generator(env_size=(10, 70), wall_components=(1, 8), obstacle_density=None,
                    go_straight=0.8):
@@ -155,7 +152,6 @@ def maze_generator(env_size=(10, 70), wall_components=(1, 8), obstacle_density=N
 
     return generator
 
-
 def DummyGenerator():
     state_map = np.array([[1, 0, 0, 0, 0],
                           [0, 0, 0, 0, 0],
@@ -173,7 +169,6 @@ def DummyGenerator():
 
     return generator
 
-
 def manual_generator(state_map, goals_map=None):
     state_map = np.array(state_map)
 
@@ -188,7 +183,6 @@ def manual_generator(state_map, goals_map=None):
         return state_map, goals_map
 
     return generator
-
 
 if __name__ == "__main__":
     from matplotlib import pyplot as plt

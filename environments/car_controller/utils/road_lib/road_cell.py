@@ -1,5 +1,5 @@
 import numpy as np
-from environments.car_controller.grid_drive.lib.road_agent import RoadAgent
+from .road_agent import RoadAgent
 
 class RoadCell(RoadAgent):
     def __init__(self, i=-1, j=-1):

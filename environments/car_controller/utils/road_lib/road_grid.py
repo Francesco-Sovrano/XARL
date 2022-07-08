@@ -1,6 +1,6 @@
 # import numpy as np
-from environments.car_controller.grid_drive.lib.road_cell import RoadCell
-from environments.car_controller.grid_drive.lib.road_agent import RoadAgent
+from .road_cell import RoadCell
+from .road_agent import RoadAgent
 import numpy as np
 
 NORTH = 0

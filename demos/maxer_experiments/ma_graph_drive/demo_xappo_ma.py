@@ -14,7 +14,7 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 from xarl.agents.xappo import XAPPOTrainer, XAPPO_DEFAULT_CONFIG
 from environments import *
 
-SELECT_ENV = "MAGraphDrive-FullWorldAllAgents"
+SELECT_ENV = "MAGraphDelivery-FullWorldAllAgents"
 
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
@@ -24,11 +24,11 @@ CONFIG = XAPPO_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'n_discrete_actions': None,
-	'allow_uturns_on_edges': True,
-	'fairness_reward_fn': 'simple', # one of the following: None, 'simple', 'engineered'
+	'reward_fn': 'frequent', # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
+	'fairness_reward_fn': 'simple', # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
 	'visibility_radius': VISIBILITY_RADIUS,
-	'max_food_per_source': float('inf'),
-	'max_food_per_target': 1,
+	'max_refills_per_source': float('inf'),
+	'max_deliveries_per_target': 1,
 	'target_junctions_number': 1+NUM_AGENTS//2,
 	'source_junctions_number': 2,
 	################################

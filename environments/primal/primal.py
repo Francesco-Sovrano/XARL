@@ -1,19 +1,16 @@
-import logging
-from ray.rllib.env.multi_agent_env import MultiAgentEnv, make_multi_agent
-
 import gym
 import numpy as np
-
-from environments.primal.Env_Builder import *
-from environments.primal.od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
-from environments.primal.od_mstar3 import od_mstar
-from environments.primal.GroupLock import Lock
+import logging
 import random
+from ray.rllib.env.multi_agent_env import MultiAgentEnv, make_multi_agent
 
-from environments.primal.Primal2Observer import Primal2Observer
-from environments.primal.Primal2Env import Primal2Env
-from environments.primal.Map_Generator import *
-
+from .Env_Builder import *
+from .od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
+from .od_mstar3 import od_mstar
+from .GroupLock import Lock
+from .Primal2Observer import Primal2Observer
+from .Primal2Env import Primal2Env
+from .Map_Generator import *
 
 class Primal(MultiAgentEnv):
 	metadata = Primal2Env.metadata

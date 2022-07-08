@@ -1,10 +1,9 @@
-from environments.primal.Observer_Builder import ObservationBuilder
 import numpy as np
 import copy
-from environments.primal.Env_Builder import *
-
 import time
 
+from .Observer_Builder import ObservationBuilder
+from .Env_Builder import *
 
 class Primal2Observer(ObservationBuilder):
     """

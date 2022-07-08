@@ -1,8 +1,8 @@
-from environments.custom_metrics import CustomEnvironmentCallbacks
+from .custom_metrics import CustomEnvironmentCallbacks
 
-from environments.car_controller import *
-# from environments.special_atari import *
-# from environments.shepherd import *
-# from environments.gfootball import *
-# from environments.petting_zoo import *
-# from environments.primal import *
+from .car_controller import *
+# from .special_atari import *
+# from .shepherd import *
+# from .gfootball import *
+# from .petting_zoo import *
+# from .primal import *

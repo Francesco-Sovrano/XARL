@@ -1,6 +1,5 @@
 from threading import Lock, Condition
 
-
 class GroupLock:
     """
     Queues asynchronous threads by group.

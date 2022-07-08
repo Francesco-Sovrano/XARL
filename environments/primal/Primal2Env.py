@@ -1,9 +1,10 @@
-from environments.primal.Env_Builder import *
-from environments.primal.od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
-from environments.primal.od_mstar3 import od_mstar
-from environments.primal.GroupLock import Lock
 import random
 from gym import spaces
+
+from .Env_Builder import *
+from .od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
+from .od_mstar3 import od_mstar
+from .GroupLock import Lock
 
 '''
     Observation: 
@@ -183,9 +184,9 @@ class DummyEnv(Primal2Env):
 
 if __name__ == '__main__':
     from matplotlib import pyplot
-    from environments.primal.Primal2Observer import Primal2Observer
-    from environments.primal.Map_Generator import maze_generator
-    from environments.primal.Map_Generator import manual_generator
+    from .Primal2Observer import Primal2Observer
+    from .Map_Generator import maze_generator
+    from .Map_Generator import manual_generator
 
     state0 = [[-1, -1, -1, -1, -1, -1, -1],
               [-1, 1, -1, 0, 0, 0, -1],

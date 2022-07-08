@@ -5,36 +5,33 @@ import numpy as np
 import math
 import warnings
 import time
-from environments.primal.od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
 import sys
 import traceback
+from matplotlib.colors import *
+import imageio
+from gym import spaces
 
+from .od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
+from .GroupLock import Lock
 ############################################
 try:
-    from environments.primal.od_mstar3 import cpp_mstar
+    from .od_mstar3 import cpp_mstar
     USE_Cython_MSTAR = True
 except:
     print('cpp_mstar not compiled. Please refer to README')
     USE_Cython_MSTAR = False
-    from environments.primal.od_mstar3 import od_mstar
+    from .od_mstar3 import od_mstar
 # USE_Cython_MSTAR = False # Cython MSTAR causes random crashes, see https://github.com/marmotlab/PRIMAL2/issues/6
-# from environments.primal.od_mstar3 import od_mstar
+# from .od_mstar3 import od_mstar
 ############################################
 try:
-    from environments.primal.astarlib3.astarlib import aStar
+    from .astarlib3.astarlib import aStar
     USE_Cython_ASTAR = True
 except:
     USE_Cython_ASTAR = False
     print('cpp_aStar not compiled. Please refer to README. Switched to py-astar automatically')
 # USE_Cython_ASTAR = False
 ############################################
-
-from environments.primal.GroupLock import Lock
-from matplotlib.colors import *
-import imageio
-
-from gym import spaces
-
 
 def make_gif(images, fname):
     gif = imageio.mimwrite(fname, images, subrectangles=True)

@@ -14,7 +14,7 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
 
-SELECT_ENV = "MAGraphDrive-PartWorldSomeAgents"
+SELECT_ENV = "MAGraphDelivery-PartWorldSomeAgents"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 VISIBILITY_RADIUS = 10
@@ -23,11 +23,11 @@ CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'n_discrete_actions': None,
-	'allow_uturns_on_edges': True,
-	'fairness_reward_fn': 'simple', # one of the following: None, 'simple', 'engineered'
+	'reward_fn': 'frequent', # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
+	'fairness_reward_fn': 'simple', # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
 	'visibility_radius': VISIBILITY_RADIUS,
-	'max_food_per_source': float('inf'),
-	'max_food_per_target': 1,
+	'max_refills_per_source': float('inf'),
+	'max_deliveries_per_target': 1,
 	'target_junctions_number': 1+NUM_AGENTS//2,
 	'source_junctions_number': 2,
 	################################
@@ -46,6 +46,9 @@ CONFIG["env_config"] = {
 	'max_normalised_speed': 120,
 }
 CONFIG.update({
+	"num_workers": 4, # Number of rollout worker actors to create for parallel sampling. Setting this to 0 will force rollouts to be done in the trainer actor.
+	"num_envs_per_worker": 1, # Number of environments to evaluate vector-wise per worker. This enables model inference batching, which can improve performance for inference bottlenecked workloads.
+	#######################
 	"framework": "torch",
 	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping

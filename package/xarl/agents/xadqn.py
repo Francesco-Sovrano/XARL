@@ -93,7 +93,7 @@ XADQN_DEFAULT_CONFIG = DQNTrainer.merge_trainer_configs(
 def xa_postprocess_nstep_and_prio(policy, batch, other_agent=None, episode=None):
 	# N-step Q adjustments.
 	if policy.config["n_step"] > 1:
-		adjust_nstep(policy.config["n_step"], policy.config["gamma"], batch[SampleBatch.CUR_OBS], batch[SampleBatch.ACTIONS], batch[SampleBatch.REWARDS], batch[SampleBatch.NEXT_OBS], batch[SampleBatch.DONES])
+		adjust_nstep(policy.config["n_step"], policy.config["gamma"], batch)
 	if PRIO_WEIGHTS not in batch:
 		batch[PRIO_WEIGHTS] = np.ones_like(batch[SampleBatch.REWARDS])
 	if policy.config["buffer_options"]["priority_id"] == "td_errors":

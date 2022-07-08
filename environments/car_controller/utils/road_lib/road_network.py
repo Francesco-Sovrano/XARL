@@ -1,11 +1,10 @@
 import numpy as np
-from collections import deque
-from ...grid_drive.lib.road_cultures import * # FIXME: Move RoadCultures to a more generic location.
-from ...grid_drive.lib.road_cell import RoadCell
-from ...grid_drive.lib.road_agent import RoadAgent
-from environments.car_controller.utils.geometry import *
-from environments.car_controller.utils.random_planar_graph.GenerateGraph import get_random_planar_graph
 import sys
+from .road_cultures import *
+from .road_cell import RoadCell
+from .road_agent import RoadAgent
+from ..geometry import *
+from ..random_planar_graph.GenerateGraph import get_random_planar_graph
 
 class Junction:
 	def __init__(self, pos):

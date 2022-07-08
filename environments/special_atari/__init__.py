@@ -2,7 +2,7 @@ from ray.tune.registry import register_env
 ######### Add new environment below #########
 
 ### XA Atari
-from environments.special_atari.special_atari import SpecialAtariEnv
+from .special_atari import SpecialAtariEnv
 for game in [
 	"adventure",
 	"air_raid",

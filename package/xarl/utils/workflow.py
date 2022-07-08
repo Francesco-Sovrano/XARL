@@ -21,28 +21,29 @@ def find_last_checkpoint_in_directory(directory):
 		(int(subdir[0].split('_')[-1]), subdir[0])
 		for subdir in os.walk(directory)
 		if 'checkpoint' in subdir[0]
+		and '/' not in subdir[0].split('_')[-1]
 	]
 	if not checkpoint_list:
-		return None
-	checkpoint_dir = max(checkpoint_list,key=lambda x: x[0])[1]
+		return 0, None
+	checkpoint_n, checkpoint_dir = max(checkpoint_list,key=lambda x: x[0])
 	for filename in os.listdir(checkpoint_dir):
 		file_path = os.path.join(checkpoint_dir, filename)
 		if os.path.isfile(file_path):
 			if '.' not in filename:
-				return file_path
-	return None
+				return checkpoint_n, file_path
+	return 0, None
 
 def get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment_id):
 	if experiment_id is None:
-		return None, None
+		return 0, None, None
 	# timestr = datetime.today().strftime("%Y-%m-%d_%H-%M-%S")
 	logdir_prefix = "{}_{}_{}".format(trainer_class.__name__, environment_class, experiment_id)
 	logdir = os.path.join(DEFAULT_RESULTS_DIR,logdir_prefix) #tempfile.mkdtemp(prefix=logdir_prefix, dir=DEFAULT_RESULTS_DIR)
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
 	logger_creator_fn = lambda config: UnifiedLogger(config, logdir, loggers=None)
-	checkpoint = find_last_checkpoint_in_directory(logdir)
-	return checkpoint, logger_creator_fn
+	checkpoint_n, checkpoint = find_last_checkpoint_in_directory(logdir)
+	return checkpoint_n, checkpoint, logger_creator_fn
 
 def test(tester_class, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3):
 	"""Tests and renders a previously trained model"""
@@ -188,7 +189,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 				os.remove(gif_filename)
 
 def train(trainer_class, config, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True):
-	checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment)
+	_, checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment)
 	# Configure RLlib to train a policy using the given environment and trainer
 	agent = trainer_class(config, env=environment_class, logger_creator=logger_creator_fn)
 	if checkpoint:
@@ -254,6 +255,10 @@ def train(trainer_class, config, environment_class, experiment=None, test_every_
 				f'train_ratio: {(train_steps/sample_steps):.2f}',
 				f'seconds: {time.time()-last_time:.2f}'
 			]))
-		if sample_steps>=check_steps or sample_steps>=stop_training_after_n_step:
+		if sample_steps>=stop_training_after_n_step:
+			save_checkpoint()
+		elif n == 1:
+			check_steps = sample_steps + test_every_n_step
+		elif sample_steps>=check_steps:
 			check_steps += test_every_n_step
 			save_checkpoint()

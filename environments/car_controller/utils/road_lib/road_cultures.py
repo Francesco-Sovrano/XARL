@@ -1,6 +1,6 @@
-from environments.car_controller.utils.culture_lib.culture import Culture, Argument
-from environments.car_controller.grid_drive.lib.road_cell import RoadCell
-from environments.car_controller.grid_drive.lib.road_agent import RoadAgent
+from ..culture_lib.culture import Culture, Argument
+from .road_cell import RoadCell
+from .road_agent import RoadAgent
 import numpy as np
 import copy
 

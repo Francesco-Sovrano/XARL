@@ -1,5 +1,5 @@
-from environments.car_controller.utils.random_planar_graph.DisjointSet import *
-from environments.car_controller.utils.random_planar_graph import triangulation
+from .DisjointSet import *
+from . import triangulation
 
 def generate_node(width, height, randstream):
 	return (randstream.randint(0, width-1), randstream.randint(0, height-1))

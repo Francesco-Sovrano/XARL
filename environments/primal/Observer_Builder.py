@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def _get_one_hot_for_agent_direction(agent):
     """Retuns the agent's direction to one-hot encoding."""
     direction = np.zeros(4)

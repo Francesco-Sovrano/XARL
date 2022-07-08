@@ -26,7 +26,8 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 		'force_car_to_stay_on_road': True,
 		'optimal_orientation_on_road': True,
 		'allow_uturns_on_edges': False,
-		'fairness_reward_fn': 'engineered', # one of the following: None, 'simple', 'engineered'
+		'reward_fn': 'frequent', # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
+		'fairness_reward_fn': 'engineered', # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
 		'visibility_radius': VISIBILITY_RADIUS,
 		'max_food_per_source': float('inf'),
 		'max_food_per_target': max_food_per_target,#(num_agents//target_junctions_number)+2,
@@ -50,7 +51,7 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 
 env_config = get_default_environment_MAGraphDrive_options(16)
 
-env = PartWorldSomeAgents_GraphDrive({"reward_fn": 'frequent_reward_default', "culture_level": None, **env_config})
+env = PartWorldSomeAgents_GraphDrive({"culture_level": None, **env_config})
 env.seed(38)
 # env = CescoDriveV0()
 multiagent = isinstance(env, MultiAgentEnv)

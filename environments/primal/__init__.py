@@ -10,6 +10,6 @@ def build_env_with_agent_groups(env_class, config):
 	return env.with_agent_groups(grouping, obs_space=obs_space, act_space=act_space)
 
 ### Primal
-from environments.primal.primal import Primal
+from .primal import Primal
 register_env("Primal", lambda config: Primal(config))
 register_env("Primal-Group", lambda config: build_env_with_agent_groups(Primal,config))

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from random import Random, randint
-from environments.car_controller.utils.random_planar_graph import graphops
-from environments.car_controller.utils.random_planar_graph import graphio
+from . import graphops
+from . import graphio
 import sys
 
 def default_seed():
