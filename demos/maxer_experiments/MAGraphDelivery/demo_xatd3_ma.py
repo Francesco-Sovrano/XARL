@@ -23,13 +23,15 @@ CONFIG = XATD3_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'n_discrete_actions': None,
-	'reward_fn': 'frequent', # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
+	'reward_fn': 'unitary_more_frequent', # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
+	'fairness_type_fn': 'simple', # one of the following: None, 'simple', 'engineered'
 	'fairness_reward_fn': 'simple', # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
 	'visibility_radius': VISIBILITY_RADIUS,
+	'spawn_on_sources_only': True,
 	'max_refills_per_source': float('inf'),
 	'max_deliveries_per_target': 1,
-	'target_junctions_number': 1+NUM_AGENTS//2,
-	'source_junctions_number': 2,
+	'target_junctions_number': NUM_AGENTS//4,
+	'source_junctions_number': 1,
 	################################
 	'max_dimension': 32,
 	'junctions_number': 32,
@@ -38,12 +40,11 @@ CONFIG["env_config"] = {
 	'max_distance_to_path': .5, # meters
 	################################
 	'random_seconds_per_step': False, # whether to sample seconds_per_step from an exponential distribution
-	'mean_seconds_per_step': 0.5, # in average, a step every n seconds
+	'mean_seconds_per_step': 1, # in average, a step every n seconds
 	################################
 	# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
 	'min_speed': 0.2, # m/s
-	'max_speed': 1.2, # m/s
-	'max_normalised_speed': 120,
+	'max_speed': 2, # m/s
 }
 CONFIG.update({
 	"framework": "torch",

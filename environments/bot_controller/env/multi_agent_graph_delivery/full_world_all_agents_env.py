@@ -17,7 +17,7 @@ from matplotlib.lines import Line2D
 
 from ...utils.geometry import *
 from .lib.multi_agent_road_network import MultiAgentRoadNetwork
-from ...utils.road_lib.road_cultures import *
+from .lib.multi_agent_road_cultures import *
 
 import logging
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 normalize_delivery_count = lambda value, max_value: np.clip(value, 0, max_value)/max_value
 is_source_junction = lambda j: j.is_available_source
 is_target_junction = lambda j: j.is_available_target
-EMPTY_FEATURE_PLACEHOLDER = -1
+EMPTY_FEATURE_PLACEHOLDER = 0
 
 class FullWorldAllAgents_Agent:
 
@@ -49,10 +49,10 @@ class FullWorldAllAgents_Agent:
 		self.fairness_type_fn = eval(f'self.{self.env_config["fairness_type_fn"]}_fairness_type') if self.env_config.get("fairness_type_fn",None) else lambda: 'unknown'
 		
 		self.obs_road_features = len(culture.properties) if culture else 0  # Number of binary ROAD features in Hard Culture
-		self.obs_car_features = (len(culture.agent_properties) - 1) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
+		self.obs_car_features = len(culture.agent_properties) if culture else 0  # Number of binary CAR features in Hard Culture (excluded speed)
 		# Spaces
 		self.discrete_action_space = self.env_config.get('n_discrete_actions',None)
-		self.decides_speed = self.culture
+		self.decides_speed = False
 		if self.discrete_action_space:
 			self.allowed_orientations = np.linspace(-1, 1, self.env_config['n_discrete_actions']).tolist()
 			if not self.decides_speed:
@@ -81,7 +81,7 @@ class FullWorldAllAgents_Agent:
 				shape= (
 					self.env_config['junctions_number'],
 					self.env_config['max_roads_per_junction'],
-					2 + self.obs_road_features, # road.end + road.af_features
+					2 + 2 + self.obs_road_features, # road.start + road.end + road.af_features
 				),
 				dtype=np.float32
 			),
@@ -124,8 +124,6 @@ class FullWorldAllAgents_Agent:
 		self.closest_road = None
 		# speed
 		self.car_speed = self.env_config['min_speed'] if self.decides_speed else self.env_config['max_speed']
-		if self.culture:
-			self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.car_speed))
 		#####
 		self.last_closest_road = None
 		self.last_closest_junction = None
@@ -134,7 +132,7 @@ class FullWorldAllAgents_Agent:
 		# init concat variables
 		self.last_action_mask = None
 		self.is_dead = False
-		self.has_food = True
+		self.has_food = is_source_junction(self.closest_junction)
 		# self.steps_in_junction = 0
 		self.step = 1
 		# self.idle = False
@@ -144,13 +142,14 @@ class FullWorldAllAgents_Agent:
 		self.visiting_new_junction = False
 		self.has_just_taken_food = False
 		self.has_just_delivered_food = False
+		self.stuck_in_junction = False
 
 	def can_see(self, p):
 		return True
 
 	@property
 	def agent_state_size(self):
-		agent_state_size = 4
+		agent_state_size = 3
 		if self.decides_speed:
 			agent_state_size += 1
 		if self.culture:
@@ -162,12 +161,13 @@ class FullWorldAllAgents_Agent:
 			self.is_in_junction(self.car_point),
 			self.has_food,
 			self.is_dead,
-			self.step_gain, # in (0,1]
+			# self.step_gain, # in (0,1]
 		]
 		if self.decides_speed:
 			agent_state.append(self.car_speed/self.env_config['max_speed']) # normalised speed # in [0,1]
 		if self.culture:
-			agent_state += self.agent_id.binary_features(as_tuple=True)
+			agent_state.extend(self.agent_id.binary_features(as_tuple=True))
+		assert len(agent_state)==self.agent_state_size
 		return agent_state
 
 	def get_state(self, car_point=None, car_orientation=None):
@@ -190,9 +190,9 @@ class FullWorldAllAgents_Agent:
 			state_dict["fc_other_agents-16"] = np.array(agent_neighbourhood_view, dtype=np.float32)
 		return state_dict
 
-	@property
-	def step_gain(self):
-		return 1/max(1,np.log(self.step)) # in (0,1]
+	# @property
+	# def step_gain(self):
+	# 	return 1/max(1,np.log(self.step)) # in (0,1]
 
 	@property
 	def step_seconds(self):
@@ -201,13 +201,14 @@ class FullWorldAllAgents_Agent:
 	def get_junction_roads(self, j, source_point, source_orientation):
 		relative_road_pos_vector = shift_and_rotate_vector(
 			[
-				road.start.pos if j.pos!=road.start.pos else road.end.pos
+				(j.pos,road.start.pos) if j.pos!=road.start.pos else road.edge
 				for road in j.roads_connected
 			], 
 			source_point, 
 			source_orientation
 		)
-		relative_road_pos_vector /= self.max_relative_coordinates
+		relative_road_pos_vector = np.reshape(relative_road_pos_vector, (-1,4))
+		relative_road_pos_vector /= self.max_relative_coordinates[0]
 		if self.culture:
 			road_feature_vector = np.array(
 				[
@@ -329,6 +330,7 @@ class FullWorldAllAgents_Agent:
 		)
 
 	def start_step(self, action_vector):
+		was_in_junction = self.is_in_junction(self.car_point) # This is correct because during reset cars are always spawn in a junction
 		##################################
 		## Get actions
 		##################################
@@ -340,26 +342,25 @@ class FullWorldAllAgents_Agent:
 		##################################
 		## Compute new orientation
 		##################################
-		orientation_action = action_vector[0]
+		orientation_action = (action_vector[0]+1)*pi
 		# Optimal orientation on road
 		if self.goal_junction: # is on road
 			road_edge = self.closest_road.edge if self.closest_road.edge[-1] == self.goal_junction.pos else self.closest_road.edge[::-1]
-			if orientation_action < 0: # invert direction; u-turn
-				road_edge = road_edge[::-1]
+			self.car_orientation = get_slope_radians(*road_edge)%two_pi # in [0, 2*pi)
+			if orientation_action > pi/2 and orientation_action < 3*pi/2:
+				self.car_orientation += pi
+				self.car_orientation %= two_pi # in [0, 2*pi)
 				tmp = self.goal_junction
 				self.goal_junction = self.source_junction
 				self.source_junction = tmp
-			self.car_orientation = get_slope_radians(*road_edge)%two_pi # in [0, 2*pi)
 		else: # is in junction
-			self.car_orientation = (self.car_orientation+(orientation_action+1)*pi)%two_pi
+			self.car_orientation = (self.car_orientation+orientation_action)%two_pi
 		##################################
 		## Compute new speed
 		##################################
 		if self.decides_speed:
 			speed_action = action_vector[1]
 			self.car_speed = np.clip((speed_action+1)/2, self.env_config['min_speed'], self.env_config['max_speed'])
-			if self.culture:
-				self.agent_id.assign_property_value("Speed", self.road_network.normalise_speed(self.env_config['min_speed'], self.env_config['max_speed'], self.car_speed))
 		##################################
 		## Move car
 		##################################
@@ -394,6 +395,7 @@ class FullWorldAllAgents_Agent:
 			self.closest_road = None
 			self.car_point = self.closest_junction.pos
 			is_in_junction = True
+		self.stuck_in_junction = is_in_junction and was_in_junction
 		##################################
 		## Update the environment
 		##################################
@@ -459,121 +461,131 @@ class FullWorldAllAgents_Agent:
 	def get_info(self):
 		return f"speed={self.car_speed}, orientation={self.car_orientation}"
 
-	def frequent_reward_default(self):
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def cost_reward(is_positive, is_terminal, label):
-			r = self.step_gain # in (0,1]
-			return (r if is_positive else -r, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
+	# def frequent_reward_default(self):
+	# 	def null_reward(is_terminal, label):
+	# 		return (0, is_terminal, label)
+	# 	def unitary_reward(is_positive, is_terminal, label):
+	# 		return (1 if is_positive else -1, is_terminal, label)
+	# 	def cost_reward(is_positive, is_terminal, label):
+	# 		r = self.step_gain # in (0,1]
+	# 		return (r if is_positive else -r, is_terminal, label)
+	# 	explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
-		#######################################
-		# "Has delivered food to target" rule
-		if self.has_just_delivered_food:
-			return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_to_target')
+	# 	#######################################
+	# 	# "Has delivered food to target" rule
+	# 	if self.has_just_delivered_food:
+	# 		return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_to_target')
 
-		#######################################
-		# "Has taken food from source" rule
-		if self.has_just_taken_food:
-			return null_reward(is_terminal=False, label='has_just_taken_from_source')
+	# 	#######################################
+	# 	# "Has taken food from source" rule
+	# 	if self.has_just_taken_food:
+	# 		return null_reward(is_terminal=False, label='has_just_taken_from_source')
 
-		#######################################
-		# "Is in junction" rule
-		if self.is_in_junction(self.car_point):
-			return null_reward(is_terminal=False, label='is_in_junction')
+	# 	#######################################
+	# 	# "Is stuck in junction" rule
+	# 	if self.stuck_in_junction:
+	# 		return unitary_reward(is_positive=False, is_terminal=False, label='stuck_in_junction')
 
-		if self.culture:
-			#######################################
-			# "Follow regulation" rule. # Run dialogue against culture.
-			# Assign normalised speed to agent properties before running dialogues.
-			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-			if not following_regulation:
-				return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+	# 	#######################################
+	# 	# "Is in junction" rule
+	# 	if self.is_in_junction(self.car_point):
+	# 		return null_reward(is_terminal=False, label='is_in_junction')
 
-		#######################################
-		# "Move forward" rule
-		return null_reward(is_terminal=False, label='moving_forward')
+	# 	if self.culture:
+	# 		#######################################
+	# 		# "Follow regulation" rule. # Run dialogue against culture.
+	# 		# Assign normalised speed to agent properties before running dialogues.
+	# 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
+	# 		if not following_regulation:
+	# 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 
-	def more_frequent_reward_default(self):
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def cost_reward(is_positive, is_terminal, label):
-			r = self.step_gain # in (0,1]
-			return (r if is_positive else -r, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
+	# 	#######################################
+	# 	# "Move forward" rule
+	# 	return null_reward(is_terminal=False, label='moving_forward')
 
-		#######################################
-		# "Has delivered food to target" rule
-		if self.has_just_delivered_food:
-			return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_to_target')
+	# def more_frequent_reward_default(self):
+	# 	def null_reward(is_terminal, label):
+	# 		return (0, is_terminal, label)
+	# 	def unitary_reward(is_positive, is_terminal, label):
+	# 		return (1 if is_positive else -1, is_terminal, label)
+	# 	def cost_reward(is_positive, is_terminal, label):
+	# 		r = self.step_gain # in (0,1]
+	# 		return (r if is_positive else -r, is_terminal, label)
+	# 	explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
-		#######################################
-		# "Has taken food from source" rule
-		if self.has_just_taken_food:
-			return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_from_source')
+	# 	#######################################
+	# 	# "Has delivered food to target" rule
+	# 	if self.has_just_delivered_food:
+	# 		return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_to_target')
 
-		#######################################
-		# "Is in junction" rule
-		if self.is_in_junction(self.car_point):
-			return null_reward(is_terminal=False, label='is_in_junction')
+	# 	#######################################
+	# 	# "Has taken food from source" rule
+	# 	if self.has_just_taken_food:
+	# 		return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_from_source')
 
-		if self.culture:
-			#######################################
-			# "Follow regulation" rule. # Run dialogue against culture.
-			# Assign normalised speed to agent properties before running dialogues.
-			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-			if not following_regulation:
-				return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+	# 	#######################################
+	# 	# "Is stuck in junction" rule
+	# 	if self.stuck_in_junction:
+	# 		return unitary_reward(is_positive=False, is_terminal=False, label='stuck_in_junction')
 
-		#######################################
-		# "Move forward" rule
-		return null_reward(is_terminal=False, label='moving_forward')
+	# 	#######################################
+	# 	# "Is in junction" rule
+	# 	if self.is_in_junction(self.car_point):
+	# 		return null_reward(is_terminal=False, label='is_in_junction')
 
-	def sparse_reward_default(self):
-		def null_reward(is_terminal, label):
-			return (0, is_terminal, label)
-		def unitary_reward(is_positive, is_terminal, label):
-			return (1 if is_positive else -1, is_terminal, label)
-		def cost_reward(is_positive, is_terminal, label):
-			r = self.step_gain # in (0,1]
-			return (r if is_positive else -r, is_terminal, label)
-		explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
+	# 	if self.culture:
+	# 		#######################################
+	# 		# "Follow regulation" rule. # Run dialogue against culture.
+	# 		# Assign normalised speed to agent properties before running dialogues.
+	# 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
+	# 		if not following_regulation:
+	# 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 
-		#######################################
-		# "Mission completed" rule
-		if self.road_network.min_deliveries == self.env_config['max_deliveries_per_target']:
-			return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
+	# 	#######################################
+	# 	# "Move forward" rule
+	# 	return null_reward(is_terminal=False, label='moving_forward')
 
-		#######################################
-		# "Has delivered food to target" rule
-		if self.has_just_delivered_food:
-			return null_reward(is_terminal=False, label='has_just_delivered_to_target')
+	# def sparse_reward_default(self):
+	# 	def null_reward(is_terminal, label):
+	# 		return (0, is_terminal, label)
+	# 	def unitary_reward(is_positive, is_terminal, label):
+	# 		return (1 if is_positive else -1, is_terminal, label)
+	# 	def cost_reward(is_positive, is_terminal, label):
+	# 		r = self.step_gain # in (0,1]
+	# 		return (r if is_positive else -r, is_terminal, label)
+	# 	explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
 
-		#######################################
-		# "Has taken food from source" rule
-		if self.has_just_taken_food:
-			return null_reward(is_terminal=False, label='has_just_taken_from_source')
+	# 	#######################################
+	# 	# "Mission completed" rule
+	# 	if self.road_network.min_deliveries == self.env_config['max_deliveries_per_target']:
+	# 		return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
 
-		#######################################
-		# "Is in junction" rule
-		if self.is_in_junction(self.car_point):
-			return null_reward(is_terminal=False, label='is_in_junction')
+	# 	#######################################
+	# 	# "Has delivered food to target" rule
+	# 	if self.has_just_delivered_food:
+	# 		return null_reward(is_terminal=False, label='has_just_delivered_to_target')
 
-		if self.culture:
-			#######################################
-			# "Follow regulation" rule. # Run dialogue against culture.
-			# Assign normalised speed to agent properties before running dialogues.
-			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-			if not following_regulation:
-				return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+	# 	#######################################
+	# 	# "Has taken food from source" rule
+	# 	if self.has_just_taken_food:
+	# 		return null_reward(is_terminal=False, label='has_just_taken_from_source')
+
+	# 	#######################################
+	# 	# "Is in junction" rule
+	# 	if self.is_in_junction(self.car_point):
+	# 		return null_reward(is_terminal=False, label='is_in_junction')
+
+	# 	if self.culture:
+	# 		#######################################
+	# 		# "Follow regulation" rule. # Run dialogue against culture.
+	# 		# Assign normalised speed to agent properties before running dialogues.
+	# 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
+	# 		if not following_regulation:
+	# 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 		
-		#######################################
-		# "Move forward" rule
-		return null_reward(is_terminal=False, label='moving_forward')
+	# 	#######################################
+	# 	# "Move forward" rule
+	# 	return null_reward(is_terminal=False, label='moving_forward')
 
 	def unitary_frequent_reward_default(self):
 		def null_reward(is_terminal, label):
@@ -591,6 +603,11 @@ class FullWorldAllAgents_Agent:
 		# "Has taken food from source" rule
 		if self.has_just_taken_food:
 			return null_reward(is_terminal=False, label='has_just_taken_from_source')
+
+		# #######################################
+		# # "Is stuck in junction" rule
+		# if self.stuck_in_junction:
+		# 	return unitary_reward(is_positive=False, is_terminal=True, label='stuck_in_junction')
 
 		#######################################
 		# "Is in junction" rule
@@ -625,6 +642,11 @@ class FullWorldAllAgents_Agent:
 		# "Has taken food from source" rule
 		if self.has_just_taken_food:
 			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_from_source')
+
+		# #######################################
+		# # "Is stuck in junction" rule
+		# if self.stuck_in_junction:
+		# 	return unitary_reward(is_positive=False, is_terminal=True, label='stuck_in_junction')
 
 		#######################################
 		# "Is in junction" rule
@@ -759,27 +781,18 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		assert self.env_config['min_junction_distance'] > 2*self.env_config['junction_radius'], f"min_junction_distance has to be greater than {2*self.env_config['junction_radius']} but it is {self.env_config['min_junction_distance']}"
 		assert self.env_config['max_speed']*self.env_config['mean_seconds_per_step'] < self.env_config['min_junction_distance'], f"max_speed*mean_seconds_per_step has to be lower than {self.env_config['min_junction_distance']} but it is {self.env_config['max_speed']*self.env_config['mean_seconds_per_step']}"
 
-		logger.warning(f'Setting environment with reward_fn <{self.env_config["reward_fn"]}>, culture_level <{self.env_config["culture_level"]}>, fairness_type_fn <{self.env_config["fairness_type_fn"]}> and fairness_reward_fn <{self.env_config["fairness_reward_fn"]}>')
-		self.culture = eval(f'{self.env_config["culture_level"]}RoadCulture')(
+		logger.warning(f'Setting environment with reward_fn <{self.env_config["reward_fn"]}>, culture <{self.env_config["culture"]}>, fairness_type_fn <{self.env_config["fairness_type_fn"]}> and fairness_reward_fn <{self.env_config["fairness_reward_fn"]}>')
+		self.culture = eval(f'{self.env_config["culture"]}Culture')(
 			road_options={
-				'motorway': 1/2,
-				'stop_sign': 1/2,
-				'school': 1/2,
-				'single_lane': 1/2,
-				'town_road': 1/2,
-				'roadworks': 1/8,
+				'require_priority': 1/8,
 				'accident': 1/8,
-				'heavy_rain': 1/2,
-				'congestion_charge': 1/8,
+				'require_fee': 1/8,
 			}, agent_options={
 				'emergency_vehicle': 1/5,
-				'heavy_vehicle': 1/4,
-				'worker_vehicle': 1/3,
-				'tasked': 1/2,
-				'paid_charge': 1/2,
-				'speed': self.env_config['max_normalised_speed'],
+				'has_priority': 1/2,
+				'can_pay_fee': 1/2,
 			}
-		) if self.env_config["culture_level"] else None
+		) if self.env_config["culture"] else None
 
 		self.agent_list = [
 			FullWorldAllAgents_Agent(self.num_agents-1, self.culture, self.env_config)
@@ -805,7 +818,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 			max_refills_per_source=self.env_config['max_refills_per_source'], 
 			max_deliveries_per_target=self.env_config['max_deliveries_per_target'],
 		)
-		starting_point_list = self.road_network.get_random_starting_point_list(n=self.num_agents)
+		starting_point_list = self.road_network.get_random_starting_point_list(n=self.num_agents, source_only=self.env_config['spawn_on_sources_only'])
 		for uid,agent in enumerate(self.agent_list):
 			agent.reset(
 				starting_point_list[uid], 

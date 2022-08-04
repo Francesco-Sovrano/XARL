@@ -296,7 +296,7 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 	key_list = line.columns.tolist()
 	get_keys = lambda k: list(map(lambda x: x[len(k):].strip('/'), filter(lambda x: x.startswith(k), key_list)))
 	get_element = lambda df, key: df[key].tolist()[0] if key in df else None
-	arrayfy = lambda x: np.array(x[1:-1].split(', '), dtype=np.float32) if x[1:-1] else []
+	arrayfy = lambda x: np.array(x[1:-1].split(', ') if ', ' in x[1:-1] else x[1:-1].split(' '), dtype=np.float32) if x[1:-1] else []
 
 	step = get_element(line,f"info/{step_type}") # "num_steps_sampled", "num_steps_trained", "num_agent_steps_sampled"
 	# obj = {

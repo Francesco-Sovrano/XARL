@@ -14,28 +14,27 @@ if PLOT_EPISODE:
 	OUTPUT_DIR = './demo_episode'
 	os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-def get_default_environment_MAGraphDrive_options(num_agents):
+def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairness_type_fn, fairness_reward_fn, discrete_actions=None, spawn_on_sources_only=True):
 	target_junctions_number = num_agents//4
-	max_food_per_target = (num_agents//target_junctions_number) - 1
+	max_deliveries_per_target = 3
 	source_junctions_number = 1
-	assert max_food_per_target
+	assert max_deliveries_per_target
 	assert target_junctions_number
 	return {
 		'num_agents': num_agents,
-		'n_discrete_actions': None,
-		'force_car_to_stay_on_road': True,
-		'optimal_orientation_on_road': True,
-		'allow_uturns_on_edges': False,
-		'reward_fn': 'frequent', # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
-		'fairness_reward_fn': 'engineered', # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
+		'n_discrete_actions': discrete_actions,
+		'reward_fn': reward_fn, # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
+		'fairness_type_fn': fairness_type_fn, # one of the following: None, 'simple', 'engineered'
+		'fairness_reward_fn': fairness_reward_fn, # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
 		'visibility_radius': VISIBILITY_RADIUS,
-		'max_food_per_source': float('inf'),
-		'max_food_per_target': max_food_per_target,#(num_agents//target_junctions_number)+2,
+		'spawn_on_sources_only': spawn_on_sources_only,
+		'max_refills_per_source': float('inf'),
+		'max_deliveries_per_target': max_deliveries_per_target,#(num_agents//target_junctions_number)+2,
 		'target_junctions_number': target_junctions_number,
 		'source_junctions_number': source_junctions_number,
 		################################
-		'max_dimension': 32,
-		'junctions_number': 32,
+		'max_dimension': 64,
+		'junctions_number': 64,
 		'max_roads_per_junction': 4,
 		'junction_radius': 1,
 		'max_distance_to_path': .5, # meters
@@ -44,14 +43,20 @@ def get_default_environment_MAGraphDrive_options(num_agents):
 		'mean_seconds_per_step': 1, # in average, a step every n seconds
 		################################
 		# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
-		'min_speed': 0.2, # m/s
-		'max_speed': 1.2, # m/s
-		'max_normalised_speed': 120,
+		'min_speed': 0.5, # m/s
+		'max_speed': 2, # m/s
 	}
 
-env_config = get_default_environment_MAGraphDrive_options(16)
+env_config = get_default_environment_MAGraphDelivery_options(
+	num_agents=4, 
+	reward_fn='unitary_more_frequent', 
+	fairness_type_fn='simple', 
+	fairness_reward_fn=None, 
+	discrete_actions=False, 
+	spawn_on_sources_only=True
+)
 
-env = PartWorldSomeAgents_GraphDrive({"culture_level": None, **env_config})
+env = PartWorldSomeAgents_GraphDelivery({"culture": 'Heterogeneity', **env_config})
 env.seed(38)
 # env = CescoDriveV0()
 multiagent = isinstance(env, MultiAgentEnv)

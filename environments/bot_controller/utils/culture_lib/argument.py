@@ -86,7 +86,3 @@ class ArgumentationFramework:
 
     def argument(self, argument_id):
         return self.all_arguments[argument_id]
-
-
-
-

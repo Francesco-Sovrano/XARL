@@ -26,7 +26,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				shape= (
 					self.max_n_junctions_in_view,
 					self.env_config['max_roads_per_junction'],
-					2 + self.obs_road_features, # road.end + road.af_features
+					2 + 2 + self.obs_road_features, # road.end + road.af_features
 				),
 				dtype=np.float32
 			),
@@ -93,14 +93,14 @@ class PartWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 		self.action_space = self.agent_list[0].action_space
 		base_space = self.agent_list[0].observation_space
 		self.observation_space = gym.spaces.Dict({
-			'all_agents_absolute_position_vector': gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.num_agents,2), dtype=np.float32),
-			'all_agents_absolute_orientation_vector': gym.spaces.Box(low=0, high=two_pi, shape=(self.num_agents,1), dtype=np.float32),
+			'all_agents_absolute_position_vector': gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.num_agents,2), dtype=np.float16),
+			'all_agents_absolute_orientation_vector': gym.spaces.Box(low=0, high=two_pi, shape=(self.num_agents,1), dtype=np.float16),
 			'all_agents_relative_features_list': gym.spaces.Tuple(
 				[base_space]*self.num_agents
 			),
-			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.float32),
+			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.uint8),
 		})
-		self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float32)
+		self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float16)
 		self.empty_agent_features = self.get_empty_state_recursively(base_space)
 		self.agent_id_mask_dict = {}
 		self.seed(config.get('seed',21))
@@ -119,7 +119,7 @@ class PartWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 	def get_this_agent_id_mask(self, this_agent_id):
 		agent_id_mask = self.agent_id_mask_dict.get(this_agent_id,None)
 		if agent_id_mask is None:
-			agent_id_mask = np.zeros((self.num_agents,), dtype=np.float32)
+			agent_id_mask = np.zeros((self.num_agents,), dtype=np.uint8)
 			agent_id_mask[this_agent_id] = 1
 			self.agent_id_mask_dict[this_agent_id] = agent_id_mask
 		return agent_id_mask
@@ -128,14 +128,34 @@ class PartWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 		if not state_dict:
 			return state_dict
 
+		# this_can_see_that = lambda this_agent_id,that_agent_id: self.agent_list[this_agent_id].can_see(self.agent_list[that_agent_id].car_point)
+		# return {
+		# 	this_agent_id: {
+		# 		'all_agents_absolute_position_vector': [
+		# 			self.agent_list[that_agent_id].car_point if that_agent_id in state_dict and this_can_see_that(this_agent_id,that_agent_id) else self.invisible_position_vec
+		# 			for that_agent_id in range(self.num_agents)
+		# 		],
+		# 		'all_agents_absolute_orientation_vector': [
+		# 			[self.agent_list[that_agent_id].car_orientation if that_agent_id in state_dict and this_can_see_that(this_agent_id,that_agent_id) else 0.]
+		# 			for that_agent_id in range(self.num_agents)
+		# 		],
+		# 		'all_agents_relative_features_list': [
+		# 			state_dict.get(that_agent_id,self.empty_agent_features) if this_can_see_that(this_agent_id,that_agent_id) else self.empty_agent_features
+		# 			for that_agent_id in range(self.num_agents)
+		# 		],
+		# 		'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
+		# 	}
+		# 	for this_agent_id in state_dict.keys()
+		# }
+
 		all_agents_absolute_position_vector = np.array([
 			self.agent_list[that_agent_id].car_point if that_agent_id in state_dict else self.invisible_position_vec
 			for that_agent_id in range(self.num_agents)
-		], dtype=np.float32)
+		], dtype=np.float16)
 		all_agents_absolute_orientation_vector = np.array([
 			self.agent_list[that_agent_id].car_orientation if that_agent_id in state_dict else 0.
 			for that_agent_id in range(self.num_agents)
-		], dtype=np.float32)[:, np.newaxis]
+		], dtype=np.float16)[:, np.newaxis]
 		all_agents_relative_features_list = [
 			state_dict.get(that_agent_id,self.empty_agent_features)
 			for that_agent_id in range(self.num_agents)

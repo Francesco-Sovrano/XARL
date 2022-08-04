@@ -23,7 +23,7 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				shape= (
 					self.env_config['junctions_number'],
 					self.env_config['max_roads_per_junction'],
-					2 + self.obs_road_features, # road.end + road.af_features
+					2 + 2 + self.obs_road_features, # road.end + road.af_features
 				),
 				dtype=np.float32
 			),

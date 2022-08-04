@@ -127,9 +127,8 @@ class MultiAgentRoadNetwork(RoadNetwork):
 			'rich_target': None,
 		}
 
-	def get_random_starting_point_list(self, n=1):
+	def get_random_starting_point_list(self, n=1, source_only=True):
 		return [
 			j.pos
-			# for j in self.road_culture.np_random.choice(self.junctions, size=n, replace=False)
-			for j in self.np_random.choice(self.source_junctions, size=n)
+			for j in self.np_random.choice(self.source_junctions if source_only else self.junctions, size=n)
 		]		

@@ -37,19 +37,18 @@ for culture_level in culture_level_list:
 ###########################################################################
 ### Multi-Agent GraphDrive
 from .env.multi_agent_graph_delivery.full_world_all_agents_env import FullWorldAllAgents_GraphDelivery
-culture_level_list = ["Easy","Medium","Hard"]
-for culture_level in culture_level_list:
-	register_env(f"MAGraphDelivery-FullWorldAllAgents-{culture_level}", lambda config: FullWorldAllAgents_GraphDelivery({"culture_level": culture_level, **config}))
-register_env(f"MAGraphDelivery-FullWorldAllAgents", lambda config: FullWorldAllAgents_GraphDelivery({"culture_level": None, **config}))
-
 from .env.multi_agent_graph_delivery.part_world_some_agents_env import PartWorldSomeAgents_GraphDelivery
-culture_level_list = ["Easy","Medium","Hard"]
-for culture_level in culture_level_list:
-	register_env(f"MAGraphDelivery-PartWorldSomeAgents-{culture_level}", lambda config: PartWorldSomeAgents_GraphDelivery({"culture_level": culture_level, **config}))
-register_env(f"MAGraphDelivery-PartWorldSomeAgents", lambda config: PartWorldSomeAgents_GraphDelivery({"culture_level": None, **config}))
-
 from .env.multi_agent_graph_delivery.full_world_some_agents_env import FullWorldSomeAgents_GraphDelivery
-culture_level_list = ["Easy","Medium","Hard"]
-for culture_level in culture_level_list:
-	register_env(f"MAGraphDelivery-FullWorldSomeAgents-{culture_level}", lambda config: FullWorldSomeAgents_GraphDelivery({"culture_level": culture_level, **config}))
-register_env(f"MAGraphDelivery-FullWorldSomeAgents", lambda config: FullWorldSomeAgents_GraphDelivery({"culture_level": None, **config}))
+culture_list = ["Heterogeneity"]
+
+for culture in culture_list:
+	register_env(f"MAGraphDelivery-FullWorldAllAgents-{culture}", lambda config: FullWorldAllAgents_GraphDelivery({"culture": culture, **config}))
+register_env(f"MAGraphDelivery-FullWorldAllAgents", lambda config: FullWorldAllAgents_GraphDelivery({"culture": None, **config}))
+
+for culture in culture_list:
+	register_env(f"MAGraphDelivery-PartWorldSomeAgents-{culture}", lambda config: PartWorldSomeAgents_GraphDelivery({"culture": culture, **config}))
+register_env(f"MAGraphDelivery-PartWorldSomeAgents", lambda config: PartWorldSomeAgents_GraphDelivery({"culture": None, **config}))
+
+for culture in culture_list:
+	register_env(f"MAGraphDelivery-FullWorldSomeAgents-{culture}", lambda config: FullWorldSomeAgents_GraphDelivery({"culture": culture, **config}))
+register_env(f"MAGraphDelivery-FullWorldSomeAgents", lambda config: FullWorldSomeAgents_GraphDelivery({"culture": None, **config}))
