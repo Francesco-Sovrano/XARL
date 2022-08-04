@@ -57,10 +57,9 @@ class AdaptiveModel(nn.Module):
 		# print(self.sub_model_dict)
 
 	def variables(self, as_dict = False):
-		p = list(self.parameters())
 		if as_dict:
-			return {k: p[i] for i, k in enumerate(self.state_dict().keys())}
-		return p
+			return self.state_dict()
+		return list(self.parameters())
 
 	def forward(self, x):
 		output_list = []
