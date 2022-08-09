@@ -18,7 +18,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 					self.max_n_junctions_in_view,
 					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
@@ -26,9 +26,9 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				shape= (
 					self.max_n_junctions_in_view,
 					self.env_config['max_roads_per_junction'],
-					2 + 2 + self.obs_road_features, # road.end + road.af_features
+					2 + self.obs_road_features, # road.end + road.af_features
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 			"fc_this_agent-8": gym.spaces.Box( # Agent features
 				low= 0,
@@ -36,7 +36,7 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				shape= (
 					self.agent_state_size,
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 		}
 		self.observation_space = gym.spaces.Dict(state_dict)
@@ -66,9 +66,9 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		roads_view_list = self.get_roads_view_list(sorted_junctions, car_point, car_orientation, self.max_n_junctions_in_view)
 		agent_feature_list = self.get_agent_feature_list()
 		state_dict = {
-			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
-			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
-			"fc_this_agent-8": np.array(agent_feature_list, dtype=np.float32),
+			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float16),
+			"fc_roads-16": np.array(roads_view_list, dtype=np.float16),
+			"fc_this_agent-8": np.array(agent_feature_list, dtype=np.float16),
 		}
 		return state_dict
 

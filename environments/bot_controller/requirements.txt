@@ -1,6 +1,6 @@
 gym==0.18.0
 
-scikit-spatial
+scikit-spatial==5.2.0
 scipy==1.6.0
 numpy==1.19.5
 matplotlib==3.3.2

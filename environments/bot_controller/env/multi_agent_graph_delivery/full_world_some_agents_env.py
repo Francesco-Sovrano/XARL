@@ -15,7 +15,7 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 					self.env_config['junctions_number'],
 					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
@@ -23,9 +23,9 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				shape= (
 					self.env_config['junctions_number'],
 					self.env_config['max_roads_per_junction'],
-					2 + 2 + self.obs_road_features, # road.end + road.af_features
+					2 + self.obs_road_features, # road.end + road.af_features
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 			"fc_this_agent-8": gym.spaces.Box( # Agent features
 				low= 0,
@@ -33,7 +33,7 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				shape= (
 					self.agent_state_size,
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 		}
 		self.observation_space = gym.spaces.Dict(state_dict)
@@ -55,9 +55,9 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		roads_view_list = self.get_roads_view_list(sorted_junctions, car_point, car_orientation, self.env_config['junctions_number'])
 		agent_feature_list = self.get_agent_feature_list()
 		state_dict = {
-			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
-			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
-			"fc_this_agent-8": np.array(agent_feature_list, dtype=np.float32),
+			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float16),
+			"fc_roads-16": np.array(roads_view_list, dtype=np.float16),
+			"fc_this_agent-8": np.array(agent_feature_list, dtype=np.float16),
 		}
 		return state_dict
 
@@ -76,14 +76,14 @@ class FullWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 		self.action_space = self.agent_list[0].action_space
 		base_space = self.agent_list[0].observation_space
 		self.observation_space = gym.spaces.Dict({
-			'all_agents_absolute_position_vector': gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.num_agents,2), dtype=np.float32),
-			'all_agents_absolute_orientation_vector': gym.spaces.Box(low=0, high=two_pi, shape=(self.num_agents,1), dtype=np.float32),
+			'all_agents_absolute_position_vector': gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.num_agents,2), dtype=np.float16),
+			'all_agents_absolute_orientation_vector': gym.spaces.Box(low=0, high=two_pi, shape=(self.num_agents,1), dtype=np.float16),
 			'all_agents_relative_features_list': gym.spaces.Tuple(
 				[base_space]*self.num_agents
 			),
-			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.float32),
+			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.float16),
 		})
-		self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float32)
+		self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float16)
 		self.empty_agent_features = self.get_empty_state_recursively(base_space)
 		self.agent_id_mask_dict = {}
 		self.seed(config.get('seed',21))
@@ -102,7 +102,7 @@ class FullWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 	def get_this_agent_id_mask(self, this_agent_id):
 		agent_id_mask = self.agent_id_mask_dict.get(this_agent_id,None)
 		if agent_id_mask is None:
-			agent_id_mask = np.zeros((self.num_agents,), dtype=np.float32)
+			agent_id_mask = np.zeros((self.num_agents,), dtype=np.float16)
 			agent_id_mask[this_agent_id] = 1
 			self.agent_id_mask_dict[this_agent_id] = agent_id_mask
 		return agent_id_mask
@@ -114,11 +114,11 @@ class FullWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 		all_agents_absolute_position_vector = np.array([
 			self.agent_list[that_agent_id].car_point if that_agent_id in state_dict else self.invisible_position_vec
 			for that_agent_id in range(self.num_agents)
-		], dtype=np.float32)
+		], dtype=np.float16)
 		all_agents_absolute_orientation_vector = np.array([
 			self.agent_list[that_agent_id].car_orientation if that_agent_id in state_dict else 0.
 			for that_agent_id in range(self.num_agents)
-		], dtype=np.float32)[:, np.newaxis]
+		], dtype=np.float16)[:, np.newaxis]
 		all_agents_relative_features_list = [
 			state_dict.get(that_agent_id,self.empty_agent_features)
 			for that_agent_id in range(self.num_agents)

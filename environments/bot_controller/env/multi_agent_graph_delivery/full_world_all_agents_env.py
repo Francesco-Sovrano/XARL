@@ -43,7 +43,7 @@ class FullWorldAllAgents_Agent:
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
 		self.max_depth_searching_for_closest_target = self.env_config.get('max_depth_searching_for_closest_target',3)
-		self.max_relative_coordinates = 2*np.array(self.env_config['map_size'], dtype=np.float32)
+		self.max_relative_coordinates = 2*np.array(self.env_config['map_size'], dtype=np.float16)
 		self.reward_fn = eval(f'self.{self.env_config.get("reward_fn","frequent")}_reward_default')
 		self.fairness_reward_fn = eval(f'self.{self.env_config["fairness_reward_fn"]}_fairness_reward') if self.env_config.get("fairness_reward_fn",None) else lambda x: 0
 		self.fairness_type_fn = eval(f'self.{self.env_config["fairness_type_fn"]}_fairness_type') if self.env_config.get("fairness_type_fn",None) else lambda: 'unknown'
@@ -62,9 +62,9 @@ class FullWorldAllAgents_Agent:
 			self.action_space = gym.spaces.Discrete(len(self.allowed_orientations)*len(self.allowed_speeds))
 		else:
 			if self.decides_speed:
-				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float32)
+				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float16)
 			else:
-				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float16)
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
@@ -73,7 +73,7 @@ class FullWorldAllAgents_Agent:
 					self.env_config['junctions_number'],
 					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
 				low= -1,
@@ -81,9 +81,9 @@ class FullWorldAllAgents_Agent:
 				shape= (
 					self.env_config['junctions_number'],
 					self.env_config['max_roads_per_junction'],
-					2 + 2 + self.obs_road_features, # road.start + road.end + road.af_features
+					2 + self.obs_road_features, # road.start + road.end + road.af_features
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 			"fc_this_agent-8": gym.spaces.Box( # Agent features
 				low= 0,
@@ -91,7 +91,7 @@ class FullWorldAllAgents_Agent:
 				shape= (
 					self.agent_state_size,
 				),
-				dtype=np.float32
+				dtype=np.float16
 			),
 		}
 		if self.n_of_other_agents > 0:
@@ -102,15 +102,15 @@ class FullWorldAllAgents_Agent:
 					self.n_of_other_agents,
 					2 + 1 + self.agent_state_size,
 				), # for each other possible agent give position + orientation + state + features
-				dtype=np.float32
+				dtype=np.float16
 			)
 		self.observation_space = gym.spaces.Dict(state_dict)
 
-		self._empty_junction = np.full(self.observation_space['fc_junctions-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
-		self._empty_road = np.full(self.observation_space['fc_roads-16'].shape[-1], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
-		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
+		self._empty_junction = np.full(self.observation_space['fc_junctions-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float16)
+		self._empty_road = np.full(self.observation_space['fc_roads-16'].shape[-1], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float16)
+		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float16)
 		if self.n_of_other_agents > 0:
-			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
+			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float16)
 
 	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
@@ -181,13 +181,13 @@ class FullWorldAllAgents_Agent:
 		roads_view_list = self.get_roads_view_list(sorted_junctions, car_point, car_orientation, self.env_config['junctions_number'])
 		agent_feature_list = self.get_agent_feature_list()
 		state_dict = {
-			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float32),
-			"fc_roads-16": np.array(roads_view_list, dtype=np.float32),
-			"fc_this_agent-8": np.array(agent_feature_list, dtype=np.float32),
+			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float16),
+			"fc_roads-16": np.array(roads_view_list, dtype=np.float16),
+			"fc_this_agent-8": np.array(agent_feature_list, dtype=np.float16),
 		}
 		if self.n_of_other_agents > 0:
 			agent_neighbourhood_view = self.get_neighbourhood_view(car_point, car_orientation)
-			state_dict["fc_other_agents-16"] = np.array(agent_neighbourhood_view, dtype=np.float32)
+			state_dict["fc_other_agents-16"] = np.array(agent_neighbourhood_view, dtype=np.float16)
 		return state_dict
 
 	# @property
@@ -201,13 +201,12 @@ class FullWorldAllAgents_Agent:
 	def get_junction_roads(self, j, source_point, source_orientation):
 		relative_road_pos_vector = shift_and_rotate_vector(
 			[
-				(j.pos,road.start.pos) if j.pos!=road.start.pos else road.edge
+				road.start.pos if j.pos!=road.start.pos else road.end.pos
 				for road in j.roads_connected
 			], 
 			source_point, 
 			source_orientation
 		)
-		relative_road_pos_vector = np.reshape(relative_road_pos_vector, (-1,4))
 		relative_road_pos_vector /= self.max_relative_coordinates[0]
 		if self.culture:
 			road_feature_vector = np.array(
@@ -215,7 +214,7 @@ class FullWorldAllAgents_Agent:
 					road.binary_features(as_tuple=True) # in [0,1]
 					for road in j.roads_connected
 				], 
-				dtype=np.float32
+				dtype=np.float16
 			)
 			junction_road_list = np.concatenate(
 				[
@@ -255,7 +254,7 @@ class FullWorldAllAgents_Agent:
 						self.env_config['max_deliveries_per_target']
 					) if sorted_junctions[i][1].is_target else -1,
 				), 
-				dtype=np.float32
+				dtype=np.float16
 			)
 			if i < len(sorted_junctions) else 
 			self._empty_junction
@@ -290,7 +289,7 @@ class FullWorldAllAgents_Agent:
 				for agent_point, agent_orientation, agent_state in sorted_alive_agents
 			]
 			agents_view_list = [
-				np.array(sorted_alive_agents[i], dtype=np.float32) 
+				np.array(sorted_alive_agents[i], dtype=np.float16) 
 				if i < len(sorted_alive_agents) else 
 				self._empty_agent
 				for i in range(len(self.other_agent_list))

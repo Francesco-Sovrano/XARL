@@ -43,12 +43,12 @@ culture_list = ["Heterogeneity"]
 
 for culture in culture_list:
 	register_env(f"MAGraphDelivery-FullWorldAllAgents-{culture}", lambda config: FullWorldAllAgents_GraphDelivery({"culture": culture, **config}))
-register_env(f"MAGraphDelivery-FullWorldAllAgents", lambda config: FullWorldAllAgents_GraphDelivery({"culture": None, **config}))
+register_env("MAGraphDelivery-FullWorldAllAgents", lambda config: FullWorldAllAgents_GraphDelivery({"culture": None, **config}))
 
 for culture in culture_list:
 	register_env(f"MAGraphDelivery-PartWorldSomeAgents-{culture}", lambda config: PartWorldSomeAgents_GraphDelivery({"culture": culture, **config}))
-register_env(f"MAGraphDelivery-PartWorldSomeAgents", lambda config: PartWorldSomeAgents_GraphDelivery({"culture": None, **config}))
+register_env("MAGraphDelivery-PartWorldSomeAgents", lambda config: PartWorldSomeAgents_GraphDelivery({"culture": None, **config}))
 
 for culture in culture_list:
 	register_env(f"MAGraphDelivery-FullWorldSomeAgents-{culture}", lambda config: FullWorldSomeAgents_GraphDelivery({"culture": culture, **config}))
-register_env(f"MAGraphDelivery-FullWorldSomeAgents", lambda config: FullWorldSomeAgents_GraphDelivery({"culture": None, **config}))
+register_env("MAGraphDelivery-FullWorldSomeAgents", lambda config: FullWorldSomeAgents_GraphDelivery({"culture": None, **config}))

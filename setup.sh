@@ -7,7 +7,7 @@ source .env/bin/activate
 pip install -U pip setuptools wheel psutil
 
 echo 'Installing env CarController..'
-pip install -r environments/car_controller/requirements.txt
+pip install -r environments/bot_controller/requirements.txt
 
 # echo 'Installing env SpecialAtari..'
 # pip install -r environments/special_atari/requirements.txt
