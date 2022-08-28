@@ -9,8 +9,8 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
-				low= -1,
-				high= 1,
+				low= float('-inf'),
+				high= float('inf'),
 				shape= (
 					self.env_config['junctions_number'],
 					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
@@ -18,12 +18,12 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				dtype=np.float16
 			),
 			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
-				low= -1,
-				high= 1,
+				low= float('-inf'),
+				high= float('inf'),
 				shape= (
 					self.env_config['junctions_number'],
 					self.env_config['max_roads_per_junction'],
-					2 + self.obs_road_features, # road.end + road.af_features
+					2 + 2 + self.obs_road_features, # road.end + road.af_features
 				),
 				dtype=np.float16
 			),
@@ -40,9 +40,8 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		# self._visible_road_network_junctions = None
 
 	def get_visible_junctions(self, source_point, source_orientation):
-		relative_jpos_vector = shift_and_rotate_vector([j.pos for j in self.road_network.junctions], source_point, source_orientation) / self.max_relative_coordinates
-		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),self.road_network.junctions), key=lambda x: x[0])
-		return sorted_junctions
+		relative_jpos_vector = shift_and_rotate_vector([j.pos for j in self.road_network.junctions], source_point, source_orientation) #/ self.max_relative_coordinate
+		return sorted(zip(relative_jpos_vector.tolist(),self.road_network.junctions), key=lambda x: x[0])
 
 	def get_state(self, car_point=None, car_orientation=None):
 		if car_point is None:
@@ -61,8 +60,12 @@ class FullWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		}
 		return state_dict
 
-	def can_see(self, p):
-		return euclidean_distance(p, self.car_point) <= self.env_config['visibility_radius']
+	# def can_see(self, p):
+	# 	if self.source_junction and p == self.source_junction.pos:
+	# 		return True
+	# 	if self.goal_junction and p == self.goal_junction.pos:
+	# 		return True
+	# 	return euclidean_distance(p, self.car_point) <= self.env_config['visibility_radius']
 
 
 class FullWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
@@ -81,7 +84,7 @@ class FullWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 			'all_agents_relative_features_list': gym.spaces.Tuple(
 				[base_space]*self.num_agents
 			),
-			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.float16),
+			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.uint8),
 		})
 		self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float16)
 		self.empty_agent_features = self.get_empty_state_recursively(base_space)
@@ -102,7 +105,7 @@ class FullWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 	def get_this_agent_id_mask(self, this_agent_id):
 		agent_id_mask = self.agent_id_mask_dict.get(this_agent_id,None)
 		if agent_id_mask is None:
-			agent_id_mask = np.zeros((self.num_agents,), dtype=np.float16)
+			agent_id_mask = np.zeros((self.num_agents,), dtype=np.uint8)
 			agent_id_mask[this_agent_id] = 1
 			self.agent_id_mask_dict[this_agent_id] = agent_id_mask
 		return agent_id_mask

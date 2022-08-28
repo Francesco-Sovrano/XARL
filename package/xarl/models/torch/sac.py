@@ -23,13 +23,13 @@ class TorchAdaptiveMultiHeadNet:
 
 			def build_policy_model(self, obs_space, num_outputs, policy_model_config, name):
 				self.preprocessing_model_policy = policy_preprocessing_model(obs_space, self.model_config['custom_model_config'])
-				self.preprocessed_obs_space_policy = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.preprocessing_model_policy.get_num_outputs(),), dtype=np.float32)
-				return super().build_policy_model(self.preprocessed_obs_space_policy, num_outputs, policy_model_config, name)
+				preprocessed_obs_space_policy = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.preprocessing_model_policy.get_num_outputs(),), dtype=np.float32)
+				return super().build_policy_model(preprocessed_obs_space_policy, num_outputs, policy_model_config, name)
 
 			def build_q_model(self, obs_space, action_space, num_outputs, q_model_config, name):
 				self.preprocessing_model_q = value_preprocessing_model(obs_space, self.model_config['custom_model_config'])
-				self.preprocessed_obs_space_q = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.preprocessing_model_q.get_num_outputs(),), dtype=np.float32)
-				return super().build_q_model(self.preprocessed_obs_space_q, action_space, num_outputs, q_model_config, name)
+				preprocessed_obs_space_q = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.preprocessing_model_q.get_num_outputs(),), dtype=np.float32)
+				return super().build_q_model(preprocessed_obs_space_q, action_space, num_outputs, q_model_config, name)
 
 			def get_policy_output(self, model_out):
 				model_out = self.preprocessing_model_policy(model_out)

@@ -32,4 +32,11 @@ class TFAdaptiveMultiHeadDQN:
 				model_out = self.preprocessing_model(get_input_list_from_input_dict(input_dict))
 				return model_out, state
 
+			def variables(self, as_dict=False):
+				if not as_dict:
+					return self.preprocessing_model.variables(as_dict) + super().variables(as_dict)
+				v = self.preprocessing_model.variables(as_dict)
+				v.update(super().variables(as_dict))
+				return v
+
 		return TFAdaptiveMultiHeadDQNInner

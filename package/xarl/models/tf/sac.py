@@ -53,8 +53,18 @@ class TFAdaptiveMultiHeadNet:
 				model_out = self.policy_preprocessing_model(get_input_list_from_input_dict({"obs": model_out}))
 				return super().get_policy_output(model_out)
 
-			def _get_q_value(self, model_out, actions, net):
-				model_out = self.value_preprocessing_model(get_input_list_from_input_dict({"obs": model_out}))
-				return super()._get_q_value(model_out, actions, net)
+			def get_q_values(self, model_out, actions = None):
+				model_out = self.value_preprocessing_model(model_out)
+				return self._get_q_value(model_out, actions, self.q_net)
+
+			def get_twin_q_values(self, model_out, actions = None):
+				model_out = self.value_preprocessing_model(model_out)
+				return self._get_q_value(model_out, actions, self.twin_q_net)
+
+			def policy_variables(self):
+				return self.policy_preprocessing_model.variables() + super().policy_variables()
+
+			def q_variables(self):
+				return self.value_preprocessing_model.variables() + super().q_variables()
 
 		return TFAdaptiveMultiHeadNetInner

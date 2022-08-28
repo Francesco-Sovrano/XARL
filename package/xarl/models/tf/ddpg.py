@@ -27,7 +27,32 @@ class TFAdaptiveMultiHeadDDPG:
 				)
 
 			def forward(self, input_dict, state, seq_lens):
-				model_out = self.preprocessing_model(get_input_list_from_input_dict(input_dict))
-				return model_out, state
+				return input_dict["obs"], state
+
+			def get_policy_output(self, model_out):
+				model_out = self.preprocessing_model_policy(model_out)
+				return self.policy_model(model_out)
+
+			def get_q_values(self, model_out, actions = None):
+				model_out = self.preprocessing_model_q(model_out)
+				return self.q_model(torch.cat([model_out, actions], -1))
+
+			def get_twin_q_values(self, model_out, actions = None):
+				model_out = self.preprocessing_model_q(model_out)
+				return self.twin_q_model(torch.cat([model_out, actions], -1))
+
+			def policy_variables(self, as_dict=False):
+				if not as_dict:
+					return self.preprocessing_model_policy.variables(as_dict) + super().policy_variables(as_dict)
+				p_dict = super().policy_variables(as_dict)
+				p_dict.update(self.preprocessing_model_policy.variables(as_dict))
+				return p_dict
+
+			def q_variables(self, as_dict=False):
+				if not as_dict:
+					return self.preprocessing_model_q.variables(as_dict) + super().q_variables(as_dict)
+				q_dict = super().q_variables(as_dict)
+				q_dict.update(self.preprocessing_model_q.variables(as_dict))
+				return q_dict
 
 		return TFAdaptiveMultiHeadDDPGInner

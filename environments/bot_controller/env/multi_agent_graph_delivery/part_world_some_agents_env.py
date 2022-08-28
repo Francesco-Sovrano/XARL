@@ -12,8 +12,8 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
-				low= -1,
-				high= 1,
+				low= float('-inf'),
+				high= float('inf'),
 				shape= (
 					self.max_n_junctions_in_view,
 					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
@@ -21,12 +21,12 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 				dtype=np.float16
 			),
 			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
-				low= -1,
-				high= 1,
+				low= float('-inf'),
+				high= float('inf'),
 				shape= (
 					self.max_n_junctions_in_view,
 					self.env_config['max_roads_per_junction'],
-					2 + self.obs_road_features, # road.end + road.af_features
+					2 + 2 + self.obs_road_features, # road.end + road.af_features
 				),
 				dtype=np.float16
 			),
@@ -47,13 +47,9 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		visible_road_network_junctions = filter(lambda j: self.can_see(j.pos), visible_road_network_junctions) #self.visible_road_network_junctions
 		# visible_road_network_junctions = filter(lambda j: j.roads_connected, visible_road_network_junctions)
 		visible_road_network_junctions = list(visible_road_network_junctions)
-
-		if visible_road_network_junctions:
-			relative_jpos_vector = shift_and_rotate_vector([j.pos for j in visible_road_network_junctions], source_point, source_orientation) / self.max_relative_coordinates
-			sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),visible_road_network_junctions), key=lambda x: x[0])
-		else:
-			sorted_junctions = []
-		return sorted_junctions
+		assert visible_road_network_junctions
+		relative_jpos_vector = shift_and_rotate_vector([j.pos for j in visible_road_network_junctions], source_point, source_orientation) #/ self.max_relative_coordinate
+		return sorted(zip(relative_jpos_vector.tolist(),visible_road_network_junctions), key=lambda x: x[0])
 
 	def get_state(self, car_point=None, car_orientation=None):
 		if car_point is None:
@@ -72,13 +68,11 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		}
 		return state_dict
 
-	# @property
-	# def visible_road_network_junctions(self):
-	# 	if self._visible_road_network_junctions is None or self.step % 16 == 0:
-	# 		self._visible_road_network_junctions = list(filter(lambda j: self.can_see(j.pos), self.road_network.junctions))
-	# 	return self._visible_road_network_junctions
-
 	def can_see(self, p):
+		if self.source_junction and p == self.source_junction.pos:
+			return True
+		if self.goal_junction and p == self.goal_junction.pos:
+			return True
 		return euclidean_distance(p, self.car_point) <= self.env_config['visibility_radius']
 
 

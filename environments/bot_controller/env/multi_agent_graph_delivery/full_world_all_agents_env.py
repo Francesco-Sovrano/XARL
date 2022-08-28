@@ -43,7 +43,7 @@ class FullWorldAllAgents_Agent:
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
 		self.max_depth_searching_for_closest_target = self.env_config.get('max_depth_searching_for_closest_target',3)
-		self.max_relative_coordinates = 2*np.array(self.env_config['map_size'], dtype=np.float16)
+		# self.max_relative_coordinate = 2*self.env_config['max_dimension']
 		self.reward_fn = eval(f'self.{self.env_config.get("reward_fn","frequent")}_reward_default')
 		self.fairness_reward_fn = eval(f'self.{self.env_config["fairness_reward_fn"]}_fairness_reward') if self.env_config.get("fairness_reward_fn",None) else lambda x: 0
 		self.fairness_type_fn = eval(f'self.{self.env_config["fairness_type_fn"]}_fairness_type') if self.env_config.get("fairness_type_fn",None) else lambda: 'unknown'
@@ -67,8 +67,8 @@ class FullWorldAllAgents_Agent:
 				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float16)
 		state_dict = {
 			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
-				low= -1,
-				high= 1,
+				low= float('-inf'),
+				high= float('inf'),
 				shape= (
 					self.env_config['junctions_number'],
 					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
@@ -76,12 +76,12 @@ class FullWorldAllAgents_Agent:
 				dtype=np.float16
 			),
 			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
-				low= -1,
-				high= 1,
+				low= float('-inf'),
+				high= float('inf'),
 				shape= (
 					self.env_config['junctions_number'],
 					self.env_config['max_roads_per_junction'],
-					2 + self.obs_road_features, # road.start + road.end + road.af_features
+					2 + 2 + self.obs_road_features, # road.start + road.end + road.af_features
 				),
 				dtype=np.float16
 			),
@@ -149,18 +149,24 @@ class FullWorldAllAgents_Agent:
 
 	@property
 	def agent_state_size(self):
-		agent_state_size = 3
+		agent_state_size = 4
 		if self.decides_speed:
 			agent_state_size += 1
 		if self.culture:
 			agent_state_size += self.obs_car_features
 		return agent_state_size
 
+	@property
+	def task_completion(self):
+		deliveries_to_do = self.env_config['target_junctions_number']*self.env_config['max_deliveries_per_target']
+		return self.road_network.deliveries/deliveries_to_do
+
 	def get_agent_feature_list(self):
 		agent_state = [
 			self.is_in_junction(self.car_point),
 			self.has_food,
 			self.is_dead,
+			self.task_completion,
 			# self.step_gain, # in (0,1]
 		]
 		if self.decides_speed:
@@ -201,13 +207,13 @@ class FullWorldAllAgents_Agent:
 	def get_junction_roads(self, j, source_point, source_orientation):
 		relative_road_pos_vector = shift_and_rotate_vector(
 			[
-				road.start.pos if j.pos!=road.start.pos else road.end.pos
+				(road.start.pos,road.end.pos) if j.pos!=road.start.pos else (road.end.pos,road.start.pos)
 				for road in j.roads_connected
 			], 
 			source_point, 
 			source_orientation
-		)
-		relative_road_pos_vector /= self.max_relative_coordinates[0]
+		) #/ self.max_relative_coordinate
+		relative_road_pos_vector = relative_road_pos_vector.reshape((-1, 4))
 		if self.culture:
 			road_feature_vector = np.array(
 				[
@@ -266,9 +272,8 @@ class FullWorldAllAgents_Agent:
 			[j.pos for j in self.road_network.junctions], 
 			source_point, 
 			source_orientation
-		) / self.max_relative_coordinates
-		sorted_junctions = sorted(zip(relative_jpos_vector.tolist(),self.road_network.junctions), key=lambda x: x[0])
-		return sorted_junctions
+		) #/ self.max_relative_coordinate
+		return sorted(zip(relative_jpos_vector.tolist(),self.road_network.junctions), key=lambda x: x[0])
 
 	def get_neighbourhood_view(self, source_point, source_orientation):
 		if self.other_agent_list:
@@ -276,7 +281,9 @@ class FullWorldAllAgents_Agent:
 			sorted_alive_agents = sorted(
 				(
 					(
-						(shift_and_rotate_vector(agent.car_point, source_point, source_orientation) / self.max_relative_coordinates).tolist(),
+						(
+							shift_and_rotate_vector(agent.car_point, source_point, source_orientation) #/ self.max_relative_coordinate
+						).tolist(),
 						agent.car_orientation/two_pi,
 						agent.get_agent_feature_list(), 
 					)
@@ -341,6 +348,7 @@ class FullWorldAllAgents_Agent:
 		##################################
 		## Compute new orientation
 		##################################
+		action_vector = np.clip(action_vector, self.action_space.low[0], self.action_space.high[0])
 		orientation_action = (action_vector[0]+1)*pi
 		# Optimal orientation on road
 		if self.goal_junction: # is on road
@@ -459,132 +467,6 @@ class FullWorldAllAgents_Agent:
 			
 	def get_info(self):
 		return f"speed={self.car_speed}, orientation={self.car_orientation}"
-
-	# def frequent_reward_default(self):
-	# 	def null_reward(is_terminal, label):
-	# 		return (0, is_terminal, label)
-	# 	def unitary_reward(is_positive, is_terminal, label):
-	# 		return (1 if is_positive else -1, is_terminal, label)
-	# 	def cost_reward(is_positive, is_terminal, label):
-	# 		r = self.step_gain # in (0,1]
-	# 		return (r if is_positive else -r, is_terminal, label)
-	# 	explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-	# 	#######################################
-	# 	# "Has delivered food to target" rule
-	# 	if self.has_just_delivered_food:
-	# 		return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_to_target')
-
-	# 	#######################################
-	# 	# "Has taken food from source" rule
-	# 	if self.has_just_taken_food:
-	# 		return null_reward(is_terminal=False, label='has_just_taken_from_source')
-
-	# 	#######################################
-	# 	# "Is stuck in junction" rule
-	# 	if self.stuck_in_junction:
-	# 		return unitary_reward(is_positive=False, is_terminal=False, label='stuck_in_junction')
-
-	# 	#######################################
-	# 	# "Is in junction" rule
-	# 	if self.is_in_junction(self.car_point):
-	# 		return null_reward(is_terminal=False, label='is_in_junction')
-
-	# 	if self.culture:
-	# 		#######################################
-	# 		# "Follow regulation" rule. # Run dialogue against culture.
-	# 		# Assign normalised speed to agent properties before running dialogues.
-	# 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-	# 		if not following_regulation:
-	# 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-
-	# 	#######################################
-	# 	# "Move forward" rule
-	# 	return null_reward(is_terminal=False, label='moving_forward')
-
-	# def more_frequent_reward_default(self):
-	# 	def null_reward(is_terminal, label):
-	# 		return (0, is_terminal, label)
-	# 	def unitary_reward(is_positive, is_terminal, label):
-	# 		return (1 if is_positive else -1, is_terminal, label)
-	# 	def cost_reward(is_positive, is_terminal, label):
-	# 		r = self.step_gain # in (0,1]
-	# 		return (r if is_positive else -r, is_terminal, label)
-	# 	explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-	# 	#######################################
-	# 	# "Has delivered food to target" rule
-	# 	if self.has_just_delivered_food:
-	# 		return cost_reward(is_positive=True, is_terminal=False, label='has_just_delivered_to_target')
-
-	# 	#######################################
-	# 	# "Has taken food from source" rule
-	# 	if self.has_just_taken_food:
-	# 		return cost_reward(is_positive=True, is_terminal=False, label='has_just_taken_from_source')
-
-	# 	#######################################
-	# 	# "Is stuck in junction" rule
-	# 	if self.stuck_in_junction:
-	# 		return unitary_reward(is_positive=False, is_terminal=False, label='stuck_in_junction')
-
-	# 	#######################################
-	# 	# "Is in junction" rule
-	# 	if self.is_in_junction(self.car_point):
-	# 		return null_reward(is_terminal=False, label='is_in_junction')
-
-	# 	if self.culture:
-	# 		#######################################
-	# 		# "Follow regulation" rule. # Run dialogue against culture.
-	# 		# Assign normalised speed to agent properties before running dialogues.
-	# 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-	# 		if not following_regulation:
-	# 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-
-	# 	#######################################
-	# 	# "Move forward" rule
-	# 	return null_reward(is_terminal=False, label='moving_forward')
-
-	# def sparse_reward_default(self):
-	# 	def null_reward(is_terminal, label):
-	# 		return (0, is_terminal, label)
-	# 	def unitary_reward(is_positive, is_terminal, label):
-	# 		return (1 if is_positive else -1, is_terminal, label)
-	# 	def cost_reward(is_positive, is_terminal, label):
-	# 		r = self.step_gain # in (0,1]
-	# 		return (r if is_positive else -r, is_terminal, label)
-	# 	explanation_list_with_label = lambda _label,_explanation_list: list(map(lambda x:(_label,x), _explanation_list)) if _explanation_list else _label
-
-	# 	#######################################
-	# 	# "Mission completed" rule
-	# 	if self.road_network.min_deliveries == self.env_config['max_deliveries_per_target']:
-	# 		return cost_reward(is_positive=True, is_terminal=True, label='mission_completed')
-
-	# 	#######################################
-	# 	# "Has delivered food to target" rule
-	# 	if self.has_just_delivered_food:
-	# 		return null_reward(is_terminal=False, label='has_just_delivered_to_target')
-
-	# 	#######################################
-	# 	# "Has taken food from source" rule
-	# 	if self.has_just_taken_food:
-	# 		return null_reward(is_terminal=False, label='has_just_taken_from_source')
-
-	# 	#######################################
-	# 	# "Is in junction" rule
-	# 	if self.is_in_junction(self.car_point):
-	# 		return null_reward(is_terminal=False, label='is_in_junction')
-
-	# 	if self.culture:
-	# 		#######################################
-	# 		# "Follow regulation" rule. # Run dialogue against culture.
-	# 		# Assign normalised speed to agent properties before running dialogues.
-	# 		following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-	# 		if not following_regulation:
-	# 			return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-		
-	# 	#######################################
-	# 	# "Move forward" rule
-	# 	return null_reward(is_terminal=False, label='moving_forward')
 
 	def unitary_frequent_reward_default(self):
 		def null_reward(is_terminal, label):
@@ -774,7 +656,6 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		self.num_agents = config.get('num_agents',1)
 		self.viewer = None
 
-		self.env_config['map_size'] = (self.env_config['max_dimension'], self.env_config['max_dimension'])
 		self.env_config['min_junction_distance'] = 2.5*self.env_config['junction_radius']
 
 		assert self.env_config['min_junction_distance'] > 2*self.env_config['junction_radius'], f"min_junction_distance has to be greater than {2*self.env_config['junction_radius']} but it is {self.env_config['min_junction_distance']}"
@@ -807,7 +688,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		self.road_network = MultiAgentRoadNetwork(
 			self.culture, 
 			self.np_random,
-			map_size=self.env_config['map_size'], 
+			map_size=(self.env_config['max_dimension'], self.env_config['max_dimension']), 
 			min_junction_distance=self.env_config['min_junction_distance'],
 			max_roads_per_junction=self.env_config['max_roads_per_junction'],
 			number_of_agents=self.num_agents,
@@ -870,15 +751,17 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 				return 'red'
 			if is_source_junction(j):
 				return 'green'
-			if j.pos in goal_junction_set:
-				return 'blue'
+			# if j.pos in goal_junction_set:
+			# 	return 'blue'
 			# if j.pos in closest_junction_set:
 			# 	return 'blue'
+			for agent in self.agent_list:
+				if not agent.is_dead and agent.can_see(j.pos):
+					return 'orange'
 			return 'grey'
 		junction1_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=1, label='Target Node')
 		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=1, label='Source Node')
-		if goal_junction_set:
-			junction3_handle = ax.scatter(*next(iter(goal_junction_set)), marker='o', color='blue', alpha=1, label='Goal Node')
+		junction3_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='orange', alpha=1, label='Visible Node')
 		
 		# [Car]
 		#######################
@@ -964,7 +847,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 					ha='center', 
 					va='center'
 				)
-			closest_junction_set = unique_everseen((agent.closest_junction for agent in self.agent_list), key=lambda x:x.pos)
+			closest_junction_set = unique_everseen((agent.closest_junction for agent in self.agent_list if not agent.is_dead), key=lambda x:x.pos)
 			for junction in filter(lambda x: not x.is_target, closest_junction_set):
 				ax.annotate(
 					'#', 
@@ -997,9 +880,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		ax.set_xlim([a,a+max_length])
 		ax.set_ylim([c,c+max_length])
 		# Build legend
-		handles = [car1_handle, car3_handle, junction1_handle, junction2_handle]
-		if goal_junction_set:
-			handles.append(junction3_handle)
+		handles = [car1_handle, car3_handle, junction1_handle, junction2_handle, junction3_handle]
 		ax.legend(handles=handles)
 		# figure.tight_layout()
 		canvas.draw()
