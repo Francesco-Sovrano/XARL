@@ -10,7 +10,7 @@ from matplotlib import use as matplotlib_use
 matplotlib_use('Agg',force=True) # no display
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Rectangle
 from matplotlib.text import Text
 from matplotlib.collections import PatchCollection
 from matplotlib.lines import Line2D
@@ -345,10 +345,11 @@ class FullWorldAllAgents_Agent:
 				self.allowed_orientations[action_vector//len(self.allowed_speeds)],
 				self.allowed_speeds[(action_vector%len(self.allowed_speeds))]
 			)
+		else:
+			action_vector = np.clip(action_vector, self.action_space.low[0], self.action_space.high[0])
 		##################################
 		## Compute new orientation
 		##################################
-		action_vector = np.clip(action_vector, self.action_space.low[0], self.action_space.high[0])
 		orientation_action = (action_vector[0]+1)*pi
 		# Optimal orientation on road
 		if self.goal_junction: # is on road
@@ -501,7 +502,7 @@ class FullWorldAllAgents_Agent:
 			# Assign normalised speed to agent properties before running dialogues.
 			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 			if not following_regulation:
-				return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+				return null_reward(is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 
 		#######################################
 		# "Move forward" rule
@@ -540,7 +541,7 @@ class FullWorldAllAgents_Agent:
 			# Assign normalised speed to agent properties before running dialogues.
 			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 			if not following_regulation:
-				return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+				return null_reward(is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 
 		#######################################
 		# "Move forward" rule
@@ -579,7 +580,7 @@ class FullWorldAllAgents_Agent:
 			# Assign normalised speed to agent properties before running dialogues.
 			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 			if not following_regulation:
-				return unitary_reward(is_positive=False, is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
+				return null_reward(is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 		
 		#######################################
 		# "Move forward" rule
@@ -735,15 +736,20 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		figure = Figure(figsize=(5,5), tight_layout=True)
 		canvas = FigureCanvas(figure)
 		ax = figure.add_subplot(111) # nrows=1, ncols=1, index=1
+		handles = []
 
 		def get_car_color(a):
 			if a.is_dead:
 				return 'grey'
 			if a.has_food:
 				return 'green'
-			return colour_to_hex("Gold")
-		car1_handle, = ax.plot((0,0), (0,0), color='green', lw=2, label="Has Food")
-		car3_handle, = ax.plot((0,0), (0,0), color='grey', lw=2, label="Is Dead")
+			return 'red'
+		handles += [
+			ax.scatter(*self.road_network.source_junctions[0].pos, marker='s', color='green', alpha=1, label='Loaded Bot'),
+			ax.scatter(*self.road_network.target_junctions[0].pos, marker='s', color='red', alpha=1, label='Unloaded Bot')
+		]
+		if self.culture:
+			handles.append(ax.scatter(*self.road_network.source_junctions[0].pos, marker='s', color='grey', alpha=1, label='Dead Bot'))
 
 		goal_junction_set = set((agent.goal_junction.pos for agent in self.agent_list if agent.goal_junction))
 		def get_junction_color(j):
@@ -759,9 +765,11 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 				if not agent.is_dead and agent.can_see(j.pos):
 					return 'orange'
 			return 'grey'
-		junction1_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=1, label='Target Node')
-		junction2_handle = ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=1, label='Source Node')
-		junction3_handle = ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='orange', alpha=1, label='Visible Node')
+		handles += [
+			ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='red', alpha=1, label='Target Node'),
+			ax.scatter(*self.road_network.source_junctions[0].pos, marker='o', color='green', alpha=1, label='Source Node'),
+			ax.scatter(*self.road_network.target_junctions[0].pos, marker='o', color='orange', alpha=1, label='Visible Node'),
+		]
 		
 		# [Car]
 		#######################
@@ -780,9 +788,10 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 			ax.add_collection(PatchCollection(visibility_view, match_original=True))
 		#######################
 		car_view = [ # [Vehicle]
-			Circle(
-				agent.car_point, 
-				1, 
+			Rectangle(
+				xy=(agent.car_point[0]-1,agent.car_point[1]-1), 
+				width=2,
+				height=2, 
 				color=get_car_color(agent), 
 				alpha=1,
 			)
@@ -880,7 +889,6 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		ax.set_xlim([a,a+max_length])
 		ax.set_ylim([c,c+max_length])
 		# Build legend
-		handles = [car1_handle, car3_handle, junction1_handle, junction2_handle, junction3_handle]
 		ax.legend(handles=handles)
 		# figure.tight_layout()
 		canvas.draw()
