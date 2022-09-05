@@ -53,13 +53,14 @@ def assign_types(multi_batch, clustering_scheme, batch_fragment_length, with_epi
 			] if len(batch) > batch_fragment_length else [batch]
 			episode_type = clustering_scheme.get_episode_type(sub_batch_list) if with_episode_type else None
 			for i,sub_batch in enumerate(sub_batch_list):
-				get_batch_infos(sub_batch)['batch_type'] = clustering_scheme.get_batch_type(
+				batch_type = clustering_scheme.get_batch_type(
 					sub_batch, 
 					episode_type=episode_type, 
 					training_step=training_step, 
 					episode_step=i, 
 					agent_id=pid
 				)
+				sub_batch[SampleBatch.INFOS] = [{'batch_type': batch_type}] # remove unnecessary infos to save some memory
 			batch_dict[pid] += sub_batch_list
 	return [
 		MultiAgentBatch(

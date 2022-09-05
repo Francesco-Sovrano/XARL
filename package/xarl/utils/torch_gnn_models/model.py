@@ -39,29 +39,16 @@ class GNNBranch(nn.Module):
 		self,
 		node_features,
 		edge_features,
-		node_embedding,
-		edge_embedding,
 		out_features,
 	):
 		nn.Module.__init__(self)
 
 		self.gnn_nn = torch.nn.Sequential(
-			torch.nn.Linear(node_embedding + edge_embedding, out_features),
-			torch.nn.LeakyReLU(),
+			torch.nn.Linear(node_features + edge_features, out_features),
+			torch.nn.ReLU(),
 		)
 
 		self.gnn = GNNConv(nn=self.gnn_nn, aggr="add")
 
-		self.node_enc = torch.nn.Sequential(
-			torch.nn.Linear(node_features, node_embedding),
-			torch.nn.LeakyReLU(),
-		)
-		self.edge_enc = torch.nn.Sequential(
-			torch.nn.Linear(edge_features, edge_embedding),
-			torch.nn.LeakyReLU(),
-		)
-
 	def forward(self, x, edge_index, edge_attr):
-		node_enc = self.node_enc(x)
-		edge_enc = self.edge_enc(edge_attr)
-		return self.gnn(node_enc, edge_index, edge_enc)
+		return self.gnn(x, edge_index, edge_attr)

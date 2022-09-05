@@ -42,6 +42,8 @@ class FullWorldAllAgents_Agent:
 		self.culture = culture
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
+		self.max_n_junctions_in_view = self.env_config['junctions_number']
+		self.terminate_when_stuck_in_junction = self.env_config.get('terminate_when_stuck_in_junction',False)
 		self.max_depth_searching_for_closest_target = self.env_config.get('max_depth_searching_for_closest_target',3)
 		# self.max_relative_coordinate = 2*self.env_config['max_dimension']
 		self.reward_fn = eval(f'self.{self.env_config.get("reward_fn","frequent")}_reward_default')
@@ -62,28 +64,20 @@ class FullWorldAllAgents_Agent:
 			self.action_space = gym.spaces.Discrete(len(self.allowed_orientations)*len(self.allowed_speeds))
 		else:
 			if self.decides_speed:
-				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float16)
+				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1+1,), dtype=np.float32)
 			else:
-				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float16)
+				self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+		self.junction_feature_size = 2 + 1 + 1 + 1 + 1 # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food 
+		self.road_feature_size = 2 + self.obs_road_features # road.end + road.af_features
 		state_dict = {
-			"fc_junctions-16": gym.spaces.Box( # Junction properties and roads'
+			"fc_junctions-64": gym.spaces.Box( # Junction properties and roads'
 				low= float('-inf'),
 				high= float('inf'),
 				shape= (
-					self.env_config['junctions_number'],
-					2 + 1 + 1 + 1 + 1, # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food
+					self.max_n_junctions_in_view,
+					self.junction_feature_size + self.road_feature_size*self.env_config['max_roads_per_junction'],
 				),
-				dtype=np.float16
-			),
-			"fc_roads-16": gym.spaces.Box( # Junction properties and roads'
-				low= float('-inf'),
-				high= float('inf'),
-				shape= (
-					self.env_config['junctions_number'],
-					self.env_config['max_roads_per_junction'],
-					2 + 2 + self.obs_road_features, # road.start + road.end + road.af_features
-				),
-				dtype=np.float16
+				dtype=np.float32
 			),
 			"fc_this_agent-8": gym.spaces.Box( # Agent features
 				low= 0,
@@ -91,7 +85,7 @@ class FullWorldAllAgents_Agent:
 				shape= (
 					self.agent_state_size,
 				),
-				dtype=np.float16
+				dtype=np.float32
 			),
 		}
 		if self.n_of_other_agents > 0:
@@ -101,16 +95,16 @@ class FullWorldAllAgents_Agent:
 				shape= (
 					self.n_of_other_agents,
 					2 + 1 + self.agent_state_size,
-				), # for each other possible agent give position + orientation + state + features
-				dtype=np.float16
+				), # agent.position + agent.orientation + agent.features
+				dtype=np.float32
 			)
 		self.observation_space = gym.spaces.Dict(state_dict)
 
-		self._empty_junction = np.full(self.observation_space['fc_junctions-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float16)
-		self._empty_road = np.full(self.observation_space['fc_roads-16'].shape[-1], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float16)
-		self._empty_junction_roads = np.full(self.observation_space['fc_roads-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float16)
+		self._empty_junction = np.full(self.junction_feature_size, EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
+		self._empty_road = np.full(self.road_feature_size, EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
+		self._empty_junction_roads = np.full((self.env_config['max_roads_per_junction'], self.road_feature_size), EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
 		if self.n_of_other_agents > 0:
-			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float16)
+			self._empty_agent = np.full(self.observation_space['fc_other_agents-16'].shape[1:], EMPTY_FEATURE_PLACEHOLDER, dtype=np.float32)
 
 	def reset(self, car_point, agent_id, road_network, other_agent_list):
 		self.agent_id = agent_id
@@ -137,6 +131,7 @@ class FullWorldAllAgents_Agent:
 		self.step = 1
 		# self.idle = False
 		self.last_reward = None
+		self.action_list = []
 
 		self.visiting_new_road = False
 		self.visiting_new_junction = False
@@ -181,19 +176,21 @@ class FullWorldAllAgents_Agent:
 			car_point=self.car_point
 		if car_orientation is None:
 			car_orientation=self.car_orientation
-		
+
 		sorted_junctions = self.get_visible_junctions(car_point, car_orientation)
-		junctions_view_list = self.get_junction_view_list(sorted_junctions, car_point, car_orientation, self.env_config['junctions_number'])
-		roads_view_list = self.get_roads_view_list(sorted_junctions, car_point, car_orientation, self.env_config['junctions_number'])
-		agent_feature_list = self.get_agent_feature_list()
+		roads_view_list = self.get_roads_view_list(sorted_junctions, car_point, car_orientation, self.max_n_junctions_in_view)
+		roads_view = np.array(roads_view_list, dtype=np.float32)
+		roads_view = np.reshape(roads_view_list, (-1, self.env_config['max_roads_per_junction']*self.road_feature_size))
+		junctions_view_list = self.get_junction_view_list(sorted_junctions, car_point, car_orientation, self.max_n_junctions_in_view)
+		junctions_view = np.array(junctions_view_list, dtype=np.float32)
+		junctions_view = np.concatenate((junctions_view,roads_view), axis=-1)
 		state_dict = {
-			"fc_junctions-16": np.array(junctions_view_list, dtype=np.float16),
-			"fc_roads-16": np.array(roads_view_list, dtype=np.float16),
-			"fc_this_agent-8": np.array(agent_feature_list, dtype=np.float16),
+			"fc_junctions-64": junctions_view,
+			"fc_this_agent-8": np.array(self.get_agent_feature_list(), dtype=np.float32),
 		}
 		if self.n_of_other_agents > 0:
 			agent_neighbourhood_view = self.get_neighbourhood_view(car_point, car_orientation)
-			state_dict["fc_other_agents-16"] = np.array(agent_neighbourhood_view, dtype=np.float16)
+			state_dict["fc_other_agents-16"] = np.array(agent_neighbourhood_view, dtype=np.float32)
 		return state_dict
 
 	# @property
@@ -207,20 +204,20 @@ class FullWorldAllAgents_Agent:
 	def get_junction_roads(self, j, source_point, source_orientation):
 		relative_road_pos_vector = shift_and_rotate_vector(
 			[
-				(road.start.pos,road.end.pos) if j.pos!=road.start.pos else (road.end.pos,road.start.pos)
+				road.start.pos if j.pos!=road.start.pos else road.end.pos
 				for road in j.roads_connected
 			], 
 			source_point, 
 			source_orientation
 		) #/ self.max_relative_coordinate
-		relative_road_pos_vector = relative_road_pos_vector.reshape((-1, 4))
+		# relative_road_pos_vector = relative_road_pos_vector.reshape((-1, 4))
 		if self.culture:
 			road_feature_vector = np.array(
 				[
 					road.binary_features(as_tuple=True) # in [0,1]
 					for road in j.roads_connected
 				], 
-				dtype=np.float16
+				dtype=np.float32
 			)
 			junction_road_list = np.concatenate(
 				[
@@ -260,7 +257,7 @@ class FullWorldAllAgents_Agent:
 						self.env_config['max_deliveries_per_target']
 					) if sorted_junctions[i][1].is_target else -1,
 				), 
-				dtype=np.float16
+				dtype=np.float32
 			)
 			if i < len(sorted_junctions) else 
 			self._empty_junction
@@ -296,7 +293,7 @@ class FullWorldAllAgents_Agent:
 				for agent_point, agent_orientation, agent_state in sorted_alive_agents
 			]
 			agents_view_list = [
-				np.array(sorted_alive_agents[i], dtype=np.float16) 
+				np.array(sorted_alive_agents[i], dtype=np.float32) 
 				if i < len(sorted_alive_agents) else 
 				self._empty_agent
 				for i in range(len(self.other_agent_list))
@@ -346,7 +343,11 @@ class FullWorldAllAgents_Agent:
 				self.allowed_speeds[(action_vector%len(self.allowed_speeds))]
 			)
 		else:
-			action_vector = np.clip(action_vector, self.action_space.low[0], self.action_space.high[0])
+			a_low = self.action_space.low[0]
+			a_high = self.action_space.high[0]
+			action_vector = (action_vector-a_low)%(a_high-a_low+1) + a_low
+			# action_vector = np.clip(action_vector, self.action_space.low[0], self.action_space.high[0])
+		self.action_list.append(action_vector)
 		##################################
 		## Compute new orientation
 		##################################
@@ -396,8 +397,7 @@ class FullWorldAllAgents_Agent:
 		##################################
 		## Adjust car position
 		##################################
-		# Force car to stay on a road or a junction
-		if not is_in_junction and not self.is_on_road(self.car_point): # go back
+		if not is_in_junction and not self.is_on_road(self.car_point): # Force car to stay on a road or a junction; go back
 			self.previous_closest_junction = old_previous_closest_junction
 			self.closest_junction = old_closest_junction
 			self.closest_road = None
@@ -458,6 +458,7 @@ class FullWorldAllAgents_Agent:
 				"refills": self.road_network.refills,
 				# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.car_speed)/(len(self.other_agent_list)+1),
 			},
+			"action_list": self.action_list,
 			# 'discard': self.idle and not reward,
 		}
 
@@ -486,19 +487,19 @@ class FullWorldAllAgents_Agent:
 		if self.has_just_taken_food:
 			return null_reward(is_terminal=False, label='has_just_taken_from_source')
 
-		# #######################################
-		# # "Is stuck in junction" rule
-		# if self.stuck_in_junction:
-		# 	return unitary_reward(is_positive=False, is_terminal=True, label='stuck_in_junction')
+		#######################################
+		# "Is stuck in junction" rule
+		if self.stuck_in_junction:
+			return unitary_reward(is_positive=False, is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
 
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
-
+		
+		#######################################
+		# "Follow regulation" rule. # Run dialogue against culture.
 		if self.culture:
-			#######################################
-			# "Follow regulation" rule. # Run dialogue against culture.
 			# Assign normalised speed to agent properties before running dialogues.
 			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 			if not following_regulation:
@@ -525,19 +526,19 @@ class FullWorldAllAgents_Agent:
 		if self.has_just_taken_food:
 			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_from_source')
 
-		# #######################################
-		# # "Is stuck in junction" rule
-		# if self.stuck_in_junction:
-		# 	return unitary_reward(is_positive=False, is_terminal=True, label='stuck_in_junction')
+		#######################################
+		# "Is stuck in junction" rule
+		if self.stuck_in_junction:
+			return unitary_reward(is_positive=False, is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
 
 		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
 
+		#######################################
+		# "Follow regulation" rule. # Run dialogue against culture.
 		if self.culture:
-			#######################################
-			# "Follow regulation" rule. # Run dialogue against culture.
 			# Assign normalised speed to agent properties before running dialogues.
 			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 			if not following_regulation:
@@ -570,18 +571,23 @@ class FullWorldAllAgents_Agent:
 			return null_reward(is_terminal=False, label='has_just_taken_from_source')
 
 		#######################################
+		# "Is stuck in junction" rule
+		if self.stuck_in_junction:
+			return unitary_reward(is_positive=False, is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
+
+		#######################################
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
 
+		#######################################
+		# "Follow regulation" rule. # Run dialogue against culture.
 		if self.culture:
-			#######################################
-			# "Follow regulation" rule. # Run dialogue against culture.
 			# Assign normalised speed to agent properties before running dialogues.
 			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
 			if not following_regulation:
 				return null_reward(is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-		
+
 		#######################################
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')
@@ -712,6 +718,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 			uid: agent.get_state()
 			for uid,agent in enumerate(self.agent_list)
 		}
+		self._step_count = 0
 		return initial_state_dict
 
 	def step(self, action_dict):
@@ -721,7 +728,8 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		state_dict, reward_dict, terminal_dict, info_dict = {}, {}, {}, {}
 		for uid in action_dict.keys():
 			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step()
-		terminal_dict['__all__'] = all(terminal_dict.values()) or self.road_network.min_deliveries == self.env_config['max_deliveries_per_target']
+		terminal_dict['__all__'] = all(terminal_dict.values()) or self.road_network.min_deliveries == self.env_config['max_deliveries_per_target'] or self._step_count == self.env_config['horizon']
+		self._step_count += 1
 		return state_dict, reward_dict, terminal_dict, info_dict
 			
 	def get_info(self):
