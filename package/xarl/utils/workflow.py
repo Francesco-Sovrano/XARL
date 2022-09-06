@@ -130,7 +130,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 			done_dict['__all__'] = False
 			# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
 			file_list = [print_screen(screens_directory, step)]
-			while not done_dict['__all__'] and step < config['horizon']:
+			while not done_dict['__all__'] and ('horizon' not in config or step < config['horizon']):
 				step += 1
 				# action = env.action_space.sample()
 				action_dict = {
@@ -150,13 +150,13 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 					f'info: {info_dict}',
 					f'action: {action_dict}',
 					f'state: {state_dict}',
-					f'\n\n',
+					'\n\n',
 				]))
 		else:
 			done = False
 			state = np.squeeze(env.reset())
 			file_list = [print_screen(screens_directory, step)]
-			while not done and step < config['horizon']:
+			while not done and ('horizon' not in config or step < config['horizon']):
 				step += 1
 				# action = env.action_space.sample()
 				action = agent.compute_action(state, full_fetch=True, explore=False)
@@ -171,7 +171,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 					f'info: {info}',
 					f'action: {action}',
 					f'state: {state}',
-					f'\n\n',
+					'\n\n',
 				]))
 		with open(episode_directory + f'/episode_{step}_{sum_reward}.log', 'w') as f:
 			f.writelines(log_list)
