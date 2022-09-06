@@ -718,7 +718,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 			uid: agent.get_state()
 			for uid,agent in enumerate(self.agent_list)
 		}
-		self._step_count = 0
+		self._step_count = 1
 		return initial_state_dict
 
 	def step(self, action_dict):
