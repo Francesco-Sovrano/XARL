@@ -42,6 +42,7 @@ class FullWorldAllAgents_Agent:
 		self.culture = culture
 		self.n_of_other_agents = n_of_other_agents
 		self.env_config = env_config
+		self.build_action_list = self.env_config.get('build_action_list', False) or self.env_config.get('build_joint_action_list', False)
 		self.max_n_junctions_in_view = self.env_config['junctions_number']
 		self.terminate_when_stuck_in_junction = self.env_config.get('terminate_when_stuck_in_junction',False)
 		self.max_depth_searching_for_closest_target = self.env_config.get('max_depth_searching_for_closest_target',3)
@@ -131,13 +132,15 @@ class FullWorldAllAgents_Agent:
 		self.step = 1
 		# self.idle = False
 		self.last_reward = None
-		self.action_list = []
+		if self.build_action_list:
+			self.action_list = []
 
 		self.visiting_new_road = False
 		self.visiting_new_junction = False
 		self.has_just_taken_food = False
 		self.has_just_delivered_food = False
 		self.stuck_in_junction = False
+		self.steps_stuck_in_junction = 0
 
 	def can_see(self, p):
 		return True
@@ -347,7 +350,8 @@ class FullWorldAllAgents_Agent:
 			a_high = self.action_space.high[0]
 			action_vector = (action_vector-a_low)%(a_high-a_low+1) + a_low
 			# action_vector = np.clip(action_vector, self.action_space.low[0], self.action_space.high[0])
-		self.action_list.append(action_vector)
+		if self.build_action_list:
+			self.action_list.append(action_vector)
 		##################################
 		## Compute new orientation
 		##################################
@@ -446,21 +450,17 @@ class FullWorldAllAgents_Agent:
 		reward += self.fairness_reward_fn(how_fair)
 
 		state = self.get_state()
+		if self.stuck_in_junction:
+			self.steps_stuck_in_junction += 1
 		info_dict = {
 			'explanation':{
 				'why': reward_type,
 				'how_fair': how_fair,
 			},
-			"stats_dict": {
-				# "min_deliveries": self.road_network.min_deliveries,
-				"deliveries": self.road_network.deliveries,
-				"fair_deliveries": self.road_network.fair_deliveries,
-				"refills": self.road_network.refills,
-				# "avg_speed": (sum((x.speed for x in self.other_agent_list))+self.car_speed)/(len(self.other_agent_list)+1),
-			},
-			"action_list": self.action_list,
 			# 'discard': self.idle and not reward,
 		}
+		if self.env_config.get('build_action_list', False):
+			info_dict["action_list"] = self.action_list
 
 		self.is_dead = dead
 		self.step += 1
@@ -490,7 +490,7 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Is stuck in junction" rule
 		if self.stuck_in_junction:
-			return unitary_reward(is_positive=False, is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
+			return null_reward(is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
 
 		#######################################
 		# "Is in junction" rule
@@ -573,7 +573,7 @@ class FullWorldAllAgents_Agent:
 		#######################################
 		# "Is stuck in junction" rule
 		if self.stuck_in_junction:
-			return unitary_reward(is_positive=False, is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
+			return null_reward(is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
 
 		#######################################
 		# "Is in junction" rule
@@ -688,6 +688,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		self.action_space = self.agent_list[0].action_space
 		self.observation_space = self.agent_list[0].observation_space
 		self._agent_ids = set(range(self.num_agents))
+		self._empty_action_vector = np.zeros((self.action_space.shape[0],), dtype=np.float32)
 		self.seed(config.get('seed',21))
 
 	def reset(self):
@@ -728,7 +729,28 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		state_dict, reward_dict, terminal_dict, info_dict = {}, {}, {}, {}
 		for uid in action_dict.keys():
 			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step()
-		terminal_dict['__all__'] = all(terminal_dict.values()) or self.road_network.min_deliveries == self.env_config['max_deliveries_per_target'] or self._step_count == self.env_config['horizon']
+		terminal_dict['__all__'] = is_terminal = all(terminal_dict.values()) or self.road_network.min_deliveries == self.env_config['max_deliveries_per_target'] or self._step_count == self.env_config.get('horizon',float('inf'))
+		# Build stats dict
+		if is_terminal:
+			avg_steps_stuck_in_junction = sum((a.steps_stuck_in_junction for a in self.agent_list))/len(self.agent_list)
+			dead_bots = sum((1 if a.is_dead else 0 for a in self.agent_list))
+			for uid in action_dict.keys():
+				info_dict[uid]["stats_dict"] = {
+					"deliveries": self.road_network.deliveries,
+					"fair_deliveries": self.road_network.fair_deliveries,
+					"refills": self.road_network.refills,
+					"avg_steps_stuck_in_junction": avg_steps_stuck_in_junction,
+					"dead_bots": dead_bots,
+				}
+		# Build the joint actions list
+		if self.env_config.get('build_joint_action_list', False) and action_dict:
+			action_list_size = len(self.agent_list[uid].action_list)
+			joint_action_list = list(map(sorted, zip(*[
+				a.action_list+[self._empty_action_vector]*(action_list_size-len(a.action_list)) 
+				for a in self.agent_list
+			])))
+			for uid in action_dict.keys():
+				info_dict[uid]['joint_action_list'] = joint_action_list
 		self._step_count += 1
 		return state_dict, reward_dict, terminal_dict, info_dict
 			

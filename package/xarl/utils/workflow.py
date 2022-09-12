@@ -81,7 +81,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 		)
 
 	render_modes = env.metadata['render.modes']
-	env.seed(config["seed"])
+	env.seed(config["seed"]+1)
 	def print_screen(screens_directory, step):
 		filename = os.path.join(screens_directory, f'frame{step}.jpg')
 		if 'rgb_array' in render_modes:
@@ -130,7 +130,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 			done_dict['__all__'] = False
 			# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
 			file_list = [print_screen(screens_directory, step)]
-			while not done_dict['__all__'] and ('horizon' not in config or step < config['horizon']):
+			while not done_dict['__all__'] and (not config.get('horizon',None) or step < config['horizon']):
 				step += 1
 				# action = env.action_space.sample()
 				action_dict = {
@@ -156,7 +156,7 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 			done = False
 			state = np.squeeze(env.reset())
 			file_list = [print_screen(screens_directory, step)]
-			while not done and ('horizon' not in config or step < config['horizon']):
+			while not done and (not config.get('horizon',None) or step < config['horizon']):
 				step += 1
 				# action = env.action_space.sample()
 				action = agent.compute_action(state, full_fetch=True, explore=False)
@@ -173,23 +173,32 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 					f'state: {state}',
 					'\n\n',
 				]))
-		with open(episode_directory + f'/episode_{step}_{sum_reward}.log', 'w') as f:
+		with open(os.path.join(episode_directory, f'episode_{step}_{sum_reward}.log'), 'w') as f:
 			f.writelines(log_list)
 		if save_gif:
-			gif_filename = os.path.join(episode_directory, 'episode.gif')
-			plt.make_gif(file_list=file_list, gif_path=gif_filename)
+			gif_file_name = f'episode_{step}_{sum_reward}.gif'
+			gif_file_path = os.path.join(episode_directory, gif_file_name)
+			plt.make_gif(file_list=file_list, gif_path=gif_file_path)
 			# Delete screens, to save memory
 			if delete_screens_after_making_gif:
 				shutil.rmtree(screens_directory, ignore_errors=True)
 			# Zip GIF, to save memory
 			if compress_gif:
-				with zipfile.ZipFile(gif_filename+'.zip', mode='w', compression=zipfile.ZIP_DEFLATED) as z:
-					z.write(gif_filename,'episode.gif')
+				with zipfile.ZipFile(gif_file_path+'.zip', mode='w', compression=zipfile.ZIP_DEFLATED) as z:
+					z.write(gif_file_path,gif_file_name)
 				# Remove unzipped GIF
-				os.remove(gif_filename)
+				os.remove(gif_file_path)
 
 def train(trainer_class, config, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True):
 	_, checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment)
+	# Add required Multi-Agent XAER options
+	if config.get("clustering_scheme", None):
+		if 'Who' in config["clustering_scheme"]:
+			config["env_config"]['build_action_list'] = True
+			print('Added "build_action_list" to "env_config"')
+		if 'Which_CoopStrategy' in config["clustering_scheme"]:
+			config["env_config"]['build_joint_action_list'] = True
+			print('Added "build_joint_action_list" to "env_config"')
 	# Configure RLlib to train a policy using the given environment and trainer
 	agent = trainer_class(config, env=environment_class, logger_creator=logger_creator_fn)
 	if checkpoint:

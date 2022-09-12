@@ -105,6 +105,7 @@ CONFIG.update({
 		'How_Well',
 		'How_Fair',
 		'Why',
+		'Which_CoopStrategy',
 		# 'Where',
 		# 'What',
 		# 'How_Many'
