@@ -19,25 +19,54 @@ class TorchAdaptiveMultiHeadDDPG:
 	def init(preprocessing_model):
 		class TorchAdaptiveMultiHeadDDPGInner(DDPGTorchModel):
 
+			policy_signature_size = 1
+
 			def __init__(self, obs_space, action_space, num_outputs, model_config, name, actor_hiddens=None, actor_hidden_activation="relu", critic_hiddens=None, critic_hidden_activation="relu", twin_q=False, add_layer_norm=False):
 				num_outputs = preprocessing_model(obs_space, model_config['custom_model_config']).get_num_outputs()
+				self.add_nonstationarity_correction = model_config['custom_model_config'].get("add_nonstationarity_correction", False)
+				if self.add_nonstationarity_correction:
+					print("Adding nonstationarity corrections")
+					num_outputs += self.policy_signature_size
 				super().__init__(obs_space, action_space, num_outputs, model_config, name, actor_hiddens, actor_hidden_activation, critic_hiddens, critic_hidden_activation, twin_q, add_layer_norm)
 				self.preprocessing_model_policy = preprocessing_model(obs_space, model_config['custom_model_config'])
 				self.preprocessing_model_q = preprocessing_model(obs_space, model_config['custom_model_config'])
 
 			def forward(self, input_dict, state, seq_lens):
+				if self.add_nonstationarity_correction:
+					if "policy_signature" not in input_dict:
+						print("Adding dummy policy_signature")
+						input_dict["policy_signature"] = torch.from_numpy(np.zeros((input_dict.count,self.policy_signature_size), dtype=np.float32))
+					return {"obs":input_dict["obs"],"policy_signature":input_dict["policy_signature"]}, state
 				return input_dict["obs"], state
 
 			def get_policy_output(self, model_out):
-				model_out = self.preprocessing_model_policy(model_out)
+				if self.add_nonstationarity_correction:
+					model_out = torch.concat((
+						self.preprocessing_model_policy(model_out["obs"]),
+						model_out["policy_signature"]
+					), dim=-1)
+				else:
+					model_out = self.preprocessing_model_policy(model_out)
 				return self.policy_model(model_out)
 
 			def get_q_values(self, model_out, actions = None):
-				model_out = self.preprocessing_model_q(model_out)
+				if self.add_nonstationarity_correction:
+					model_out = torch.concat((
+						self.preprocessing_model_q(model_out["obs"]),
+						model_out["policy_signature"]
+					), dim=-1)
+				else:
+					model_out = self.preprocessing_model_q(model_out)
 				return self.q_model(torch.cat([model_out, actions], -1))
 
 			def get_twin_q_values(self, model_out, actions = None):
-				model_out = self.preprocessing_model_q(model_out)
+				if self.add_nonstationarity_correction:
+					model_out = torch.concat((
+						self.preprocessing_model_q(model_out["obs"]),
+						model_out["policy_signature"]
+					), dim=-1)
+				else:
+					model_out = self.preprocessing_model_q(model_out)
 				return self.twin_q_model(torch.cat([model_out, actions], -1))
 
 			def policy_variables(self, as_dict=False):
@@ -53,5 +82,8 @@ class TorchAdaptiveMultiHeadDDPG:
 				q_dict = super().q_variables(as_dict)
 				q_dict.update(self.preprocessing_model_q.variables(as_dict))
 				return q_dict
+
+			def get_entropy_var(self):
+				return None
 
 		return TorchAdaptiveMultiHeadDDPGInner

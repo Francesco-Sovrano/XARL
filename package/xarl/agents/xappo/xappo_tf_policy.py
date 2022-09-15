@@ -8,6 +8,8 @@ Keep in sync with changes to VTraceTFPolicy.
 from ray.rllib.agents.ppo.appo_tf_policy import *
 from ray.rllib.agents.ppo.appo_tf_policy import _make_time_major
 from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
+from ray.rllib.agents.ppo.ppo_tf_policy import vf_preds_fetches
+from xarl.agents.xappo.xappo_torch_policy import xappo_postprocess_trajectory
 
 def xappo_surrogate_loss(policy, model, dist_class, train_batch):
 	model_out, _ = model(train_batch)
@@ -227,3 +229,10 @@ def xappo_surrogate_loss(policy, model, dist_class, train_batch):
 		return loss_wo_vf, mean_vf_loss
 	else:
 		return total_loss
+
+XAPPOTFPolicy = AsyncPPOTFPolicy.with_updates(
+	name="XAPPOTFPolicy",
+	extra_action_fetches_fn=vf_preds_fetches,
+	postprocess_fn=xappo_postprocess_trajectory,
+	loss_fn=xappo_surrogate_loss,
+)

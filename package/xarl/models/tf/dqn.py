@@ -39,4 +39,7 @@ class TFAdaptiveMultiHeadDQN:
 				v.update(super().variables(as_dict))
 				return v
 
+			def get_entropy_var(self):
+				return None
+
 		return TFAdaptiveMultiHeadDQNInner

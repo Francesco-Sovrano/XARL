@@ -7,7 +7,8 @@ import os
 from environments import *
 
 HORIZON = 2**8
-VISIBILITY_RADIUS = 10
+VISIBILITY_RADIUS = 16
+N_AGENTS = 9
 
 PLOT_EPISODE = False
 if PLOT_EPISODE:
@@ -15,9 +16,9 @@ if PLOT_EPISODE:
 	os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairness_type_fn, fairness_reward_fn, discrete_actions=None, spawn_on_sources_only=True):
-	target_junctions_number = num_agents//4
-	max_deliveries_per_target = 3
-	source_junctions_number = 1
+	target_junctions_number = num_agents//3
+	max_deliveries_per_target = 2
+	source_junctions_number = 2
 	assert max_deliveries_per_target
 	assert target_junctions_number
 	return {
@@ -27,6 +28,7 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 		'fairness_type_fn': fairness_type_fn, # one of the following: None, 'simple', 'engineered'
 		'fairness_reward_fn': fairness_reward_fn, # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
 		'visibility_radius': VISIBILITY_RADIUS,
+		'terminate_when_stuck_in_junction': False,
 		'spawn_on_sources_only': spawn_on_sources_only,
 		'max_refills_per_source': float('inf'),
 		'max_deliveries_per_target': max_deliveries_per_target,#(num_agents//target_junctions_number)+2,
@@ -48,7 +50,7 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 	}
 
 env_config = get_default_environment_MAGraphDelivery_options(
-	num_agents=4, 
+	num_agents=N_AGENTS, 
 	reward_fn='unitary_more_frequent', 
 	fairness_type_fn='simple', 
 	fairness_reward_fn=None, 

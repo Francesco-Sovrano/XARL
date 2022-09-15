@@ -102,7 +102,7 @@ class Buffer(object):
 			self.batches[biggest_cluster].popleft()
 		self.batches[type_].append(batch)
 
-	def sample(self, n=1):
+	def sample(self, n=1, **args):
 		type_ = random.choice(self.type_values)
 		batch_list = [
 			random.choice(self.batches[type_])

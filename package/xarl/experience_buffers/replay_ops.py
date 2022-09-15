@@ -73,6 +73,23 @@ def assign_types(multi_batch, clustering_scheme, batch_fragment_length, with_epi
 		for b_list in zip(*batch_dict.values())
 	]
 
+def add_policy_signature(batch, policy):
+	# train_step = np.array((policy.global_timestep,), dtype=np.float32)
+	policy_exploration_state = policy.get_exploration_state()
+	policy_exploration_state_items = policy_exploration_state.items()
+	if len(policy_exploration_state) > 1:
+		policy_exploration_state_items = filter(lambda x: x[0].startswith('cur'), policy_exploration_state_items)
+	policy_entropy_var = next(map(lambda x: x[-1], policy_exploration_state_items), None)
+	if not policy_entropy_var:
+		policy_entropy_var = 0
+	policy_entropy_var = np.array((policy_entropy_var,), dtype=np.float32)
+	model_entropy_var = policy.model.get_entropy_var()
+	if not model_entropy_var:
+		model_entropy_var = np.array((0,), dtype=np.float32)
+	batch["policy_signature"] = np.concatenate((model_entropy_var,policy_entropy_var), axis=-1)
+	batch["policy_signature"] = np.tile(batch["policy_signature"],(batch.count,1))
+	return batch
+
 def get_update_replayed_batch_fn(local_replay_buffer, local_worker, postprocess_trajectory_fn):
 	def update_replayed_fn(samples):
 		if isinstance(samples, MultiAgentBatch):

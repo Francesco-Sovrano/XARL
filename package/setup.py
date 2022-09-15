@@ -5,7 +5,7 @@ with open("requirements.txt", 'r') as f:
 
 setup(
 	name='xarl',
-	version='3.0',
+	version='4.0',
 	description='A plugin for RLlib, providing some extra explanation-aware algorithms.',
 	url='https://www.unibo.it/sitoweb/francesco.sovrano2/en',
 	author='Francesco Sovrano',

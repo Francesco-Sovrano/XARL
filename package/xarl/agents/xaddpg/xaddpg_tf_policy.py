@@ -1,4 +1,5 @@
 from ray.rllib.agents.ddpg.ddpg_tf_policy import *
+from xarl.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
 
 def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	twin_q = policy.config["twin_q"]
@@ -8,9 +9,9 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	huber_threshold = policy.config["huber_threshold"]
 	l2_reg = policy.config["l2_reg"]
 
-	input_dict = SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], _is_training=True)
+	input_dict = SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True)
 	input_dict_next = SampleBatch(
-		obs=train_batch[SampleBatch.NEXT_OBS], _is_training=True
+		obs=train_batch[SampleBatch.NEXT_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True
 	)
 
 	model_out_t, _ = model(input_dict, [], None)
@@ -144,3 +145,40 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	# 2 optimizers: actor and critic).
 	return policy.critic_loss + policy.actor_loss
 
+class TFComputeTDErrorMixin:
+	def __init__(self):
+		@make_tf_callable(self.get_session(), dynamic_shape=True)
+		def compute_td_error(obs_t, act_t, rew_t, obs_tp1, done_mask, importance_weights, policy_signature=None):
+			# Do forward pass on loss to update td errors attribute
+			# (one TD-error value per item in batch to update PR weights).
+			input_dict = {
+				SampleBatch.CUR_OBS: tf.convert_to_tensor(obs_t),
+				SampleBatch.ACTIONS: tf.convert_to_tensor(act_t),
+				SampleBatch.REWARDS: tf.convert_to_tensor(rew_t),
+				SampleBatch.NEXT_OBS: tf.convert_to_tensor(obs_tp1),
+				SampleBatch.DONES: tf.convert_to_tensor(done_mask),
+				PRIO_WEIGHTS: tf.convert_to_tensor(importance_weights),
+			}
+			if policy_signature is not None:
+				input_dict["policy_signature"] = policy_signature
+			xaddpg_actor_critic_loss(
+				self,
+				self.model,
+				None,
+				input_dict,
+			)
+			# `self.td_error` is set in loss_fn.
+			return self.td_error
+
+		self.compute_td_error = compute_td_error
+
+def tf_setup_mid_mixins(policy, obs_space, action_space, config):
+	TFComputeTDErrorMixin.__init__(policy)
+
+XADDPGTFPolicy = DDPGTFPolicy.with_updates(
+	name="XADDPGTFPolicy",
+	postprocess_fn=xa_postprocess_nstep_and_prio,
+	loss_fn=xaddpg_actor_critic_loss,
+	before_loss_init=tf_setup_mid_mixins,
+	mixins=[TargetNetworkMixin, ActorCriticOptimizerMixin, TFComputeTDErrorMixin],
+)

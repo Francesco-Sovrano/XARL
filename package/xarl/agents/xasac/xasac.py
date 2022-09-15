@@ -6,12 +6,14 @@ Detailed documentation:
 https://docs.ray.io/en/master/rllib-algorithms.html#deep-deterministic-policy-gradients-ddpg-td3
 """  # noqa: E501
 
-from xarl.agents.xadqn import xa_postprocess_nstep_and_prio, xadqn_execution_plan, XADQN_EXTRA_OPTIONS
+from xarl.agents.xadqn import XADQNTrainer, XADQN_EXTRA_OPTIONS
+from ray.rllib.evaluation.collectors.simple_list_collector import SimpleListCollector
 from ray.rllib.agents.sac.sac import SACTrainer, DEFAULT_CONFIG as SAC_DEFAULT_CONFIG
-from ray.rllib.agents.sac.sac_torch_policy import SACTorchPolicy
-from ray.rllib.agents.sac.sac_tf_policy import SACTFPolicy
-from xarl.agents.xasac.xasac_tf_loss import xasac_actor_critic_loss as tf_xasac_actor_critic_loss
-from xarl.agents.xasac.xasac_torch_loss import xasac_actor_critic_loss as torch_xasac_actor_critic_loss
+from ray.rllib.policy.sample_batch import SampleBatch
+from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
+from xarl.agents.xasac.xasac_tf_policy import XASACTFPolicy
+from xarl.agents.xasac.xasac_torch_policy import XASACTorchPolicy
+from xarl.experience_buffers.replay_ops import add_policy_signature
 import copy
 
 XASAC_EXTRA_OPTIONS = copy.deepcopy(XADQN_EXTRA_OPTIONS)
@@ -26,24 +28,26 @@ XASAC_DEFAULT_CONFIG = SACTrainer.merge_trainer_configs(
 # XASAC's Policy
 ########################
 
-XASACTFPolicy = SACTFPolicy.with_updates(
-	name="XASACTFPolicy",
-	postprocess_fn=xa_postprocess_nstep_and_prio,
-	loss_fn=tf_xasac_actor_critic_loss,
-)
-XASACTorchPolicy = SACTorchPolicy.with_updates(
-	name="XASACTorchPolicy",
-	postprocess_fn=xa_postprocess_nstep_and_prio,
-	loss_fn=torch_xasac_actor_critic_loss,
-)
-
 class XASACTrainer(SACTrainer):
 	def get_default_config(cls):
 		return XASAC_DEFAULT_CONFIG
+
+	def get_default_policy_class(self, config):
+		return XASACTorchPolicy if config["framework"] == "torch" else XASACTFPolicy
+
+	def validate_config(self, config):
+		# Call super's validation method.
+		super().validate_config(config)
+
+		if config["model"]["custom_model_config"].get("add_nonstationarity_correction", False):
+			class PolicySignatureListCollector(SimpleListCollector):
+				def get_inference_input_dict(self, policy_id):
+					batch = super().get_inference_input_dict(policy_id)
+					policy = self.policy_map[policy_id]
+					return add_policy_signature(batch,policy)
+			config["sample_collector"] = PolicySignatureListCollector
 		
 	@staticmethod
 	def execution_plan(workers, config, **kwargs):
-		return xadqn_execution_plan(workers, config, **kwargs)
+		return XADQNTrainer.execution_plan(workers, config, **kwargs)
 		
-	def get_default_policy_class(self, config):
-		return XASACTorchPolicy if config["framework"] == "torch" else XASACTFPolicy

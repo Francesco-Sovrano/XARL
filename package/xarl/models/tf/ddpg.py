@@ -55,4 +55,7 @@ class TFAdaptiveMultiHeadDDPG:
 				q_dict.update(self.preprocessing_model_q.variables(as_dict))
 				return q_dict
 
+			def get_entropy_var(self):
+				return None
+
 		return TFAdaptiveMultiHeadDDPGInner

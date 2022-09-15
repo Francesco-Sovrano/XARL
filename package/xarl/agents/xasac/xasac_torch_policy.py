@@ -3,6 +3,7 @@ PyTorch policy class used for SAC.
 """
 from ray.rllib.agents.sac.sac_torch_policy import *
 from ray.rllib.agents.sac.sac_torch_policy import _get_dist_class
+from xarl.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
 
 def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 	target_model = policy.target_models[model]
@@ -10,15 +11,15 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 	deterministic = policy.config["_deterministic_loss"]
 
 	model_out_t, _ = model(
-		SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], _is_training=True), [], None
+		SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True), [], None
 	)
 
 	model_out_tp1, _ = model(
-		SampleBatch(obs=train_batch[SampleBatch.NEXT_OBS], _is_training=True), [], None
+		SampleBatch(obs=train_batch[SampleBatch.NEXT_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True), [], None
 	)
 
 	target_model_out_tp1, _ = target_model(
-		SampleBatch(obs=train_batch[SampleBatch.NEXT_OBS], _is_training=True), [], None
+		SampleBatch(obs=train_batch[SampleBatch.NEXT_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True), [], None
 	)
 
 	alpha = torch.exp(model.log_alpha)
@@ -166,3 +167,40 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 
 	# Return all loss terms corresponding to our optimizers.
 	return tuple([actor_loss] + critic_loss + [alpha_loss])
+
+class TorchComputeTDErrorMixin:
+	def __init__(self):
+		def compute_td_error(obs_t, act_t, rew_t, obs_tp1, done_mask, importance_weights, policy_signature=None):
+			input_dict = {
+				SampleBatch.CUR_OBS: obs_t,
+				SampleBatch.ACTIONS: act_t,
+				SampleBatch.REWARDS: rew_t,
+				SampleBatch.NEXT_OBS: obs_tp1,
+				SampleBatch.DONES: done_mask,
+				PRIO_WEIGHTS: importance_weights,
+			}
+			if policy_signature is not None:
+				input_dict["policy_signature"] = policy_signature
+			input_dict = self._lazy_tensor_dict(input_dict)
+			# Do forward pass on loss to update td errors attribute
+			# (one TD-error value per item in batch to update PR weights).
+			xasac_actor_critic_loss(self, self.model, None, input_dict)
+
+			# `self.model.td_error` is set within actor_critic_loss call.
+			# Return its updated value here.
+			return self.model.tower_stats["td_error"]
+
+		# Assign the method to policy (self) for later usage.
+		self.compute_td_error = compute_td_error
+
+def torch_setup_late_mixins(policy, obs_space, action_space, config):
+	TorchComputeTDErrorMixin.__init__(policy)
+	TargetNetworkMixin.__init__(policy)
+
+XASACTorchPolicy = SACTorchPolicy.with_updates(
+	name="XASACTorchPolicy",
+	postprocess_fn=xa_postprocess_nstep_and_prio,
+	loss_fn=xasac_actor_critic_loss,
+	before_loss_init=torch_setup_late_mixins,
+	mixins=[TargetNetworkMixin, TorchComputeTDErrorMixin],
+)

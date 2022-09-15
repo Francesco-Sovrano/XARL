@@ -7,25 +7,28 @@ https://docs.ray.io/en/master/rllib-algorithms.html#deep-q-networks-dqn-rainbow-
 """  # noqa: E501
 from more_itertools import unique_everseen
 from ray.rllib.agents.dqn.dqn import calculate_rr_weights, DQNTrainer, Concurrently, StandardMetricsReporting, LEARNER_STATS_KEY, DEFAULT_CONFIG as DQN_DEFAULT_CONFIG
-from ray.rllib.agents.dqn.dqn_torch_policy import DQNTorchPolicy, compute_q_values as torch_compute_q_values, torch, F, FLOAT_MIN
-from ray.rllib.agents.dqn.dqn_tf_policy import DQNTFPolicy, compute_q_values as tf_compute_q_values, tf
+from ray.rllib.agents.dqn.dqn_torch_policy import DQNTorchPolicy, compute_q_values as torch_compute_q_values, torch, F, FLOAT_MIN, TargetNetworkMixin as TorchTargetNetworkMixin, LearningRateSchedule as TorchLearningRateSchedule, build_q_losses as torch_build_q_losses
+from ray.rllib.agents.dqn.dqn_tf_policy import DQNTFPolicy, compute_q_values as tf_compute_q_values, tf, TargetNetworkMixin as TFTargetNetworkMixin, LearningRateSchedule as TFLearningRateSchedule, build_q_losses as tf_build_q_losses
 from ray.rllib.evaluation.postprocessing import adjust_nstep
+from ray.rllib.evaluation.collectors.simple_list_collector import SimpleListCollector
 from ray.rllib.execution.rollout_ops import ParallelRollouts, ConcatBatches
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.view_requirement import ViewRequirement
 from ray.rllib.execution.train_ops import TrainOneStep, UpdateTargetNetwork, TrainTFMultiGPU
 from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
 from ray.rllib.execution.common import (
-    AGENT_STEPS_SAMPLED_COUNTER,
-    STEPS_SAMPLED_COUNTER,
-    SAMPLE_TIMER,
-    GRAD_WAIT_TIMER,
-    _check_sample_batch_type,
-    _get_shared_metrics,
+	AGENT_STEPS_SAMPLED_COUNTER,
+	STEPS_SAMPLED_COUNTER,
+	SAMPLE_TIMER,
+	GRAD_WAIT_TIMER,
+	_check_sample_batch_type,
+	_get_shared_metrics,
 )
 
-from xarl.experience_buffers.replay_ops import StoreToReplayBuffer, Replay, get_clustered_replay_buffer, assign_types, add_buffer_metrics, clean_batch
+from xarl.experience_buffers.replay_ops import Replay, get_clustered_replay_buffer, assign_types, add_policy_signature, add_buffer_metrics, clean_batch
 from xarl.experience_buffers.replay_buffer import get_batch_infos, get_batch_uid
+from xarl.agents.xadqn.xadqn_tf_policy import XADQNTFPolicy
+from xarl.agents.xadqn.xadqn_torch_policy import XADQNTorchPolicy
 
 import random
 import numpy as np
@@ -78,6 +81,7 @@ XADQN_EXTRA_OPTIONS = {
 	"centralised_buffer": True, # for MARL
 	"replay_integral_multi_agent_batches": False, # for MARL, set this to True for MADDPG and QMIX
 	"batch_dropout_rate": 0, # Probability of dropping a state transition before adding it to the experience buffer. Set this to any value greater than zero to randomly drop state transitions
+	# "add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
 }
 # The combination of update_insertion_time_when_sampling==True and prioritized_drop_probability==0 helps mantaining in the buffer only those batches with the most up-to-date priorities.
 XADQN_DEFAULT_CONFIG = DQNTrainer.merge_trainer_configs(
@@ -87,149 +91,133 @@ XADQN_DEFAULT_CONFIG = DQNTrainer.merge_trainer_configs(
 )
 
 ########################
-# XADQN's Policy
-########################
-
-def xa_postprocess_nstep_and_prio(policy, batch, other_agent=None, episode=None):
-	# N-step Q adjustments.
-	if policy.config["n_step"] > 1:
-		adjust_nstep(policy.config["n_step"], policy.config["gamma"], batch)
-	if PRIO_WEIGHTS not in batch:
-		batch[PRIO_WEIGHTS] = np.ones_like(batch[SampleBatch.REWARDS])
-	if policy.config["buffer_options"]["priority_id"] == "td_errors":
-		batch["td_errors"] = policy.compute_td_error(batch[SampleBatch.CUR_OBS], batch[SampleBatch.ACTIONS], batch[SampleBatch.REWARDS], batch[SampleBatch.NEXT_OBS], batch[SampleBatch.DONES], batch[PRIO_WEIGHTS])
-	return batch
-
-XADQNTFPolicy = DQNTFPolicy.with_updates(
-	name="XADQNTFPolicy",
-	postprocess_fn=xa_postprocess_nstep_and_prio,
-)
-XADQNTorchPolicy = DQNTorchPolicy.with_updates(
-	name="XADQNTorchPolicy",
-	postprocess_fn=xa_postprocess_nstep_and_prio,
-)
-
-########################
 # XADQN's Execution Plan
-########################
-
-def xadqn_execution_plan(workers, config, **kwargs): 
-	random.seed(config["seed"])
-	np.random.seed(config["seed"])
-	replay_batch_size = config["train_batch_size"]
-	sample_batch_size = config.get("n_step",1)
-	if sample_batch_size and sample_batch_size > 1:
-		replay_batch_size = int(max(1, replay_batch_size // sample_batch_size))
-	local_replay_buffer, clustering_scheme = get_clustered_replay_buffer(config)
-	local_worker = workers.local_worker()
-
-	def add_view_requirements(w):
-		for policy in w.policy_map.values():
-			# policy.view_requirements[SampleBatch.T] = ViewRequirement(SampleBatch.T, shift=0)
-			policy.view_requirements[SampleBatch.INFOS] = ViewRequirement(SampleBatch.INFOS, shift=0)
-			if policy.config["buffer_options"]["priority_id"] == "td_errors":
-				policy.view_requirements["td_errors"] = ViewRequirement("td_errors", shift=0)
-			# policy.view_requirements[PRIO_WEIGHTS] = ViewRequirement(PRIO_WEIGHTS, shift=0)
-	workers.foreach_worker(add_view_requirements)
-
-	rollouts = ParallelRollouts(workers, mode="bulk_sync")
-
-	# We execute the following steps concurrently:
-	# (1) Generate rollouts and store them in our local replay buffer. Calling
-	# next() on store_op drives this.
-	store_fn = StoreToReplayBuffer(local_buffer=local_replay_buffer)
-	def store_batch(batch):
-		total_buffer_additions = sum(map(
-			store_fn, 
-			assign_types(batch, clustering_scheme, sample_batch_size, with_episode_type=config["cluster_with_episode_type"], training_step=local_replay_buffer.get_train_steps())
-		))
-		# _get_shared_metrics().counters[STEPS_SAMPLED_COUNTER] -= batch.count-total_buffer_additions
-		return batch
-	store_op = rollouts.for_each(store_batch)
-
-	# (2) Read and train on experiences from the replay buffer. Every batch
-	# returned from the LocalReplay() iterator is passed to TrainOneStep to
-	# take a SGD step, and then we decide whether to update the target network.
-	def update_priorities(item):
-		local_replay_buffer.increase_train_steps()
-		samples, info_dict = item
-		if not config.get("prioritized_replay"):
-			return info_dict
-		priority_id = config["buffer_options"]["priority_id"]
-		samples = clean_batch(samples, keys_to_keep=[priority_id,'infos'], keep_only_keys_to_keep=True)
-		if priority_id == "td_errors":
-			for policy_id, info in info_dict.items():
-				td_errors = info.get("td_error", info[LEARNER_STATS_KEY].get("td_error"))
-				# samples.policy_batches[policy_id].set_get_interceptor(None)
-				samples.policy_batches[policy_id]["td_errors"] = td_errors
-		# IMPORTANT: split train-batch into replay-batches, using batch_uid, before updating priorities
-		policy_batch_list = []
-		for policy_id, batch in samples.policy_batches.items():
-			if sample_batch_size > 1 and config["batch_mode"] == "complete_episodes":
-				sub_batch_indexes = [
-					i
-					for i,infos in enumerate(batch['infos'])
-					if "batch_uid" in infos
-				] + [batch.count]
-				sub_batch_iter = (
-					batch.slice(sub_batch_indexes[j], sub_batch_indexes[j+1])
-					for j in range(len(sub_batch_indexes)-1)
-				)
-			else:
-				sub_batch_iter = batch.timeslices(sample_batch_size)
-			sub_batch_iter = unique_everseen(sub_batch_iter, key=get_batch_uid)
-			for i,sub_batch in enumerate(sub_batch_iter):
-				if i >= len(policy_batch_list):
-					policy_batch_list.append({})
-				policy_batch_list[i][policy_id] = sub_batch
-		for policy_batch in policy_batch_list:
-			local_replay_buffer.update_priorities(policy_batch)
-		return info_dict
-	post_fn = config.get("before_learn_on_batch") or (lambda b, *a: b)
-	if config.get("simple_optimizer",True):
-		train_step_op = TrainOneStep(workers)
-	else:
-		train_step_op = TrainTFMultiGPU(
-			workers=workers,
-			sgd_minibatch_size=config["train_batch_size"],
-			num_sgd_iter=1,
-			num_gpus=config["num_gpus"],
-			# shuffle_sequences=True,
-			_fake_gpus=config["_fake_gpus"],
-			# framework=config.get("framework"),
-		)
-	concat_batch_dict = {
-		'min_batch_size': replay_batch_size,
-		'count_steps_by': config["multiagent"]["count_steps_by"]
-	}
-	replay_op = Replay(
-			local_buffer=local_replay_buffer, 
-			replay_batch_size=replay_batch_size, 
-			cluster_overview_size=config["cluster_overview_size"]
-		) \
-		.flatten() \
-		.combine(ConcatBatches(**concat_batch_dict)) \
-		.for_each(lambda x: post_fn(x, workers, config)) \
-		.for_each(train_step_op) \
-		.for_each(update_priorities) \
-		.for_each(UpdateTargetNetwork(workers, config["target_network_update_freq"]))
-
-	# Alternate deterministically between (1) and (2). Only return the output
-	# of (2) since training metrics are not available until (2) runs.
-	train_op = Concurrently([store_op, replay_op], mode="round_robin", output_indexes=[1], round_robin_weights=calculate_rr_weights(config))
-
-	standard_metrics_reporting = StandardMetricsReporting(train_op, workers, config)
-	if config['collect_cluster_metrics']:
-		standard_metrics_reporting = standard_metrics_reporting.for_each(lambda x: add_buffer_metrics(x,local_replay_buffer))
-	return standard_metrics_reporting
+########################	
 
 class XADQNTrainer(DQNTrainer):
 	def get_default_config(cls):
 		return XADQN_DEFAULT_CONFIG
+
+	def get_default_policy_class(self, config):
+		return XADQNTorchPolicy if config["framework"] == "torch" else XADQNTFPolicy
+
+	def validate_config(self, config):
+		# Call super's validation method.
+		super().validate_config(config)
+
+		if config["model"]["custom_model_config"].get("add_nonstationarity_correction", False):
+			class PolicySignatureListCollector(SimpleListCollector):
+				def get_inference_input_dict(self, policy_id):
+					batch = super().get_inference_input_dict(policy_id)
+					policy = self.policy_map[policy_id]
+					return add_policy_signature(batch,policy)
+			config["sample_collector"] = PolicySignatureListCollector
 		
 	@staticmethod
 	def execution_plan(workers, config, **kwargs):
-		return xadqn_execution_plan(workers, config, **kwargs)
+		random.seed(config["seed"])
+		np.random.seed(config["seed"])
+		replay_batch_size = config["train_batch_size"]
+		sample_batch_size = config.get("n_step",1)
+		if sample_batch_size and sample_batch_size > 1:
+			replay_batch_size = int(max(1, replay_batch_size // sample_batch_size))
+		local_replay_buffer, clustering_scheme = get_clustered_replay_buffer(config)
+		local_worker = workers.local_worker()
+
+		def add_view_requirements(w):
+			for policy in w.policy_map.values():
+				# policy.view_requirements[SampleBatch.T] = ViewRequirement(SampleBatch.T, shift=0)
+				policy.view_requirements[SampleBatch.INFOS] = ViewRequirement(SampleBatch.INFOS, shift=0)
+				if policy.config["buffer_options"]["priority_id"] == "td_errors":
+					policy.view_requirements["td_errors"] = ViewRequirement("td_errors", shift=0)
+				if policy.config["model"]["custom_model_config"].get("add_nonstationarity_correction", False):
+					policy.view_requirements["policy_signature"] = ViewRequirement("policy_signature", shift=0)
+		workers.foreach_worker(add_view_requirements)
+
+		rollouts = ParallelRollouts(workers, mode="bulk_sync")
 		
-	def get_default_policy_class(self, config):
-		return XADQNTorchPolicy if config["framework"] == "torch" else XADQNTFPolicy
+		# We execute the following steps concurrently:
+		# (1) Generate rollouts and store them in our local replay buffer. Calling
+		# next() on store_op drives this.
+		def store_batch(batch):
+			sub_batch_iter = assign_types(batch, clustering_scheme, sample_batch_size, with_episode_type=config["cluster_with_episode_type"], training_step=local_replay_buffer.get_train_steps())
+			total_buffer_additions = sum(map(local_replay_buffer.add_batch, sub_batch_iter))
+			return batch
+		store_op = rollouts.for_each(store_batch)
+
+		# (2) Read and train on experiences from the replay buffer. Every batch
+		# returned from the LocalReplay() iterator is passed to TrainOneStep to
+		# take a SGD step, and then we decide whether to update the target network.
+		def update_priorities(item):
+			local_replay_buffer.increase_train_steps()
+			samples, info_dict = item
+			if not config.get("prioritized_replay"):
+				return info_dict
+			priority_id = config["buffer_options"]["priority_id"]
+			if priority_id == "td_errors":
+				for policy_id, info in info_dict.items():
+					td_errors = info.get("td_error", info[LEARNER_STATS_KEY].get("td_error"))
+					# samples.policy_batches[policy_id].set_get_interceptor(None)
+					samples.policy_batches[policy_id]["td_errors"] = td_errors
+			# IMPORTANT: split train-batch into replay-batches, using batch_uid, before updating priorities
+			policy_batch_list = []
+			for policy_id, batch in samples.policy_batches.items():
+				if sample_batch_size > 1 and config["batch_mode"] == "complete_episodes":
+					sub_batch_indexes = [
+						i
+						for i,infos in enumerate(batch['infos'])
+						if "batch_uid" in infos
+					] + [batch.count]
+					sub_batch_iter = (
+						batch.slice(sub_batch_indexes[j], sub_batch_indexes[j+1])
+						for j in range(len(sub_batch_indexes)-1)
+					)
+				else:
+					sub_batch_iter = batch.timeslices(sample_batch_size)
+				sub_batch_iter = unique_everseen(sub_batch_iter, key=get_batch_uid)
+				for i,sub_batch in enumerate(sub_batch_iter):
+					if i >= len(policy_batch_list):
+						policy_batch_list.append({})
+					policy_batch_list[i][policy_id] = sub_batch
+			for policy_batch in policy_batch_list:
+				local_replay_buffer.update_priorities(policy_batch)
+			return info_dict
+		post_fn = config.get("before_learn_on_batch") or (lambda b, *a: b)
+		if config.get("simple_optimizer",True):
+			train_step_op = TrainOneStep(workers)
+		else:
+			train_step_op = TrainTFMultiGPU(
+				workers=workers,
+				sgd_minibatch_size=config["train_batch_size"],
+				num_sgd_iter=1,
+				num_gpus=config["num_gpus"],
+				# shuffle_sequences=True,
+				_fake_gpus=config["_fake_gpus"],
+				# framework=config.get("framework"),
+			)
+		concat_batch_dict = {
+			'min_batch_size': replay_batch_size,
+			'count_steps_by': config["multiagent"]["count_steps_by"]
+		}
+		replay_op = Replay(
+				local_buffer=local_replay_buffer, 
+				replay_batch_size=replay_batch_size, 
+				cluster_overview_size=config["cluster_overview_size"]
+			) \
+			.flatten() \
+			.combine(ConcatBatches(**concat_batch_dict)) \
+			.for_each(lambda x: post_fn(x, workers, config)) \
+			.for_each(train_step_op) \
+			.for_each(update_priorities) \
+			.for_each(UpdateTargetNetwork(workers, config["target_network_update_freq"]))
+
+		# Alternate deterministically between (1) and (2). Only return the output
+		# of (2) since training metrics are not available until (2) runs.
+		train_op = Concurrently([store_op, replay_op], mode="round_robin", output_indexes=[1], round_robin_weights=calculate_rr_weights(config))
+
+		standard_metrics_reporting = StandardMetricsReporting(train_op, workers, config)
+		if config['collect_cluster_metrics']:
+			standard_metrics_reporting = standard_metrics_reporting.for_each(lambda x: add_buffer_metrics(x,local_replay_buffer))
+		return standard_metrics_reporting
+		
+	

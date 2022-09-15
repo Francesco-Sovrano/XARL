@@ -6,13 +6,15 @@ Detailed documentation:
 https://docs.ray.io/en/master/rllib-algorithms.html#deep-deterministic-policy-gradients-ddpg-td3
 """  # noqa: E501
 
-from xarl.agents.xadqn import xa_postprocess_nstep_and_prio, xadqn_execution_plan, XADQN_EXTRA_OPTIONS
+from xarl.agents.xadqn import XADQNTrainer, XADQN_EXTRA_OPTIONS
+from ray.rllib.evaluation.collectors.simple_list_collector import SimpleListCollector
 from ray.rllib.agents.ddpg.ddpg import DDPGTrainer, DEFAULT_CONFIG as DDPG_DEFAULT_CONFIG
 from ray.rllib.agents.ddpg.td3 import TD3Trainer, TD3_DEFAULT_CONFIG
 from ray.rllib.agents.ddpg.ddpg_tf_policy import DDPGTFPolicy
 from ray.rllib.agents.ddpg.ddpg_torch_policy import DDPGTorchPolicy
-from xarl.agents.xaddpg.xaddpg_tf_loss import xaddpg_actor_critic_loss as tf_xaddpg_actor_critic_loss
-from xarl.agents.xaddpg.xaddpg_torch_loss import xaddpg_actor_critic_loss as torch_xaddpg_actor_critic_loss
+from xarl.agents.xaddpg.xaddpg_tf_policy import XADDPGTFPolicy
+from xarl.agents.xaddpg.xaddpg_torch_policy import XADDPGTorchPolicy
+from xarl.experience_buffers.replay_ops import add_policy_signature
 
 XADDPG_DEFAULT_CONFIG = DDPGTrainer.merge_trainer_configs(
 	DDPG_DEFAULT_CONFIG, # For more details, see here: https://docs.ray.io/en/master/rllib-algorithms.html#deep-q-networks-dqn-rainbow-parametric-dqn
@@ -27,38 +29,52 @@ XATD3_DEFAULT_CONFIG = TD3Trainer.merge_trainer_configs(
 )
 
 ########################
-# XADDPG's Policy
+# XADDPG's Execution Plan
 ########################
-
-XADDPGTFPolicy = DDPGTFPolicy.with_updates(
-	name="XADDPGTFPolicy",
-	postprocess_fn=xa_postprocess_nstep_and_prio,
-	loss_fn=tf_xaddpg_actor_critic_loss,
-)
-XADDPGTorchPolicy = DDPGTorchPolicy.with_updates(
-	name="XADDPGTorchPolicy",
-	postprocess_fn=xa_postprocess_nstep_and_prio,
-	loss_fn=torch_xaddpg_actor_critic_loss,
-)
 
 class XADDPGTrainer(DDPGTrainer):
 	def get_default_config(cls):
 		return XADDPG_DEFAULT_CONFIG
 		
-	@staticmethod
-	def execution_plan(workers, config, **kwargs):
-		return xadqn_execution_plan(workers, config, **kwargs)
-		
 	def get_default_policy_class(self, config):
 		return XADDPGTorchPolicy if config["framework"] == "torch" else XADDPGTFPolicy
+
+	def validate_config(self, config):
+		# Call super's validation method.
+		super().validate_config(config)
+
+		if config["model"]["custom_model_config"].get("add_nonstationarity_correction", False):
+			class PolicySignatureListCollector(SimpleListCollector):
+				def get_inference_input_dict(self, policy_id):
+					batch = super().get_inference_input_dict(policy_id)
+					policy = self.policy_map[policy_id]
+					return add_policy_signature(batch,policy)
+			config["sample_collector"] = PolicySignatureListCollector
+		
+	@staticmethod
+	def execution_plan(workers, config, **kwargs):
+		return XADQNTrainer.execution_plan(workers, config, **kwargs)
 
 class XATD3Trainer(TD3Trainer):
 	def get_default_config(cls):
 		return XATD3_DEFAULT_CONFIG
+
+	def get_default_policy_class(self, config):
+		return XADDPGTorchPolicy if config["framework"] == "torch" else XADDPGTFPolicy
+
+	def validate_config(self, config):
+		# Call super's validation method.
+		super().validate_config(config)
+
+		if config["model"]["custom_model_config"].get("add_nonstationarity_correction", False):
+			class PolicySignatureListCollector(SimpleListCollector):
+				def get_inference_input_dict(self, policy_id):
+					batch = super().get_inference_input_dict(policy_id)
+					policy = self.policy_map[policy_id]
+					return add_policy_signature(batch,policy)
+			config["sample_collector"] = PolicySignatureListCollector
 		
 	@staticmethod
 	def execution_plan(workers, config, **kwargs):
-		return xadqn_execution_plan(workers, config, **kwargs)
+		return XADQNTrainer.execution_plan(workers, config, **kwargs)
 		
-	def get_default_policy_class(self, config):
-		return XADDPGTorchPolicy if config["framework"] == "torch" else XADDPGTFPolicy

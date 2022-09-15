@@ -399,15 +399,26 @@ class FullWorldAllAgents_Agent:
 		# else:
 		# 	_,self.closest_junction = self.road_network.get_closest_junction_by_point(self.car_point, self.neighbouring_junctions_iter)
 		##################################
-		## Adjust car position
+		## Adjust Car Position: Correct Errors
 		##################################
-		if not is_in_junction and not self.is_on_road(self.car_point): # Force car to stay on a road or a junction; go back
-			self.previous_closest_junction = old_previous_closest_junction
-			self.closest_junction = old_closest_junction
-			self.closest_road = None
-			self.car_point = self.closest_junction.pos
-			is_in_junction = True
-		self.stuck_in_junction = is_in_junction and was_in_junction
+		if self.culture:
+			self.following_regulation = True
+		self.stuck_in_junction = False
+		if not is_in_junction:
+			adjust_car_position = False
+			if not self.is_on_road(self.car_point): # Force car to stay on a road or a junction; go back
+				adjust_car_position = True
+			elif self.culture:
+				self.following_regulation, self.explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
+				if not self.following_regulation:
+					adjust_car_position = True
+			if adjust_car_position:
+				self.stuck_in_junction = True
+				self.previous_closest_junction = old_previous_closest_junction
+				self.closest_junction = old_closest_junction
+				self.closest_road = None
+				self.car_point = self.closest_junction.pos
+				is_in_junction = True
 		##################################
 		## Update the environment
 		##################################
@@ -459,6 +470,8 @@ class FullWorldAllAgents_Agent:
 			},
 			# 'discard': self.idle and not reward,
 		}
+		if self.culture:
+			info_dict['explanation']['who'] = (self.agent_id.binary_features(as_tuple=True),)
 		if self.env_config.get('build_action_list', False):
 			info_dict["action_list"] = self.action_list
 
@@ -488,6 +501,12 @@ class FullWorldAllAgents_Agent:
 			return null_reward(is_terminal=False, label='has_just_taken_from_source')
 
 		#######################################
+		# "Follow regulation" rule. # Do this before checking if agent is_stuck_in_junction
+		if self.culture:
+			if not self.following_regulation:
+				return null_reward(is_terminal=self.terminate_when_stuck_in_junction, label=explanation_list_with_label('not_following_regulation', self.explanation_list))
+
+		#######################################
 		# "Is stuck in junction" rule
 		if self.stuck_in_junction:
 			return null_reward(is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
@@ -497,14 +516,6 @@ class FullWorldAllAgents_Agent:
 		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
 		
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		if self.culture:
-			# Assign normalised speed to agent properties before running dialogues.
-			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-			if not following_regulation:
-				return null_reward(is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
-
 		#######################################
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')
@@ -527,6 +538,12 @@ class FullWorldAllAgents_Agent:
 			return unitary_reward(is_positive=True, is_terminal=False, label='has_just_taken_from_source')
 
 		#######################################
+		# "Follow regulation" rule. # Do this before checking if agent is_stuck_in_junction
+		if self.culture:
+			if not self.following_regulation:
+				return unitary_reward(is_positive=False, is_terminal=self.terminate_when_stuck_in_junction, label=explanation_list_with_label('not_following_regulation', self.explanation_list))
+
+		#######################################
 		# "Is stuck in junction" rule
 		if self.stuck_in_junction:
 			return unitary_reward(is_positive=False, is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
@@ -535,14 +552,6 @@ class FullWorldAllAgents_Agent:
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
-
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		if self.culture:
-			# Assign normalised speed to agent properties before running dialogues.
-			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-			if not following_regulation:
-				return null_reward(is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 
 		#######################################
 		# "Move forward" rule
@@ -571,6 +580,12 @@ class FullWorldAllAgents_Agent:
 			return null_reward(is_terminal=False, label='has_just_taken_from_source')
 
 		#######################################
+		# "Follow regulation" rule. # Do this before checking if agent is_stuck_in_junction
+		if self.culture:
+			if not self.following_regulation:
+				return null_reward(is_terminal=self.terminate_when_stuck_in_junction, label=explanation_list_with_label('not_following_regulation', self.explanation_list))
+
+		#######################################
 		# "Is stuck in junction" rule
 		if self.stuck_in_junction:
 			return null_reward(is_terminal=self.terminate_when_stuck_in_junction, label='is_stuck_in_junction')
@@ -579,14 +594,6 @@ class FullWorldAllAgents_Agent:
 		# "Is in junction" rule
 		if self.is_in_junction(self.car_point):
 			return null_reward(is_terminal=False, label='is_in_junction')
-
-		#######################################
-		# "Follow regulation" rule. # Run dialogue against culture.
-		if self.culture:
-			# Assign normalised speed to agent properties before running dialogues.
-			following_regulation, explanation_list = self.road_network.run_dialogue(self.closest_road, self.agent_id, explanation_type="compact")
-			if not following_regulation:
-				return null_reward(is_terminal=True, label=explanation_list_with_label('not_following_regulation', explanation_list))
 
 		#######################################
 		# "Move forward" rule

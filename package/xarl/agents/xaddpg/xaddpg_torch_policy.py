@@ -1,4 +1,5 @@
 from ray.rllib.agents.ddpg.ddpg_torch_policy import *
+from xarl.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
 
 def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	target_model = policy.target_models[model]
@@ -9,9 +10,9 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	huber_threshold = policy.config["huber_threshold"]
 	l2_reg = policy.config["l2_reg"]
 
-	input_dict = SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], _is_training=True)
+	input_dict = SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True)
 	input_dict_next = SampleBatch(
-		obs=train_batch[SampleBatch.NEXT_OBS], _is_training=True
+		obs=train_batch[SampleBatch.NEXT_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True
 	)
 
 	model_out_t, _ = model(input_dict, [], None)
@@ -143,3 +144,39 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	# Return two loss terms (corresponding to the two optimizers, we create).
 	return actor_loss, critic_loss
 
+class TorchComputeTDErrorMixin:
+	def __init__(self):
+		def compute_td_error(obs_t, act_t, rew_t, obs_tp1, done_mask, importance_weights, policy_signature=None):
+			input_dict = {
+				SampleBatch.CUR_OBS: obs_t,
+				SampleBatch.ACTIONS: act_t,
+				SampleBatch.REWARDS: rew_t,
+				SampleBatch.NEXT_OBS: obs_tp1,
+				SampleBatch.DONES: done_mask,
+				PRIO_WEIGHTS: importance_weights,
+			}
+			if policy_signature is not None:
+				input_dict["policy_signature"] = policy_signature
+			input_dict = self._lazy_tensor_dict(input_dict)
+			# Do forward pass on loss to update td errors attribute
+			# (one TD-error value per item in batch to update PR weights).
+			xaddpg_actor_critic_loss(self, self.model, None, input_dict)
+
+			# `self.model.td_error` is set within actor_critic_loss call.
+			# Return its updated value here.
+			return self.model.tower_stats["td_error"]
+
+		# Assign the method to policy (self) for later usage.
+		self.compute_td_error = compute_td_error
+
+def setup_late_mixins(policy, obs_space, action_space, config):
+    TorchComputeTDErrorMixin.__init__(policy)
+    TargetNetworkMixin.__init__(policy)
+
+XADDPGTorchPolicy = DDPGTorchPolicy.with_updates(
+	name="XADDPGTorchPolicy",
+	postprocess_fn=xa_postprocess_nstep_and_prio,
+	loss_fn=xaddpg_actor_critic_loss,
+	before_loss_init=setup_late_mixins,
+	mixins=[TargetNetworkMixin, TorchComputeTDErrorMixin],
+)

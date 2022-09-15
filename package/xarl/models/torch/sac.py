@@ -1,8 +1,10 @@
-from ray.rllib.agents.sac.sac_torch_model import SACTorchModel
+import os
 import gym
 import numpy as np
+
+from ray.rllib.agents.sac.sac_torch_model import SACTorchModel
 from ray.rllib.utils.framework import try_import_torch
-import os
+from ray.rllib.policy.view_requirement import ViewRequirement
 
 torch, nn = try_import_torch()
 # torch.set_num_threads(os.cpu_count())
@@ -20,27 +22,81 @@ class TorchAdaptiveMultiHeadNet:
 			`model_out`, `actions` -> get_q_values() -> Q(s, a)
 			`model_out`, `actions` -> get_twin_q_values() -> Q_twin(s, a)
 			"""
+			policy_signature_size = 2
+
+			def __init__(self,obs_space,action_space,num_outputs,model_config,name,policy_model_config = None,q_model_config = None,twin_q = False,initial_alpha = 1.0,target_entropy = None):
+				self.add_nonstationarity_correction = model_config['custom_model_config'].get("add_nonstationarity_correction", False)
+				if self.add_nonstationarity_correction:
+					print("Adding nonstationarity corrections")
+				super().__init__(
+					obs_space,
+					action_space,
+					num_outputs,
+					model_config,
+					name,
+					policy_model_config = policy_model_config,
+					q_model_config = q_model_config,
+					twin_q = twin_q,
+					initial_alpha = initial_alpha,
+					target_entropy = target_entropy
+				)
+
+			def forward(self, input_dict, state, seq_lens):
+				if self.add_nonstationarity_correction:
+					# print(input_dict)
+					if "policy_signature" not in input_dict:
+						print("Adding dummy policy_signature")
+						input_dict["policy_signature"] = torch.from_numpy(np.zeros((input_dict.count,self.policy_signature_size), dtype=np.float32))
+					return {"obs":input_dict["obs"],"policy_signature":input_dict["policy_signature"]}, state
+				return super().forward(input_dict, state, seq_lens)
 
 			def build_policy_model(self, obs_space, num_outputs, policy_model_config, name):
 				self.preprocessing_model_policy = policy_preprocessing_model(obs_space, self.model_config['custom_model_config'])
-				preprocessed_obs_space_policy = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.preprocessing_model_policy.get_num_outputs(),), dtype=np.float32)
-				return super().build_policy_model(preprocessed_obs_space_policy, num_outputs, policy_model_config, name)
+				preprocessed_input_size = self.preprocessing_model_policy.get_num_outputs()
+				if self.add_nonstationarity_correction:
+					preprocessed_input_size += self.policy_signature_size
+				preprocessed_obs_space_policy = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(preprocessed_input_size,), dtype=np.float32)
+				model = super().build_policy_model(preprocessed_obs_space_policy, num_outputs, policy_model_config, name)
+				return model
 
 			def build_q_model(self, obs_space, action_space, num_outputs, q_model_config, name):
 				self.preprocessing_model_q = value_preprocessing_model(obs_space, self.model_config['custom_model_config'])
-				preprocessed_obs_space_q = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(self.preprocessing_model_q.get_num_outputs(),), dtype=np.float32)
-				return super().build_q_model(preprocessed_obs_space_q, action_space, num_outputs, q_model_config, name)
+				preprocessed_input_size = self.preprocessing_model_q.get_num_outputs()
+				if self.add_nonstationarity_correction:
+					preprocessed_input_size += self.policy_signature_size
+				preprocessed_obs_space_q = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(preprocessed_input_size,), dtype=np.float32)
+				model = super().build_q_model(preprocessed_obs_space_q, action_space, num_outputs, q_model_config, name)
+				return model
 
 			def get_policy_output(self, model_out):
-				model_out = self.preprocessing_model_policy(model_out)
+				if self.add_nonstationarity_correction:
+					# print(model_out["policy_signature"].shape, self.preprocessing_model_policy(model_out["obs"]).shape)
+					model_out = torch.concat((
+						self.preprocessing_model_policy(model_out["obs"]),
+						model_out["policy_signature"]
+					), dim=-1)
+				else:
+					model_out = self.preprocessing_model_policy(model_out)
 				return super().get_policy_output(model_out)
 
 			def get_q_values(self, model_out, actions = None):
-				model_out = self.preprocessing_model_q(model_out)
+				if self.add_nonstationarity_correction:
+					model_out = torch.concat((
+						self.preprocessing_model_q(model_out["obs"]),
+						model_out["policy_signature"]
+					), dim=-1)
+				else:
+					model_out = self.preprocessing_model_q(model_out)
 				return self._get_q_value(model_out, actions, self.q_net)
 
 			def get_twin_q_values(self, model_out, actions = None):
-				model_out = self.preprocessing_model_q(model_out)
+				if self.add_nonstationarity_correction:
+					model_out = torch.concat((
+						self.preprocessing_model_q(model_out["obs"]),
+						model_out["policy_signature"]
+					), dim=-1)
+				else:
+					model_out = self.preprocessing_model_q(model_out)
 				return self._get_q_value(model_out, actions, self.twin_q_net)
 
 			def policy_variables(self):
@@ -48,5 +104,9 @@ class TorchAdaptiveMultiHeadNet:
 
 			def q_variables(self):
 				return self.preprocessing_model_q.variables() + super().q_variables()
+
+			def get_entropy_var(self):
+				alpha = np.exp(self.log_alpha.detach().numpy())
+				return alpha
 
 		return TorchAdaptiveMultiHeadNetInner

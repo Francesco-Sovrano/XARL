@@ -60,8 +60,17 @@ CONFIG.update({
 		"custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
 			"comm_range": VISIBILITY_RADIUS,
+			"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
 		},
 	},
+	# "exploration_config": {
+	# 	# The Exploration class to use.
+	# 	"type": "EpsilonGreedy",
+	# 	# Config for the Exploration class' constructor:
+	# 	"initial_epsilon": 1.0,
+	# 	"final_epsilon": 0.02,
+	# 	"epsilon_timesteps": 10000,  # Timesteps over which to anneal epsilon.
+	# },
 	# "batch_dropout_rate": 0.5, # Probability of dropping a state transition before adding it to the experience buffer. Set this to any value greater than zero to randomly drop state transitions
 	# "normalize_actions": False,
 
@@ -101,14 +110,15 @@ CONFIG.update({
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
 	"clustering_scheme": [ # Which scheme to use for building clusters. Set it to None or to a list of the following: How_WellOnZero, How_Well, When_DuringTraining, When_DuringEpisode, Why, Why_Verbose, Where, What, How_Many, Who
+		'Why',
 		'Who',
 		'How_Well',
 		'How_Fair',
-		'Why',
-		'Which_CoopStrategy',
 		# 'Where',
 		# 'What',
 		# 'How_Many'
+		'UWho',
+		# 'UWhich_CoopStrategy',
 	],
 	"clustering_scheme_options": {
 		"n_clusters": {
