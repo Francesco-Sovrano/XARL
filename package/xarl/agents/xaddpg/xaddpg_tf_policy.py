@@ -1,5 +1,6 @@
 from ray.rllib.agents.ddpg.ddpg_tf_policy import *
 from xarl.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
+from xarl.agents.xaddpg.xaddpg_torch_policy import torch_get_distribution_inputs_and_class
 
 def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	twin_q = policy.config["twin_q"]
@@ -9,10 +10,14 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	huber_threshold = policy.config["huber_threshold"]
 	l2_reg = policy.config["l2_reg"]
 
-	input_dict = SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True)
-	input_dict_next = SampleBatch(
-		obs=train_batch[SampleBatch.NEXT_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True
-	)
+	input_dict = SampleBatch({
+		"obs": train_batch[SampleBatch.CUR_OBS], 
+		'policy_signature': train_batch.get('policy_signature',None)
+		}, _is_training=True)
+	input_dict_next = SampleBatch({
+		"obs": train_batch[SampleBatch.NEXT_OBS], 
+		'policy_signature': train_batch.get('policy_signature',None)
+		}, _is_training=True)
 
 	model_out_t, _ = model(input_dict, [], None)
 	model_out_tp1, _ = model(input_dict_next, [], None)
@@ -119,6 +124,7 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 		input_dict[SampleBatch.REWARDS] = train_batch[SampleBatch.REWARDS]
 		input_dict[SampleBatch.DONES] = train_batch[SampleBatch.DONES]
 		input_dict[SampleBatch.NEXT_OBS] = train_batch[SampleBatch.NEXT_OBS]
+		input_dict['policy_signature'] = train_batch.get('policy_signature',None)
 		if log_once("ddpg_custom_loss"):
 			logger.warning(
 				"You are using a state-preprocessor with DDPG and "
@@ -178,6 +184,7 @@ def tf_setup_mid_mixins(policy, obs_space, action_space, config):
 XADDPGTFPolicy = DDPGTFPolicy.with_updates(
 	name="XADDPGTFPolicy",
 	postprocess_fn=xa_postprocess_nstep_and_prio,
+	action_distribution_fn=torch_get_distribution_inputs_and_class,
 	loss_fn=xaddpg_actor_critic_loss,
 	before_loss_init=tf_setup_mid_mixins,
 	mixins=[TargetNetworkMixin, ActorCriticOptimizerMixin, TFComputeTDErrorMixin],

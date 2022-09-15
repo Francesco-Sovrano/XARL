@@ -17,7 +17,9 @@ from environments import *
 SELECT_ENV = "MAGraphDelivery-FullWorldSomeAgents"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
-VISIBILITY_RADIUS = 10
+VISIBILITY_RADIUS = 8
+HORIZON = 2**9
+TRAIN_BATCH_SIZE = 2**8
 
 CONFIG = XADQN_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
@@ -47,13 +49,14 @@ CONFIG["env_config"] = {
 }
 CONFIG.update({
 	"framework": "torch",
-	"horizon": 2**9, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
+	"horizon": HORIZON, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	"model": { # this is for GraphDrive and GridDrive
 		# "vf_share_layers": True, # Share layers for value function. If you set this to True, it's important to tune vf_loss_coeff.
 		"custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
 			"comm_range": VISIBILITY_RADIUS,
+			"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
 			# 'max_num_neighbors': 32,
 			# 'message_size': 128,
 		},
@@ -69,7 +72,7 @@ CONFIG.update({
 	"seed": 42, # This makes experiments reproducible.
 	###########################
 	"rollout_fragment_length": 2**6, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
-	"train_batch_size": 2**8, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
+	"train_batch_size": TRAIN_BATCH_SIZE, # Number of transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for DQN, 500 for APPO.
 	# "batch_mode": "truncate_episodes", # For some clustering schemes (e.g. extrinsic_reward, moving_best_extrinsic_reward, etc..) it has to be equal to 'complete_episodes', otherwise it can also be 'truncate_episodes'.
 	###########################
 	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
@@ -88,12 +91,29 @@ CONFIG.update({
 	# 'timesteps_per_iteration': 10000,
 	###########################
 	# "grad_clip": None, # no need of gradient clipping with huber loss
-	# "dueling": True,
-	# "double_q": True,
-	# "num_atoms": 21,
+	"dueling": True,
+	"double_q": True,
+	# "clip_rewards": False,
+	###########################
+	## MAGraphDelivery: Apparently, the agent struggles with exploration, tending to overfit on a sub-set of the observation space, maybe because multi-agency makes it too large. This should also motivate the use of XAER in a multi-agent setting.
+	'noisy': True, 
+	# 'sigma0': 0.25, # default is 0.5
+	# 'num_atoms': 51, # default is 1
 	# "v_max": 2**5,
 	# "v_min": -1,
 	"clip_rewards": False,
+	"exploration_config": {
+		# The Exploration class to use.
+		"type": "EpsilonGreedy",
+		# Config for the Exploration class' constructor:
+		"initial_epsilon": 1.0,
+		"final_epsilon": 0.02,
+		"epsilon_timesteps": max(HORIZON*NUM_AGENTS,TRAIN_BATCH_SIZE)*100,  # Timesteps over which to anneal epsilon.
+
+		# # For soft_q, use:
+		# "type": "SoftQ",
+		# "temperature": 1.0, # [float, e.g. 1.0]
+	},
 	##################################
 	"buffer_options": {
 		'priority_id': 'td_errors', # Which batch column to use for prioritisation. Default is inherited by DQN and it is 'td_errors'. One of the following: rewards, prev_rewards, td_errors.

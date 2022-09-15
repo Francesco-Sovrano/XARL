@@ -131,7 +131,7 @@ class XADQNTrainer(DQNTrainer):
 				if policy.config["buffer_options"]["priority_id"] == "td_errors":
 					policy.view_requirements["td_errors"] = ViewRequirement("td_errors", shift=0)
 				if policy.config["model"]["custom_model_config"].get("add_nonstationarity_correction", False):
-					policy.view_requirements["policy_signature"] = ViewRequirement("policy_signature", shift=0)
+					policy.view_requirements["policy_signature"] = ViewRequirement("policy_signature", used_for_compute_actions=True, shift=0)
 		workers.foreach_worker(add_view_requirements)
 
 		rollouts = ParallelRollouts(workers, mode="bulk_sync")

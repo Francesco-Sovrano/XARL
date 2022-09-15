@@ -80,12 +80,13 @@ def add_policy_signature(batch, policy):
 	if len(policy_exploration_state) > 1:
 		policy_exploration_state_items = filter(lambda x: x[0].startswith('cur'), policy_exploration_state_items)
 	policy_entropy_var = next(map(lambda x: x[-1], policy_exploration_state_items), None)
-	if not policy_entropy_var:
+	if policy_entropy_var is None:
 		policy_entropy_var = 0
 	policy_entropy_var = np.array((policy_entropy_var,), dtype=np.float32)
 	model_entropy_var = policy.model.get_entropy_var()
-	if not model_entropy_var:
+	if model_entropy_var is None:
 		model_entropy_var = np.array((0,), dtype=np.float32)
+	# print("policy_signature:", model_entropy_var,policy_entropy_var)
 	batch["policy_signature"] = np.concatenate((model_entropy_var,policy_entropy_var), axis=-1)
 	batch["policy_signature"] = np.tile(batch["policy_signature"],(batch.count,1))
 	return batch

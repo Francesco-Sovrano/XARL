@@ -677,15 +677,15 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 
 		logger.warning(f'Setting environment with reward_fn <{self.env_config["reward_fn"]}>, culture <{self.env_config["culture"]}>, fairness_type_fn <{self.env_config["fairness_type_fn"]}> and fairness_reward_fn <{self.env_config["fairness_reward_fn"]}>')
 		self.culture = eval(f'{self.env_config["culture"]}Culture')(
-			road_options={
-				'require_priority': 1/8,
-				'accident': 1/8,
-				'require_fee': 1/8,
-			}, agent_options={
-				'emergency_vehicle': 1/5,
-				'has_priority': 1/2,
-				'can_pay_fee': 1/2,
-			}
+			# road_options={
+			# 	'require_priority': 1/8,
+			# 	'accident': 1/8,
+			# 	'require_fee': 1/8,
+			# }, agent_options={
+			# 	'emergency_vehicle': 1/5,
+			# 	'has_priority': 1/2,
+			# 	'can_pay_fee': 1/2,
+			# }
 		) if self.env_config["culture"] else None
 
 		self.agent_list = [
@@ -695,7 +695,8 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		self.action_space = self.agent_list[0].action_space
 		self.observation_space = self.agent_list[0].observation_space
 		self._agent_ids = set(range(self.num_agents))
-		self._empty_action_vector = np.zeros((self.action_space.shape[0],), dtype=np.float32)
+		if self.env_config.get('build_joint_action_list', False):
+			self._empty_action_vector = np.zeros((self.action_space.shape[0],), dtype=np.float32) if not self.env_config.get('n_discrete_actions',None) else np.full((1,), -1, dtype=np.float32)
 		self.seed(config.get('seed',21))
 
 	def reset(self):

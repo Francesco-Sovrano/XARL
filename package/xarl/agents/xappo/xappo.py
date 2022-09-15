@@ -141,7 +141,7 @@ class XAPPOTrainer(APPOTrainer):
 				if policy.config["buffer_options"]["prioritization_importance_beta"]:
 					policy.view_requirements["weights"] = ViewRequirement("weights", shift=0)
 				if policy.config["model"]["custom_model_config"].get("add_nonstationarity_correction", False):
-					policy.view_requirements["policy_signature"] = ViewRequirement("policy_signature", shift=0)
+					policy.view_requirements["policy_signature"] = ViewRequirement("policy_signature", used_for_compute_actions=True, shift=0)
 		workers.foreach_worker(add_view_requirements)
 
 		# Augment with replay and concat to desired train batch size.

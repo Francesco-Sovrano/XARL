@@ -8,6 +8,7 @@ from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.utils import get_activation_fn
 from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.typing import ModelConfigDict, TensorType
+from ray.rllib.models.modelv2 import restore_original_dimensions
 
 torch, nn = try_import_torch()
 # torch.set_num_threads(os.cpu_count())
@@ -19,7 +20,7 @@ class TorchAdaptiveMultiHeadDDPG:
 	def init(preprocessing_model):
 		class TorchAdaptiveMultiHeadDDPGInner(DDPGTorchModel):
 
-			policy_signature_size = 1
+			policy_signature_size = 2
 
 			def __init__(self, obs_space, action_space, num_outputs, model_config, name, actor_hiddens=None, actor_hidden_activation="relu", critic_hiddens=None, critic_hidden_activation="relu", twin_q=False, add_layer_norm=False):
 				num_outputs = preprocessing_model(obs_space, model_config['custom_model_config']).get_num_outputs()
@@ -30,6 +31,10 @@ class TorchAdaptiveMultiHeadDDPG:
 				super().__init__(obs_space, action_space, num_outputs, model_config, name, actor_hiddens, actor_hidden_activation, critic_hiddens, critic_hidden_activation, twin_q, add_layer_norm)
 				self.preprocessing_model_policy = preprocessing_model(obs_space, model_config['custom_model_config'])
 				self.preprocessing_model_q = preprocessing_model(obs_space, model_config['custom_model_config'])
+
+			# def __call__(self, input_dict, state = None, seq_lens = None):
+			# 	print('u',input_dict)
+			# 	return super().__call__(input_dict, state, seq_lens)
 
 			def forward(self, input_dict, state, seq_lens):
 				if self.add_nonstationarity_correction:

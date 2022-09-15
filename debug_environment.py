@@ -58,7 +58,7 @@ env_config = get_default_environment_MAGraphDelivery_options(
 	spawn_on_sources_only=True
 )
 
-env = PartWorldSomeAgents_GraphDelivery({"culture": 'Heterogeneity', **env_config})
+env = PartWorldSomeAgents_GraphDelivery({"culture": 'ComplexHeterogeneity', **env_config})
 env.seed(38)
 # env = CescoDriveV0()
 multiagent = isinstance(env, MultiAgentEnv)

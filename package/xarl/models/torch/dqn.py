@@ -1,6 +1,7 @@
 from ray.rllib.agents.dqn.dqn_torch_model import DQNTorchModel
 from ray.rllib.utils.framework import try_import_torch
 import os
+import numpy as np
 
 torch, nn = try_import_torch()
 # torch.set_num_threads(os.cpu_count())
@@ -12,7 +13,7 @@ class TorchAdaptiveMultiHeadDQN:
 	def init(preprocessing_model):
 		class TorchAdaptiveMultiHeadDQNInner(DQNTorchModel):
 			
-			policy_signature_size = 1
+			policy_signature_size = 2
 
 			def __init__(self, obs_space, action_space, num_outputs, model_config, name, *, q_hiddens = (256,), dueling = False, dueling_activation = "relu", num_atoms = 1, use_noisy = False, v_min = -10.0, v_max = 10.0, sigma0 = 0.5, add_layer_norm = False):
 				preprocessed_input_size = preprocessing_model(obs_space, model_config['custom_model_config']).get_num_outputs()

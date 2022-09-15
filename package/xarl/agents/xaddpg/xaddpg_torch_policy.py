@@ -1,5 +1,27 @@
+"""
+PyTorch policy class used for TD3 and DDPG.
+"""
 from ray.rllib.agents.ddpg.ddpg_torch_policy import *
 from xarl.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
+
+def torch_get_distribution_inputs_and_class(policy, model, input_dict, *, explore = True, is_training = False, **kwargs):
+	input_dict = input_dict.copy(shallow=True)
+	input_dict.set_training(is_training)
+	assert input_dict.is_training==is_training
+	model_out, _ = model(input_dict, [], None)
+	dist_inputs = model.get_policy_output(model_out)
+
+	if isinstance(policy.action_space, Simplex):
+		distr_class = (
+			TorchDirichlet if policy.config["framework"] == "torch" else Dirichlet
+		)
+	else:
+		distr_class = (
+			TorchDeterministic
+			if policy.config["framework"] == "torch"
+			else Deterministic
+		)
+	return dist_inputs, distr_class, []  # []=state out
 
 def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	target_model = policy.target_models[model]
@@ -10,10 +32,14 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	huber_threshold = policy.config["huber_threshold"]
 	l2_reg = policy.config["l2_reg"]
 
-	input_dict = SampleBatch(obs=train_batch[SampleBatch.CUR_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True)
-	input_dict_next = SampleBatch(
-		obs=train_batch[SampleBatch.NEXT_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True
-	)
+	input_dict = SampleBatch({
+		"obs": train_batch[SampleBatch.CUR_OBS], 
+		'policy_signature': train_batch.get('policy_signature',None)
+		}, _is_training=True)
+	input_dict_next = SampleBatch({
+		"obs": train_batch[SampleBatch.NEXT_OBS], 
+		'policy_signature': train_batch.get('policy_signature',None)
+		}, _is_training=True)
 
 	model_out_t, _ = model(input_dict, [], None)
 	model_out_tp1, _ = model(input_dict_next, [], None)
@@ -70,7 +96,7 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 			model_out_t, train_batch[SampleBatch.ACTIONS]
 		)
 	# q_batchnorm_update_ops = list(
-	#     set(tf1.get_collection(tf.GraphKeys.UPDATE_OPS)) - prev_update_ops)
+	#	 set(tf1.get_collection(tf.GraphKeys.UPDATE_OPS)) - prev_update_ops)
 
 	# Target q-net(s) evaluation.
 	q_tp1 = target_model.get_q_values(target_model_out_tp1, policy_tp1_smoothed)
@@ -128,6 +154,7 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 		input_dict[SampleBatch.REWARDS] = train_batch[SampleBatch.REWARDS]
 		input_dict[SampleBatch.DONES] = train_batch[SampleBatch.DONES]
 		input_dict[SampleBatch.NEXT_OBS] = train_batch[SampleBatch.NEXT_OBS]
+		input_dict['policy_signature'] = train_batch.get('policy_signature',None)
 		[actor_loss, critic_loss] = model.custom_loss(
 			[actor_loss, critic_loss], input_dict
 		)
@@ -170,12 +197,13 @@ class TorchComputeTDErrorMixin:
 		self.compute_td_error = compute_td_error
 
 def setup_late_mixins(policy, obs_space, action_space, config):
-    TorchComputeTDErrorMixin.__init__(policy)
-    TargetNetworkMixin.__init__(policy)
+	TorchComputeTDErrorMixin.__init__(policy)
+	TargetNetworkMixin.__init__(policy)
 
 XADDPGTorchPolicy = DDPGTorchPolicy.with_updates(
 	name="XADDPGTorchPolicy",
 	postprocess_fn=xa_postprocess_nstep_and_prio,
+	action_distribution_fn=torch_get_distribution_inputs_and_class,
 	loss_fn=xaddpg_actor_critic_loss,
 	before_loss_init=setup_late_mixins,
 	mixins=[TargetNetworkMixin, TorchComputeTDErrorMixin],

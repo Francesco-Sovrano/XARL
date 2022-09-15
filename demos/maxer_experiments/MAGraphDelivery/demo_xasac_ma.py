@@ -14,7 +14,7 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 from xarl.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
 from environments import *
 
-SELECT_ENV = "MAGraphDelivery-PartWorldSomeAgents-Heterogeneity"
+SELECT_ENV = "MAGraphDelivery-PartWorldSomeAgents-ComplexHeterogeneity"
 CENTRALISED_TRAINING = True
 NUM_AGENTS = 16
 VISIBILITY_RADIUS = 10
@@ -23,7 +23,7 @@ CONFIG = XASAC_DEFAULT_CONFIG.copy()
 CONFIG["env_config"] = {
 	'num_agents': NUM_AGENTS,
 	'n_discrete_actions': None,
-	'reward_fn': 'unitary_more_frequent', # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
+	'reward_fn': 'unitary_frequent', # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_sparse'
 	'fairness_type_fn': 'simple', # one of the following: None, 'simple', 'engineered'
 	'fairness_reward_fn': 'simple', # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
 	'visibility_radius': VISIBILITY_RADIUS,
