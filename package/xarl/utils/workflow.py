@@ -193,10 +193,10 @@ def train(trainer_class, config, environment_class, experiment=None, test_every_
 	_, checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment)
 	# Add required Multi-Agent XAER options
 	if config.get("clustering_scheme", None):
-		if 'Who' in config["clustering_scheme"]:
+		if 'UWho' in config["clustering_scheme"]:
 			config["env_config"]['build_action_list'] = True
 			print('Added "build_action_list" to "env_config"')
-		if 'Which_CoopStrategy' in config["clustering_scheme"]:
+		if 'UWhich_CoopStrategy' in config["clustering_scheme"]:
 			config["env_config"]['build_joint_action_list'] = True
 			print('Added "build_joint_action_list" to "env_config"')
 	# Configure RLlib to train a policy using the given environment and trainer
