@@ -105,7 +105,7 @@ class HeterogeneityCulture(Culture):
 class ComplexHeterogeneityCulture(HeterogeneityCulture):
 
 	def __init__(self, road_options=None, agent_options=None):
-		self.super().__init__(road_options=road_options, agent_options=agent_options)
+		super().__init__(road_options=road_options, agent_options=agent_options)
 		self.name = "Complex Heterogeneity Culture"
 		# Properties of the culture with their default values go in self.env_properties.
 		self.env_properties.update({
