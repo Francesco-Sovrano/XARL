@@ -60,7 +60,7 @@ def assign_types(multi_batch, clustering_scheme, batch_fragment_length, with_epi
 					episode_step=i, 
 					agent_id=pid
 				)
-				sub_batch[SampleBatch.INFOS] = [{'batch_type': batch_type}] # remove unnecessary infos to save some memory
+				sub_batch[SampleBatch.INFOS] = [{'batch_type': batch_type,'training_step': training_step}] # remove unnecessary infos to save some memory
 			batch_dict[pid] += sub_batch_list
 	return [
 		MultiAgentBatch(

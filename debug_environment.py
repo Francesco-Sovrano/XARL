@@ -51,8 +51,8 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 
 env_config = get_default_environment_MAGraphDelivery_options(
 	num_agents=N_AGENTS, 
-	reward_fn='unitary_more_frequent', 
-	fairness_type_fn='simple', 
+	reward_fn='unitary_frequent', 
+	fairness_type_fn=None, 
 	fairness_reward_fn=None, 
 	discrete_actions=False, 
 	spawn_on_sources_only=True

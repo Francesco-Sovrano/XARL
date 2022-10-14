@@ -17,6 +17,7 @@ discard_batch = lambda x: all(map(lambda y: y.get('discard',False), x[SampleBatc
 get_batch_infos = lambda x: x[SampleBatch.INFOS][0]
 get_batch_indexes = lambda x: get_batch_infos(x)['batch_index']
 get_batch_uid = lambda x: get_batch_infos(x)['batch_uid']
+get_training_step = lambda x: get_batch_infos(x)['training_step']
 
 class PseudoPrioritizedBuffer(Buffer):
 	
@@ -30,7 +31,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		prioritization_importance_eta=1e-2,
 		prioritization_epsilon=1e-6,
 		prioritized_drop_probability=0.5, 
-		global_distribution_matching=False, 
+		stationarity_window_size_for_real_distribution_matching=False, 
 		cluster_prioritisation_strategy='highest',
 		cluster_prioritization_alpha=1,
 		cluster_level_weighting=True,
@@ -52,7 +53,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		self._prioritization_importance_eta = prioritization_importance_eta # Eta is a value > 0 that enables eta-weighting, thus allowing for importance weighting with priorities lower than 0. Eta is used to avoid importance weights equal to 0 when the sampled batch is the one with the highest priority. The closer eta is to 0, the closer to 0 would be the importance weight of the highest-priority batch.
 		self._prioritization_epsilon = prioritization_epsilon # prioritization_epsilon to add to the priorities when updating priorities.
 		self._prioritized_drop_probability = prioritized_drop_probability # remove the worst batch with this probability otherwise remove the oldest one
-		self._global_distribution_matching = global_distribution_matching
+		self._stationarity_window_size_for_real_distribution_matching = stationarity_window_size_for_real_distribution_matching
 		self._cluster_prioritisation_strategy = cluster_prioritisation_strategy
 		self._cluster_prioritization_alpha = cluster_prioritization_alpha
 		self._cluster_level_weighting = cluster_level_weighting
@@ -95,14 +96,14 @@ class PseudoPrioritizedBuffer(Buffer):
 		self.batches.append([])
 		new_sample_priority_tree = SumSegmentTree(
 			self._it_capacity, 
-			with_min_tree=self._prioritization_importance_beta or (self._cluster_prioritisation_strategy is not None) or self._priority_can_be_negative or (self._prioritized_drop_probability > 0 and not self._global_distribution_matching), 
+			with_min_tree=self._prioritization_importance_beta or (self._cluster_prioritisation_strategy is not None) or self._priority_can_be_negative or (self._prioritized_drop_probability > 0 and not self._stationarity_window_size_for_real_distribution_matching), 
 			with_max_tree=self._priority_can_be_negative, 
 		)
 		self._sample_priority_tree.append(new_sample_priority_tree)
 		if self._prioritized_drop_probability > 0:
 			self._drop_priority_tree.append(
-				MinSegmentTree(self._it_capacity,neutral_element=(float('inf'),-1))
-				if self._global_distribution_matching else
+				MinSegmentTree(self._it_capacity,neutral_element=((float('inf'),float('inf')),-1))
+				if self._stationarity_window_size_for_real_distribution_matching else
 				new_sample_priority_tree.min_tree
 			)
 		if self._prioritized_drop_probability < 1:
@@ -141,7 +142,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		type_id = self.type_keys[type_]
 		del get_batch_indexes(self.batches[type_][idx])[type_id]
 		if idx == last_idx: # idx is the last, remove it
-			if self._prioritized_drop_probability > 0 and self._global_distribution_matching:
+			if self._prioritized_drop_probability > 0 and self._stationarity_window_size_for_real_distribution_matching:
 				self._drop_priority_tree[type_][idx] = None # O(log)
 			if self._prioritized_drop_probability < 1:
 				self._insertion_time_tree[type_][idx] = None # O(log)
@@ -150,7 +151,7 @@ class PseudoPrioritizedBuffer(Buffer):
 			self._sample_priority_tree[type_][idx] = None # O(log)
 			self.batches[type_].pop()
 		elif idx < last_idx: # swap idx with the last element and then remove it
-			if self._prioritized_drop_probability > 0 and self._global_distribution_matching:
+			if self._prioritized_drop_probability > 0 and self._stationarity_window_size_for_real_distribution_matching:
 				self._drop_priority_tree[type_][idx] = (self._drop_priority_tree[type_][last_idx][0],idx) # O(log)
 				self._drop_priority_tree[type_][last_idx] = None # O(log)
 			if self._prioritized_drop_probability < 1:
@@ -317,8 +318,10 @@ class PseudoPrioritizedBuffer(Buffer):
 		if self._prioritized_drop_probability < 1:
 			self._insertion_time_tree[type_][idx] = (self.get_relative_time(), idx) # O(log)
 		# Set drop priority
-		if self._prioritized_drop_probability > 0 and self._global_distribution_matching:
-			self._drop_priority_tree[type_][idx] = (random.random(), idx) # O(log)
+		if self._prioritized_drop_probability > 0 and self._stationarity_window_size_for_real_distribution_matching:
+			stationarity_stage_id = batch_infos['training_step']//self._stationarity_window_size_for_real_distribution_matching
+			# logger.warning((stationarity_stage_id,random.random()))
+			self._drop_priority_tree[type_][idx] = ((stationarity_stage_id,random.random()), idx) # O(log)
 		# Set priority
 		self.update_priority(batch, idx, type_id) # add batch
 		# Resize buffer
