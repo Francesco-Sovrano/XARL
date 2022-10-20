@@ -199,4 +199,5 @@ ray.init(
 	num_cpus=os.cpu_count(),
 )
 
-train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7//100, stop_training_after_n_step=4e7)
+train(XASACTrainer, CONFIG, SELECT_ENV, test_every_n_step=4e7//100, stop_training_after_n_step=4e7, 
+	save_gif=False, n_episodes=3, with_log=False)

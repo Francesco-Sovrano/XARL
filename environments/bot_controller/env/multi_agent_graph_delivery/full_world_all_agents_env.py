@@ -33,7 +33,7 @@ class FullWorldAllAgents_Agent:
 
 	def seed(self, seed=None):
 		# logger.warning(f"Setting random seed to: {seed}")
-		self.np_random, _ = seeding.np_random(seed)
+		self.np_random = seeding.np_random(seed)[0]
 		return [seed]
 
 	def __init__(self, n_of_other_agents, culture, env_config):
@@ -658,9 +658,9 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 	def seed(self, seed=None):
 		logger.warning(f"Setting random seed to: {seed}")
 		for i,a in enumerate(self.agent_list):
-			seed = a.seed(seed+i)[0]
+			a.seed(seed+i)
 		self._seed = seed-1
-		self.np_random, _ = seeding.np_random(self._seed)
+		self.np_random = seeding.np_random(self._seed)[0]
 		# if self.culture:
 		# 	self.culture.np_random = self.np_random
 		return [self._seed]

@@ -45,15 +45,16 @@ def get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, e
 	checkpoint_n, checkpoint = find_last_checkpoint_in_directory(logdir)
 	return checkpoint_n, checkpoint, logger_creator_fn
 
-def test(tester_class, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3):
-	"""Tests and renders a previously trained model"""
-	# test_config = config.copy()
-	# test_config['explore'] = False
-	agent = tester_class(config, env=environment_class)
-	if checkpoint is None:
-		raise ValueError(f"A previously trained checkpoint must be provided for algorithm {alg}")
-	print(f'Testing with checkpoint: {checkpoint}')
+def restore_agent_from_checkpoint(alg_class, config, environment_class, checkpoint):
+	assert checkpoint, "A previously trained checkpoint must be provided"
+	agent = alg_class(config, env=environment_class)
+	print(f'Restoring checkpoint: {checkpoint}')
 	agent.restore(checkpoint)
+	return agent
+
+def test(agent, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
+	"""Tests and renders a previously trained model"""
+	# agent = restore_agent_from_checkpoint(tester_class, config, environment_class, checkpoint)
 
 	checkpoint_directory = os.path.dirname(checkpoint)
 	env = agent.env_creator(config["env_config"])
@@ -114,12 +115,17 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 		return filename
 
 	multiagent = isinstance(env, MultiAgentEnv)
+	sum_reward_list = []
+	step_list = []
 	for episode_id in range(n_episodes):
-		episode_directory = os.path.join(checkpoint_directory, f'episode_{episode_id}')
-		os.mkdir(episode_directory)
-		screens_directory = os.path.join(episode_directory, 'screen')
-		os.mkdir(screens_directory)
-		log_list = []
+		if with_log or save_gif:
+			episode_directory = os.path.join(checkpoint_directory, f'episode_{episode_id}')
+			os.mkdir(episode_directory)
+		if save_gif:
+			screens_directory = os.path.join(episode_directory, 'screen')
+			os.mkdir(screens_directory)
+		if with_log:
+			log_list = []
 		sum_reward = 0
 		step = 0
 		
@@ -129,7 +135,8 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 			done_dict = {i: False for i in state_dict.keys()}
 			done_dict['__all__'] = False
 			# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
-			file_list = [print_screen(screens_directory, step)]
+			if save_gif:
+				file_list = [print_screen(screens_directory, step)]
 			while not done_dict['__all__'] and (not config.get('horizon',None) or step < config['horizon']):
 				step += 1
 				# action = env.action_space.sample()
@@ -142,20 +149,23 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 				state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
 				# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
 				sum_reward += sum(reward_dict.values())
-				file_list.append(print_screen(screens_directory, step))
-				log_list.append(', '.join([
-					f'step: {step}',
-					f'reward: {reward_dict}',
-					f'done: {done_dict}',
-					f'info: {info_dict}',
-					f'action: {action_dict}',
-					f'state: {state_dict}',
-					'\n\n',
-				]))
+				if save_gif:
+					file_list.append(print_screen(screens_directory, step))
+				if with_log:
+					log_list.append(', '.join([
+						f'step: {step}',
+						f'reward: {reward_dict}',
+						f'done: {done_dict}',
+						f'info: {info_dict}',
+						f'action: {action_dict}',
+						f'state: {state_dict}',
+						'\n\n',
+					]))
 		else:
 			done = False
 			state = np.squeeze(env.reset())
-			file_list = [print_screen(screens_directory, step)]
+			if save_gif:
+				file_list = [print_screen(screens_directory, step)]
 			while not done and (not config.get('horizon',None) or step < config['horizon']):
 				step += 1
 				# action = env.action_space.sample()
@@ -163,18 +173,23 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 				state, reward, done, info = env.step(action[0])
 				state = np.squeeze(state)
 				sum_reward += reward
-				file_list.append(print_screen(screens_directory, step))
-				log_list.append(', '.join([
-					f'step: {step}',
-					f'reward: {reward}',
-					f'done: {done}',
-					f'info: {info}',
-					f'action: {action}',
-					f'state: {state}',
-					'\n\n',
-				]))
-		with open(os.path.join(episode_directory, f'episode_{step}_{sum_reward}.log'), 'w') as f:
-			f.writelines(log_list)
+				if save_gif:
+					file_list.append(print_screen(screens_directory, step))
+				if with_log:
+					log_list.append(', '.join([
+						f'step: {step}',
+						f'reward: {reward}',
+						f'done: {done}',
+						f'info: {info}',
+						f'action: {action}',
+						f'state: {state}',
+						'\n\n',
+					]))
+		sum_reward_list.append(sum_reward)
+		step_list.append(step)
+		if with_log:
+			with open(os.path.join(episode_directory, f'episode_{step}_{sum_reward}.log'), 'w') as f:
+				f.writelines(log_list)
 		if save_gif:
 			gif_file_name = f'episode_{step}_{sum_reward}.gif'
 			gif_file_path = os.path.join(episode_directory, gif_file_name)
@@ -188,8 +203,15 @@ def test(tester_class, config, environment_class, checkpoint, save_gif=True, del
 					z.write(gif_file_path,gif_file_name)
 				# Remove unzipped GIF
 				os.remove(gif_file_path)
+	with open(os.path.join(checkpoint_directory, 'stats.log'), 'w') as f:
+		f.writelines([
+			f'mean reward: {np.mean(sum_reward_list)} ± {np.std(sum_reward_list)}\n',
+			f'median reward: {np.median(sum_reward_list)} <{np.quantile(sum_reward_list, 0.25)}, {np.quantile(sum_reward_list, 0.75)}>\n',
+			f'mean steps: {np.mean(step_list)} ± {np.std(step_list)}\n',
+			f'median steps: {np.median(step_list)} <{np.quantile(step_list, 0.25)}, {np.quantile(step_list, 0.75)}>\n',
+		])
 
-def train(trainer_class, config, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True):
+def train(trainer_class, config, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
 	_, checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment)
 	# Add required Multi-Agent XAER options
 	if config.get("clustering_scheme", None):
@@ -237,7 +259,7 @@ def train(trainer_class, config, environment_class, experiment=None, test_every_
 		print(f'Checkpoint saved in {checkpoint}')
 		print(f'Testing..')
 		try:
-			test(trainer_class, config, environment_class, checkpoint)
+			test(agent, config, environment_class, checkpoint, save_gif=save_gif, delete_screens_after_making_gif=delete_screens_after_making_gif, compress_gif=compress_gif, n_episodes=n_episodes, with_log=with_log)
 		except Exception as e:
 			print(e)
 		

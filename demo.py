@@ -60,9 +60,11 @@ TEST_EVERY_N_STEP = int(float(sys.argv[4]))
 STOP_TRAINING_AFTER_N_STEP = int(float(sys.argv[5]))
 CENTRALISED_TRAINING = sys.argv[6].lower() == 'true'
 NUM_AGENTS = int(float(sys.argv[7]))
-if len(sys.argv) > 8:
+EPISODES_PER_TEST = int(float(sys.argv[8]))
+SAVE_GIFS = sys.argv[9].lower() == 'true'
+if len(sys.argv) > 10:
 	print('Updating options..')
-	OPTIONS = json.loads(' '.join(sys.argv[8:]))
+	OPTIONS = json.loads(' '.join(sys.argv[10:]))
 	print('Old options:', CONFIG)
 	print('New options:', json.dumps(OPTIONS, indent=4))
 	CONFIG.update(OPTIONS)
@@ -108,4 +110,12 @@ ray.init(
 	num_cpus=os.cpu_count(),
 )
 
-train(TRAINER, CONFIG, ENVIRONMENT, experiment=EXPERIMENT, test_every_n_step=TEST_EVERY_N_STEP, stop_training_after_n_step=STOP_TRAINING_AFTER_N_STEP)
+train(
+	TRAINER, 
+	CONFIG, 
+	ENVIRONMENT, 
+	experiment=EXPERIMENT, 
+	test_every_n_step=TEST_EVERY_N_STEP, 
+	stop_training_after_n_step=STOP_TRAINING_AFTER_N_STEP,
+	save_gif=SAVE_GIFS, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=EPISODES_PER_TEST, with_log=False
+)
