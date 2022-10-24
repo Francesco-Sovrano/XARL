@@ -46,7 +46,8 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 		################################
 		# information about speed parameters: http://www.ijtte.com/uploads/2012-10-01/5ebd8343-9b9c-b1d4IJTTE%20vol2%20no3%20%287%29.pdf
 		'min_speed': 0.5, # m/s
-		'max_speed': 2, # m/s
+		'max_speed': 1.5, # m/s
+		'print_debug_info': True,
 	}
 
 env_config = get_default_environment_MAGraphDelivery_options(

@@ -783,8 +783,8 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 				return 'green'
 			return 'red'
 		handles += [
-			ax.scatter(*self.road_network.source_junctions[0].pos, marker='s', color='green', alpha=1, label='Loaded Bot'),
-			ax.scatter(*self.road_network.target_junctions[0].pos, marker='s', color='red', alpha=1, label='Unloaded Bot')
+			ax.scatter(*self.road_network.source_junctions[0].pos, marker='s', facecolor='green', edgecolor='black', lw=1, alpha=1, label='Loaded Bot'),
+			ax.scatter(*self.road_network.target_junctions[0].pos, marker='s', facecolor='red', edgecolor='black', lw=1, alpha=1, label='Unloaded Bot')
 		]
 		if self.culture:
 			handles.append(ax.scatter(*self.road_network.source_junctions[0].pos, marker='s', color='grey', alpha=1, label='Dead Bot'))
@@ -811,31 +811,44 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		
 		# [Car]
 		#######################
+		car_len = self.env_config['max_dimension']/16
+		car_view = [ # [Vehicle]
+			Rectangle(
+				xy=(agent.car_point[0]-car_len/2,agent.car_point[1]-car_len/2), 
+				width=car_len,
+				height=car_len, 
+				facecolor=get_car_color(agent), 
+				edgecolor='black',
+				lw=1,
+				alpha=1,
+			)
+			for uid,agent in enumerate(self.agent_list)
+		]
+		ax.add_collection(PatchCollection(car_view, match_original=True))
+		#######################
+		for uid,agent in enumerate(self.agent_list): # [Heading Vector]
+			car_x, car_y = agent.car_point
+			dir_x, dir_y = get_heading_vector(angle=agent.car_orientation, space=1.5*car_len)
+			heading_vector_handle = ax.plot(
+				[car_x, car_x+dir_x],[car_y, car_y+dir_y], 
+				color=get_car_color(agent), 
+				alpha=1, 
+				# label='Heading Vector'
+			)
+		#######################
 		visibility_radius = self.env_config.get('visibility_radius',None)
 		if visibility_radius: # [Visibility]
 			visibility_view = [
 				Circle(
 					agent.car_point, 
 					visibility_radius, 
-					color='yellow', 
-					alpha=0.25,
+					color='blue', 
+					alpha=0.05,
 				)
 				for uid,agent in enumerate(self.agent_list)
 				if not agent.is_dead
 			]
 			ax.add_collection(PatchCollection(visibility_view, match_original=True))
-		#######################
-		car_view = [ # [Vehicle]
-			Rectangle(
-				xy=(agent.car_point[0]-1,agent.car_point[1]-1), 
-				width=2,
-				height=2, 
-				color=get_car_color(agent), 
-				alpha=1,
-			)
-			for uid,agent in enumerate(self.agent_list)
-		]
-		ax.add_collection(PatchCollection(car_view, match_original=True))
 		#######################
 		for uid,agent in enumerate(self.agent_list): # [Rewards]
 			if not agent.last_reward:
@@ -846,29 +859,20 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 				s=f"{agent.last_reward:.2f}",
 			)
 		#######################
-		for uid,agent in enumerate(self.agent_list): # [Debug info]
-			if agent.visiting_new_road:
-				ax.text(
-					x=agent.car_point[0],
-					y=agent.car_point[1],
-					s='R', 
-				)
-			if agent.visiting_new_junction:
-				ax.text(
-					x=agent.car_point[0],
-					y=agent.car_point[1],
-					s='J', 
-				)
-		#######################
-		for uid,agent in enumerate(self.agent_list): # [Heading Vector]
-			car_x, car_y = agent.car_point
-			dir_x, dir_y = get_heading_vector(angle=agent.car_orientation, space=self.env_config['max_dimension']/16)
-			heading_vector_handle = ax.plot(
-				[car_x, car_x+dir_x],[car_y, car_y+dir_y], 
-				color=get_car_color(agent), 
-				alpha=1, 
-				# label='Heading Vector'
-			)
+		if self.env_config.get('print_debug_info',True):
+			for uid,agent in enumerate(self.agent_list): # [Debug info]
+				if agent.visiting_new_road:
+					ax.text(
+						x=agent.car_point[0],
+						y=agent.car_point[1],
+						s='R', 
+					)
+				if agent.visiting_new_junction:
+					ax.text(
+						x=agent.car_point[0],
+						y=agent.car_point[1],
+						s='J', 
+					)
 		#######################
 		# [Junctions]
 		if len(self.road_network.junctions) > 0:
@@ -895,16 +899,18 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 					va='center'
 				)
 			closest_junction_set = unique_everseen((agent.closest_junction for agent in self.agent_list if not agent.is_dead), key=lambda x:x.pos)
-			for junction in filter(lambda x: not x.is_target, closest_junction_set):
-				ax.annotate(
-					'#', 
-					junction.pos, 
-					color='black', 
-					# weight='bold', 
-					fontsize=12, 
-					ha='center', 
-					va='center'
-				)
+			#######################
+			if self.env_config.get('print_debug_info',True):
+				for junction in filter(lambda x: not x.is_target, closest_junction_set): # [Debug info]
+					ax.annotate(
+						'#', 
+						junction.pos, 
+						color='black', 
+						# weight='bold', 
+						fontsize=12, 
+						ha='center', 
+						va='center'
+					)
 
 		# [Roads]
 		closest_road_set = set((agent.closest_road.edge for agent in self.agent_list if agent.closest_road))
