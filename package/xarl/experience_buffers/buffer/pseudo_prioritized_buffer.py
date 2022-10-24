@@ -32,6 +32,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		prioritization_epsilon=1e-6,
 		prioritized_drop_probability=0.5, 
 		stationarity_window_size_for_real_distribution_matching=False, 
+		stationarity_smoothing_factor=1,
 		cluster_prioritisation_strategy='highest',
 		cluster_prioritization_alpha=1,
 		cluster_level_weighting=True,
@@ -44,6 +45,8 @@ class PseudoPrioritizedBuffer(Buffer):
 		assert not prioritization_importance_beta or prioritization_importance_beta > 0., f"prioritization_importance_beta must be > 0, but it is {prioritization_importance_beta}"
 		assert not prioritization_importance_eta or prioritization_importance_eta > 0, f"prioritization_importance_eta must be > 0, but it is {prioritization_importance_eta}"
 		assert clustering_xi >= 1, f"clustering_xi must be >= 1, but it is {clustering_xi}"
+		if stationarity_window_size_for_real_distribution_matching:
+			assert stationarity_smoothing_factor >= 1, "stationarity_smoothing_factor must be >= 1"
 		self._priority_id = priority_id
 		self._priority_lower_limit = priority_lower_limit
 		self._priority_can_be_negative = priority_lower_limit is None or priority_lower_limit < 0
@@ -54,6 +57,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		self._prioritization_epsilon = prioritization_epsilon # prioritization_epsilon to add to the priorities when updating priorities.
 		self._prioritized_drop_probability = prioritized_drop_probability # remove the worst batch with this probability otherwise remove the oldest one
 		self._stationarity_window_size_for_real_distribution_matching = stationarity_window_size_for_real_distribution_matching
+		self._stationarity_smoothing_factor = stationarity_smoothing_factor
 		self._cluster_prioritisation_strategy = cluster_prioritisation_strategy
 		self._cluster_prioritization_alpha = cluster_prioritization_alpha
 		self._cluster_level_weighting = cluster_level_weighting
@@ -320,6 +324,8 @@ class PseudoPrioritizedBuffer(Buffer):
 		# Set drop priority
 		if self._prioritized_drop_probability > 0 and self._stationarity_window_size_for_real_distribution_matching:
 			stationarity_stage_id = batch_infos['training_step']//self._stationarity_window_size_for_real_distribution_matching
+			if random.random() >= 1/self._stationarity_smoothing_factor: # smoothly change stage without saturating the buffer with experience from the last episode
+				stationarity_stage_id = max(0, stationarity_stage_id-1)
 			# logger.warning((stationarity_stage_id,random.random()))
 			self._drop_priority_tree[type_][idx] = ((stationarity_stage_id,random.random()), idx) # O(log)
 		# Set priority

@@ -203,7 +203,7 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 					z.write(gif_file_path,gif_file_name)
 				# Remove unzipped GIF
 				os.remove(gif_file_path)
-	with open(os.path.join(checkpoint_directory, 'stats.log'), 'w') as f:
+	with open(os.path.join(checkpoint_directory, 'stats.txt'), 'w') as f:
 		f.writelines([
 			f'mean reward: {np.mean(sum_reward_list)} ± {np.std(sum_reward_list)}\n',
 			f'median reward: {np.median(sum_reward_list)} <{np.quantile(sum_reward_list, 0.25)}, {np.quantile(sum_reward_list, 0.75)}>\n',

@@ -125,31 +125,32 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 				stats_dict = y[key]
 				if buckets_average == 'median':
 					stats_dict["quantiles"].append({
-						'lower_quartile': np.quantile(value_list,0.25), # lower quartile
-						'median': np.quantile(value_list,0.5), # median
-						'upper_quartile': np.quantile(value_list,0.75), # upper quartile
+						'lower_quartile': float(np.quantile(value_list,0.25)), # lower quartile
+						'median': float(np.quantile(value_list,0.5)), # median
+						'upper_quartile': float(np.quantile(value_list,0.75)), # upper quartile
 					})
 				else:
-					v_mean = np.mean(value_list)
-					v_std = np.std(value_list)
+					v_mean = float(np.mean(value_list))
+					v_std = float(np.std(value_list))
 					stats_dict["quantiles"].append({
 						'mean-std': v_mean-v_std,
 						'mean': v_mean,
 						'mean+std': v_mean+v_std,
 					})
 				# print(key, min(value_list))
-				stats_dict["min"] = min(stats_dict["min"], min(value_list))
-				stats_dict["max"] = max(stats_dict["max"], max(value_list))
+				stats_dict["min"] = float(min(stats_dict["min"], min(value_list)))
+				stats_dict["max"] = float(max(stats_dict["max"], max(value_list)))
 				x[key].append(last_step)
 		lines_dict[name] = {
 			'x': x,
 			'y': y,
 			'log_id': log_id
 		}
-		print('#'*10)
-		# print(name)
-		print('episode_reward_mean:', json.dumps(y["episode_reward_mean"], indent=4))
-		print('#'*10)
+		for yk,yv in y.items():
+			print('#'*10)
+			# print(name)
+			print(f'{yk}:', json.dumps(yv, indent=4))
+			print('#'*10)
 	plotted_baseline = False
 	plot_dict = {}
 	for name, line in lines_dict.items():
