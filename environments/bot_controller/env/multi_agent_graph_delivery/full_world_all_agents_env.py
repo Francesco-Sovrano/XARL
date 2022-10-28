@@ -483,7 +483,7 @@ class FullWorldAllAgents_Agent:
 	def get_info(self):
 		return f"speed={self.car_speed}, orientation={self.car_orientation}"
 
-	def unitary_frequent_reward_default(self):
+	def unitary_sparse_reward_default(self):
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
@@ -520,7 +520,7 @@ class FullWorldAllAgents_Agent:
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')
 
-	def unitary_more_frequent_reward_default(self):
+	def unitary_frequent_reward_default(self):
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):
@@ -557,7 +557,7 @@ class FullWorldAllAgents_Agent:
 		# "Move forward" rule
 		return null_reward(is_terminal=False, label='moving_forward')
 
-	def unitary_sparse_reward_default(self):
+	def unitary_more_sparse_reward_default(self):
 		def null_reward(is_terminal, label):
 			return (0, is_terminal, label)
 		def unitary_reward(is_positive, is_terminal, label):

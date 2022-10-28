@@ -40,7 +40,7 @@ pip install -r environments/bot_controller/requirements.txt
 # rm -r build
 # cd ../../..
 
-echo 'Installing XARL..'
+echo 'Installing DEER..'
 pip install -e ./package # cmake is needed
 pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.11.0+cpu.html
 
