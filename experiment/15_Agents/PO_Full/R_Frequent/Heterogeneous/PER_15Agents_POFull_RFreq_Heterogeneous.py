@@ -171,8 +171,9 @@ experiment_options = copy_dict_and_update_with_key(default_experiment_options, "
 	'priority_lower_limit': 0,
 	'global_size': EXPERIENCE_BUFFER_SIZE, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).
 	'prioritized_drop_probability': 1, # Probability of dropping the batch having the lowest priority in the buffer instead of the one having the lowest timestamp. In SAC default is 0.
-	'stationarity_window_size_for_real_distribution_matching': None,
-	'stationarity_smoothing_factor': 1, # A number >= 1, where 1 means no smoothing. The larger this number, the smoother the transition from a stationarity stage to the next one. This should help avoiding experience buffers saturated by one single episode during a stage transition. The optimal value should be equal to ceil(HORIZON*number_of_agents/EXPERIENCE_BUFFER_SIZE)*stationarity_window_size_for_real_distribution_matching.
+	'global_distribution_matching': False, # Whether to use a random number rather than the batch priority during prioritised dropping. If True then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far. 
+	'stationarity_window_size': None, # If lower than float('inf') and greater than 0, then the stationarity_window_size W is used to guarantee that every W training-steps the buffer is emptied from old state transitions.
+	'stationarity_smoothing_factor': 1, # A number >= 1, where 1 means no smoothing. The larger this number, the smoother the transition from a stationarity stage to the next one. This should help avoiding experience buffers saturated by one single episode during a stage transition. The optimal value should be equal to ceil(HORIZON*number_of_agents/EXPERIENCE_BUFFER_SIZE)*stationarity_window_size.
 })
 experiment_options = copy_dict_and_update(experiment_options, get_default_environment_MAGraphDelivery_options(
 	number_of_agents, 
@@ -202,10 +203,12 @@ xaer_experiment_options = copy_dict_and_update(experiment_options,{
 	],
 })
 xaer_gdm_experiment_options = copy_dict_and_update_with_key(xaer_experiment_options, "buffer_options", {
-	'stationarity_window_size_for_real_distribution_matching': float('inf'),
+	'global_distribution_matching': True,
+	'stationarity_window_size': float('inf'),
 })
 deer_experiment_options = copy_dict_and_update_with_key(xaer_experiment_options, "buffer_options", {
-	'stationarity_window_size_for_real_distribution_matching': 5, # Whether to use a random number rather than the batch priority during prioritised dropping. If equal to float('inf') then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far. If lower than float('inf') and greater than 0, then stationarity_window_size_for_real_distribution_matching is used to guarantee that every stationarity_window_size_for_real_distribution_matching training-steps the buffer is emptied from old state transitions.
+	'global_distribution_matching': True,
+	'stationarity_window_size': 5, # Whether to use a random number rather than the batch priority during prioritised dropping. If equal to float('inf') then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far. If lower than float('inf') and greater than 0, then stationarity_window_size is used to guarantee that every stationarity_window_size training-steps the buffer is emptied from old state transitions.
 })
 
 CONFIG = XASAC_DEFAULT_CONFIG.copy()
