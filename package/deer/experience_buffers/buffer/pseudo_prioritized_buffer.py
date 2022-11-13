@@ -30,8 +30,9 @@ class PseudoPrioritizedBuffer(Buffer):
 		prioritization_importance_beta=0.4, 
 		prioritization_importance_eta=1e-2,
 		prioritization_epsilon=1e-6,
-		prioritized_drop_probability=0.5, 
-		stationarity_window_size_for_real_distribution_matching=False, 
+		prioritized_drop_probability=0, 
+		global_distribution_matching=False,
+		stationarity_window_size=None, 
 		stationarity_smoothing_factor=1,
 		cluster_prioritisation_strategy='highest',
 		cluster_prioritization_alpha=1,
@@ -45,7 +46,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		assert not prioritization_importance_beta or prioritization_importance_beta > 0., f"prioritization_importance_beta must be > 0, but it is {prioritization_importance_beta}"
 		assert not prioritization_importance_eta or prioritization_importance_eta > 0, f"prioritization_importance_eta must be > 0, but it is {prioritization_importance_eta}"
 		assert clustering_xi >= 1, f"clustering_xi must be >= 1, but it is {clustering_xi}"
-		if stationarity_window_size_for_real_distribution_matching:
+		if stationarity_window_size:
 			assert stationarity_smoothing_factor >= 1, "stationarity_smoothing_factor must be >= 1"
 		self._priority_id = priority_id
 		self._priority_lower_limit = priority_lower_limit
@@ -56,7 +57,8 @@ class PseudoPrioritizedBuffer(Buffer):
 		self._prioritization_importance_eta = prioritization_importance_eta # Eta is a value > 0 that enables eta-weighting, thus allowing for importance weighting with priorities lower than 0. Eta is used to avoid importance weights equal to 0 when the sampled batch is the one with the highest priority. The closer eta is to 0, the closer to 0 would be the importance weight of the highest-priority batch.
 		self._prioritization_epsilon = prioritization_epsilon # prioritization_epsilon to add to the priorities when updating priorities.
 		self._prioritized_drop_probability = prioritized_drop_probability # remove the worst batch with this probability otherwise remove the oldest one
-		self._stationarity_window_size_for_real_distribution_matching = stationarity_window_size_for_real_distribution_matching
+		self._global_distribution_matching = global_distribution_matching
+		self._stationarity_window_size = stationarity_window_size
 		self._stationarity_smoothing_factor = stationarity_smoothing_factor
 		self._cluster_prioritisation_strategy = cluster_prioritisation_strategy
 		self._cluster_prioritization_alpha = cluster_prioritization_alpha
@@ -64,6 +66,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		self._clustering_xi = clustering_xi
 		# self._clip_cluster_priority_by_max_capacity = clip_cluster_priority_by_max_capacity
 		self._weight_importance_by_update_time = self._max_age_window = max_age_window
+		logger.warning(f'Building new buffer with: prioritized_drop_probability={prioritized_drop_probability}, global_distribution_matching={global_distribution_matching}, stationarity_window_size={stationarity_window_size}, stationarity_smoothing_factor={stationarity_smoothing_factor}')
 		super().__init__(cluster_size=cluster_size, global_size=global_size, seed=seed)
 		self._it_capacity = 1
 		while self._it_capacity < self.cluster_size:
@@ -100,14 +103,14 @@ class PseudoPrioritizedBuffer(Buffer):
 		self.batches.append([])
 		new_sample_priority_tree = SumSegmentTree(
 			self._it_capacity, 
-			with_min_tree=self._prioritization_importance_beta or (self._cluster_prioritisation_strategy is not None) or self._priority_can_be_negative or (self._prioritized_drop_probability > 0 and not self._stationarity_window_size_for_real_distribution_matching), 
+			with_min_tree=self._prioritization_importance_beta or (self._cluster_prioritisation_strategy is not None) or self._priority_can_be_negative or (self._prioritized_drop_probability > 0 and not self._stationarity_window_size), 
 			with_max_tree=self._priority_can_be_negative, 
 		)
 		self._sample_priority_tree.append(new_sample_priority_tree)
 		if self._prioritized_drop_probability > 0:
 			self._drop_priority_tree.append(
 				MinSegmentTree(self._it_capacity,neutral_element=((float('inf'),float('inf')),-1))
-				if self._stationarity_window_size_for_real_distribution_matching else
+				if self._stationarity_window_size else
 				new_sample_priority_tree.min_tree
 			)
 		if self._prioritized_drop_probability < 1:
@@ -146,7 +149,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		type_id = self.type_keys[type_]
 		del get_batch_indexes(self.batches[type_][idx])[type_id]
 		if idx == last_idx: # idx is the last, remove it
-			if self._prioritized_drop_probability > 0 and self._stationarity_window_size_for_real_distribution_matching:
+			if self._prioritized_drop_probability > 0 and self._stationarity_window_size:
 				self._drop_priority_tree[type_][idx] = None # O(log)
 			if self._prioritized_drop_probability < 1:
 				self._insertion_time_tree[type_][idx] = None # O(log)
@@ -155,7 +158,7 @@ class PseudoPrioritizedBuffer(Buffer):
 			self._sample_priority_tree[type_][idx] = None # O(log)
 			self.batches[type_].pop()
 		elif idx < last_idx: # swap idx with the last element and then remove it
-			if self._prioritized_drop_probability > 0 and self._stationarity_window_size_for_real_distribution_matching:
+			if self._prioritized_drop_probability > 0 and self._stationarity_window_size:
 				self._drop_priority_tree[type_][idx] = (self._drop_priority_tree[type_][last_idx][0],idx) # O(log)
 				self._drop_priority_tree[type_][last_idx] = None # O(log)
 			if self._prioritized_drop_probability < 1:
@@ -322,13 +325,20 @@ class PseudoPrioritizedBuffer(Buffer):
 		if self._prioritized_drop_probability < 1:
 			self._insertion_time_tree[type_][idx] = (self.get_relative_time(), idx) # O(log)
 		# Set drop priority
-		if self._prioritized_drop_probability > 0 and self._stationarity_window_size_for_real_distribution_matching:
-			stationarity_stage_id = batch_infos['training_step']//self._stationarity_window_size_for_real_distribution_matching
-			if self._stationarity_smoothing_factor > 1:
-				if random.random() >= 1/self._stationarity_smoothing_factor: # smoothly change stage without saturating the buffer with experience from the last episode
-					stationarity_stage_id = max(0, stationarity_stage_id-1)
-			# logger.warning((stationarity_stage_id,random.random()))
-			self._drop_priority_tree[type_][idx] = ((stationarity_stage_id,random.random()), idx) # O(log)
+		if self._global_distribution_matching:
+			if self._prioritized_drop_probability > 0 and self._stationarity_window_size:
+				stationarity_stage_id = batch_infos['training_step']//self._stationarity_window_size
+				if self._stationarity_smoothing_factor > 1:
+					if random.random() >= 1/self._stationarity_smoothing_factor: # smoothly change stage without saturating the buffer with experience from the last episode
+						stationarity_stage_id = max(0, stationarity_stage_id-1)
+				# logger.warning((stationarity_stage_id,random.random()))
+				self._drop_priority_tree[type_][idx] = (  # O(log)
+					(
+						stationarity_stage_id,
+						random.random()
+					), 
+					idx
+				)
 		# Set priority
 		self.update_priority(batch, idx, type_id) # add batch
 		# Resize buffer
@@ -471,6 +481,22 @@ class PseudoPrioritizedBuffer(Buffer):
 		self._sample_priority_tree[type_][idx] = normalized_priority # O(log)
 		if self._weight_importance_by_update_time:
 			self._update_times[type_][idx] = self._update_times[type_][idx] - 1 # O(1)
+		# Set drop priority
+		if not self._global_distribution_matching: 
+			if self._prioritized_drop_probability > 0 and self._stationarity_window_size:
+				batch_infos = get_batch_infos(new_batch)
+				stationarity_stage_id = batch_infos['training_step']//self._stationarity_window_size
+				if self._stationarity_smoothing_factor > 1:
+					if random.random() >= 1/self._stationarity_smoothing_factor: # smoothly change stage without saturating the buffer with experience from the last episode
+						stationarity_stage_id = max(0, stationarity_stage_id-1)
+				# logger.warning((stationarity_stage_id,random.random()))
+				self._drop_priority_tree[type_][idx] = (  # O(log)
+					(
+						stationarity_stage_id,
+						normalized_priority
+					), 
+					idx
+				)
 
 	def get_relative_time(self):
 		return time.time()-self._base_time
