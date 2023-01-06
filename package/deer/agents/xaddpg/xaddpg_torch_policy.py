@@ -12,15 +12,9 @@ def torch_get_distribution_inputs_and_class(policy, model, input_dict, *, explor
 	dist_inputs = model.get_policy_output(model_out)
 
 	if isinstance(policy.action_space, Simplex):
-		distr_class = (
-			TorchDirichlet if policy.config["framework"] == "torch" else Dirichlet
-		)
+		distr_class = TorchDirichlet
 	else:
-		distr_class = (
-			TorchDeterministic
-			if policy.config["framework"] == "torch"
-			else Deterministic
-		)
+		distr_class = TorchDeterministic
 	return dist_inputs, distr_class, []  # []=state out
 
 def xaddpg_actor_critic_loss(policy, model, _, train_batch):
@@ -89,8 +83,6 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	# Q-values for current policy (no noise) in given current state
 	q_t_det_policy = model.get_q_values(model_out_t, policy_t)
 
-	actor_loss = -torch.mean(train_batch[PRIO_WEIGHTS] * q_t_det_policy)
-
 	if twin_q:
 		twin_q_t = model.get_twin_q_values(
 			model_out_t, train_batch[SampleBatch.ACTIONS]
@@ -137,6 +129,7 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 			errors = 0.5 * torch.pow(td_error, 2.0)
 
 	critic_loss = torch.mean(train_batch[PRIO_WEIGHTS] * errors)
+	actor_loss = -torch.mean(train_batch[PRIO_WEIGHTS] * q_t_det_policy)
 
 	# Add l2-regularization if required.
 	if l2_reg is not None:

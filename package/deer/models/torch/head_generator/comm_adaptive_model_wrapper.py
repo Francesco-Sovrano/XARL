@@ -1,5 +1,4 @@
 from deer.models.torch.head_generator.adaptive_model_wrapper import AdaptiveModel
-from deer.utils.torch_gnn_models.model import GNNBranch
 from ray.rllib.utils.framework import try_import_torch
 import logging
 import numpy as np
@@ -94,10 +93,13 @@ class CommAdaptiveModel(AdaptiveModel):
 		self.max_num_neighbors = config.get('max_num_neighbors', self.n_agents_and_leaders-1)
 		self.message_size = config.get('message_size', agent_features_size)
 		self.comm_range = torch.Tensor([config.get('comm_range', 10.)])
-		self.gnn = GNNBranch(
-			node_features=agent_features_size,
-			edge_features=2+1, # position + orientation
-			out_features=self.message_size,
+		self.gnn = torch_geometric.nn.GATv2Conv( # https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html?highlight=GENConv#torch_geometric.nn.conv.GATv2Conv
+			in_channels=agent_features_size,
+			out_channels=self.message_size,
+			edge_dim=2+1, # position + orientation
+			add_self_loops=True,
+			fill_value=0, # The way to generate edge features of self-loops (in case :obj:`edge_dim != None`).
+			# heads=1,
 		)
 		# self.post_proc = torch.nn.LayerNorm(agent_features_size + self.message_size)
 		logger.warning(f"Building keras layers for Comm model with {self.n_agents} agents, {self.n_leaders} leaders and communication range {self.comm_range[0]} for maximum {self.max_num_neighbors} neighbours")
@@ -154,10 +156,10 @@ class CommAdaptiveModel(AdaptiveModel):
 			graphs.x = torch.cat([graphs.x, all_agents_types], dim=1)
 		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
 		graphs = RelativePosition()(graphs) # Saves the relative positions of linked nodes in its edge attributes
-		graphs = RelativeOrientation(norm=False)(graphs) # Saves the relative orientations in its edge attributes
+		graphs = RelativeOrientation(norm=True)(graphs) # Saves the relative orientations in its edge attributes
 
 		## process graphs
-		gnn_output = self.gnn(graphs.x, graphs.edge_index, graphs.edge_attr)
+		gnn_output = self.gnn(graphs.x, graphs.edge_index, edge_attr=graphs.edge_attr)
 		# assert not gnn_output.isnan().any()
 		gnn_output = gnn_output.view(-1, self.n_agents_and_leaders, self.message_size) # reshape GNN outputs
 		if self.n_leaders:

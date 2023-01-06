@@ -31,6 +31,7 @@ class TorchAdaptiveMultiHeadDDPG:
 				super().__init__(obs_space, action_space, num_outputs, model_config, name, actor_hiddens, actor_hidden_activation, critic_hiddens, critic_hidden_activation, twin_q, add_layer_norm)
 				self.preprocessing_model_policy = preprocessing_model(obs_space, model_config['custom_model_config'])
 				self.preprocessing_model_q = preprocessing_model(obs_space, model_config['custom_model_config'])
+				self.preprocessing_model_twin_q = preprocessing_model(obs_space, model_config['custom_model_config'])
 
 			# def __call__(self, input_dict, state = None, seq_lens = None):
 			# 	print('u',input_dict)
@@ -67,11 +68,11 @@ class TorchAdaptiveMultiHeadDDPG:
 			def get_twin_q_values(self, model_out, actions = None):
 				if self.add_nonstationarity_correction:
 					model_out = torch.concat((
-						self.preprocessing_model_q(model_out["obs"]),
+						self.preprocessing_model_twin_q(model_out["obs"]),
 						model_out["policy_signature"]
 					), dim=-1)
 				else:
-					model_out = self.preprocessing_model_q(model_out)
+					model_out = self.preprocessing_model_twin_q(model_out)
 				return self.twin_q_model(torch.cat([model_out, actions], -1))
 
 			def policy_variables(self, as_dict=False):
@@ -82,11 +83,18 @@ class TorchAdaptiveMultiHeadDDPG:
 				return p_dict
 
 			def q_variables(self, as_dict=False):
-				if not as_dict:
-					return self.preprocessing_model_q.variables(as_dict) + super().q_variables(as_dict)
-				q_dict = super().q_variables(as_dict)
-				q_dict.update(self.preprocessing_model_q.variables(as_dict))
-				return q_dict
+				if as_dict:
+					return {
+						**self.preprocessing_model_q.state_dict(),
+						**self.q_model.state_dict(),
+						**(self.preprocessing_model_twin_q.state_dict() if self.twin_q_model else {}),
+						**(self.twin_q_model.state_dict() if self.twin_q_model else {}),
+					}
+				return list(self.preprocessing_model_q.parameters()) + list(self.q_model.parameters()) + (
+					list(self.preprocessing_model_twin_q.parameters()) if self.twin_q_model else []
+				) + (
+					list(self.twin_q_model.parameters()) if self.twin_q_model else []
+				)
 
 			def get_entropy_var(self):
 				return None

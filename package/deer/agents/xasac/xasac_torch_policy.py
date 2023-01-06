@@ -4,6 +4,12 @@ PyTorch policy class used for SAC.
 from ray.rllib.agents.sac.sac_torch_policy import *
 from ray.rllib.agents.sac.sac_torch_policy import _get_dist_class
 from deer.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
+from ray.rllib.utils.torch_utils import (
+    apply_grad_clipping,
+    concat_multi_gpu_td_errors,
+    huber_loss,
+)
+import numpy as np
 
 def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 	target_model = policy.target_models[model]
@@ -110,8 +116,12 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 
 	# Compute the TD-error (potentially clipped).
 	base_td_error = torch.abs(q_t_selected - q_t_selected_target)
+	# if policy.config["clip_epsilon"] > 0:
+	# 	base_td_error = torch.clamp(base_td_error, 0,policy.config["clip_epsilon"])
 	if policy.config["twin_q"]:
 		twin_td_error = torch.abs(twin_q_t_selected - q_t_selected_target)
+		# if policy.config["clip_epsilon"] > 0:
+		# 	twin_td_error = torch.clamp(twin_td_error, 0,policy.config["clip_epsilon"])
 		td_error = 0.5 * (base_td_error + twin_td_error)
 	else:
 		td_error = base_td_error
@@ -127,11 +137,15 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 	# Discrete case: Multiply the action probs as weights with the original
 	# loss terms (no expectations needed).
 	if model.discrete:
-		weighted_log_alpha_loss = policy_t.detach() * (
-			-model.log_alpha * (log_pis_t + model.target_entropy).detach()
-		)
 		# Sum up weighted terms and mean over all batch items.
-		alpha_loss = torch.mean(train_batch[PRIO_WEIGHTS] * torch.sum(weighted_log_alpha_loss, dim=-1))
+		alpha_loss = torch.mean(
+			train_batch[PRIO_WEIGHTS] * torch.sum(
+				policy_t.detach() * (
+					-model.log_alpha * (log_pis_t + model.target_entropy).detach()
+				), 
+				dim=-1
+			)
+		)
 		# Actor loss.
 		actor_loss = torch.mean(
 			train_batch[PRIO_WEIGHTS] * torch.sum(
@@ -139,18 +153,18 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 					# NOTE: No stop_grad around policy output here
 					# (compare with q_t_det_policy for continuous case).
 					policy_t,
-					alpha.detach() * log_pis_t - q_t.detach(),
+					alpha * log_pis_t - q_t.detach(),
 				),
 				dim=-1,
 			)
 		)
-	else:
+	else: # Read this for more details: https://arxiv.org/pdf/2112.15568.pdf
 		alpha_loss = -torch.mean(train_batch[PRIO_WEIGHTS] * model.log_alpha * (log_pis_t + model.target_entropy).detach())
 		# Note: Do not detach q_t_det_policy here b/c is depends partly
 		# on the policy vars (policy sample pushed through Q-net).
 		# However, we must make sure `actor_loss` is not used to update
 		# the Q-net(s)' variables.
-		actor_loss = torch.mean(train_batch[PRIO_WEIGHTS] * (alpha.detach() * log_pis_t - q_t_det_policy))
+		actor_loss = torch.mean(train_batch[PRIO_WEIGHTS] * (alpha * log_pis_t - q_t_det_policy))
 
 	# Store values for stats function in model (tower), such that for
 	# multi-GPU, we do not override them during the parallel loss phase.
@@ -203,4 +217,5 @@ XASACTorchPolicy = SACTorchPolicy.with_updates(
 	loss_fn=xasac_actor_critic_loss,
 	before_loss_init=torch_setup_late_mixins,
 	mixins=[TargetNetworkMixin, TorchComputeTDErrorMixin],
+	extra_grad_process_fn=apply_grad_clipping,
 )

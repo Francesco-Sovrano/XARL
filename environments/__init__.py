@@ -5,4 +5,4 @@ from .bot_controller import *
 # from .shepherd import *
 # from .gfootball import *
 # from .petting_zoo import *
-# from .primal import *
+from .primal import *

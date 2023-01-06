@@ -60,8 +60,12 @@ class TorchAdaptiveMultiHeadNet:
 				return model
 
 			def build_q_model(self, obs_space, action_space, num_outputs, q_model_config, name):
-				self.preprocessing_model_q = value_preprocessing_model(obs_space, self.model_config['custom_model_config'])
-				preprocessed_input_size = self.preprocessing_model_q.get_num_outputs()
+				if name == "twin_q":
+					self.preprocessing_model_twin_q = value_preprocessing_model(obs_space, self.model_config['custom_model_config'])
+					preprocessed_input_size = self.preprocessing_model_twin_q.get_num_outputs()
+				elif name == "q":
+					self.preprocessing_model_q = value_preprocessing_model(obs_space, self.model_config['custom_model_config'])
+					preprocessed_input_size = self.preprocessing_model_q.get_num_outputs()
 				if self.add_nonstationarity_correction:
 					preprocessed_input_size += self.policy_signature_size
 				preprocessed_obs_space_q = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=(preprocessed_input_size,), dtype=np.float32)
@@ -92,18 +96,23 @@ class TorchAdaptiveMultiHeadNet:
 			def get_twin_q_values(self, model_out, actions = None):
 				if self.add_nonstationarity_correction:
 					model_out = torch.concat((
-						self.preprocessing_model_q(model_out["obs"]),
+						self.preprocessing_model_twin_q(model_out["obs"]),
 						model_out["policy_signature"]
 					), dim=-1)
 				else:
-					model_out = self.preprocessing_model_q(model_out)
+					model_out = self.preprocessing_model_twin_q(model_out)
 				return self._get_q_value(model_out, actions, self.twin_q_net)
 
 			def policy_variables(self):
 				return self.preprocessing_model_policy.variables() + super().policy_variables()
 
 			def q_variables(self):
-				return self.preprocessing_model_q.variables() + super().q_variables()
+				q_vars = self.preprocessing_model_q.variables() + self.q_net.variables()
+				if not self.twin_q_net:
+					return q_vars
+				# sac_torch_policy::optimizer_fn uses index to separate q variables from twin_q variables. So, here, variables should be returned accordingly
+				twin_q_vars = self.preprocessing_model_twin_q.variables() + self.twin_q_net.variables()
+				return q_vars + twin_q_vars
 
 			def get_entropy_var(self):
 				alpha = np.exp(self.log_alpha.detach().numpy())

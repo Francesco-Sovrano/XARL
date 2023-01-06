@@ -1,6 +1,19 @@
 from ray.rllib.agents.ddpg.ddpg_tf_policy import *
 from deer.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
-from deer.agents.xaddpg.xaddpg_torch_policy import torch_get_distribution_inputs_and_class
+from ray.rllib.models.tf.tf_action_dist import Deterministic, Dirichlet
+
+def tf_get_distribution_inputs_and_class(policy, model, input_dict, *, explore = True, is_training = False, **kwargs):
+	input_dict = input_dict.copy(shallow=True)
+	input_dict.set_training(is_training)
+	assert input_dict.is_training==is_training
+	model_out, _ = model(input_dict, [], None)
+	dist_inputs = model.get_policy_output(model_out)
+
+	if isinstance(policy.action_space, Simplex):
+		distr_class = Dirichlet
+	else:
+		distr_class = Deterministic
+	return dist_inputs, distr_class, []  # []=state out
 
 def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	twin_q = policy.config["twin_q"]
@@ -184,7 +197,7 @@ def tf_setup_mid_mixins(policy, obs_space, action_space, config):
 XADDPGTFPolicy = DDPGTFPolicy.with_updates(
 	name="XADDPGTFPolicy",
 	postprocess_fn=xa_postprocess_nstep_and_prio,
-	action_distribution_fn=torch_get_distribution_inputs_and_class,
+	action_distribution_fn=tf_get_distribution_inputs_and_class,
 	loss_fn=xaddpg_actor_critic_loss,
 	before_loss_init=tf_setup_mid_mixins,
 	mixins=[TargetNetworkMixin, ActorCriticOptimizerMixin, TFComputeTDErrorMixin],

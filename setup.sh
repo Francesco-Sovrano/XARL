@@ -29,16 +29,16 @@ pip install -r environments/bot_controller/requirements.txt
 # echo 'Installing env PettingZoo..'
 # pip install -r environments/petting_zoo/requirements.txt
 
-# echo 'Installing env PRIMAL..'
-# pip install -r environments/primal/requirements.txt
-# cd environments/primal/od_mstar3
-# python3 setup.py build_ext --inplace
-# rm -r build
-# cd ../../..
-# cd environments/primal/astarlib3
-# python3 setup.py build_ext --inplace
-# rm -r build
-# cd ../../..
+echo 'Installing env PRIMAL..'
+pip install -r environments/primal/requirements.txt
+cd environments/primal/od_mstar3
+python3 setup.py build_ext --inplace
+rm -r build
+cd ../../..
+cd environments/primal/astarlib3
+python3 setup.py build_ext --inplace
+rm -r build
+cd ../../..
 
 echo 'Installing DEER..'
 pip install -e ./package # cmake is needed

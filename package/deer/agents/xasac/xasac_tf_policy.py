@@ -2,6 +2,7 @@
 TensorFlow policy class used for SAC.
 """
 from ray.rllib.agents.sac.sac_tf_policy import *
+from ray.rllib.utils.tf_utils import make_tf_callable
 from ray.rllib.agents.sac.sac_tf_policy import _get_dist_class
 from deer.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
 
@@ -168,6 +169,10 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 		)
 	else:
 		alpha_loss = -tf.reduce_mean(prio_weights * model.log_alpha * tf.stop_gradient(log_pis_t + model.target_entropy))
+		# Note: Do not detach q_t_det_policy here b/c is depends partly
+		# on the policy vars (policy sample pushed through Q-net).
+		# However, we must make sure `actor_loss` is not used to update
+		# the Q-net(s)' variables.
 		actor_loss = tf.reduce_mean(prio_weights * (model.alpha * log_pis_t - q_t_det_policy))
 
 	# Save for stats function.

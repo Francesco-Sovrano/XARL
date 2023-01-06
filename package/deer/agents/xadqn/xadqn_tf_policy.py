@@ -2,6 +2,7 @@
 PyTorch policy class used for SAC.
 """
 from ray.rllib.agents.dqn.dqn_tf_policy import *
+from ray.rllib.utils.tf_utils import make_tf_callable
 from deer.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
 
 def xadqn_q_losses(policy, model, _, train_batch):
