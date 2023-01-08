@@ -709,6 +709,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 		return [self._seed]
 
 	def __init__(self, config=None):
+		super().__init__()
 		self.env_config = config
 		self.num_agents = config.get('num_agents',1)
 		self.viewer = None
