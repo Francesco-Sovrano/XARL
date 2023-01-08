@@ -153,7 +153,7 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 					# NOTE: No stop_grad around policy output here
 					# (compare with q_t_det_policy for continuous case).
 					policy_t,
-					alpha * log_pis_t - q_t.detach(),
+					alpha.detach() * log_pis_t - q_t.detach(),
 				),
 				dim=-1,
 			)
@@ -164,7 +164,7 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 		# on the policy vars (policy sample pushed through Q-net).
 		# However, we must make sure `actor_loss` is not used to update
 		# the Q-net(s)' variables.
-		actor_loss = torch.mean(train_batch[PRIO_WEIGHTS] * (alpha * log_pis_t - q_t_det_policy))
+		actor_loss = torch.mean(train_batch[PRIO_WEIGHTS] * (alpha.detach() * log_pis_t - q_t_det_policy))
 
 	# Store values for stats function in model (tower), such that for
 	# multi-GPU, we do not override them during the parallel loss phase.
