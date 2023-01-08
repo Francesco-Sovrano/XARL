@@ -1,12 +1,24 @@
 """
 TensorFlow policy class used for SAC.
 """
-from ray.rllib.agents.sac.sac_tf_policy import *
+from ray.rllib.algorithms.sac.sac_tf_policy import *
 from ray.rllib.utils.tf_utils import make_tf_callable
-from ray.rllib.agents.sac.sac_tf_policy import _get_dist_class
+from ray.rllib.algorithms.sac.sac_tf_policy import _get_dist_class
 from deer.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
 
 def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
+	"""Constructs the loss for the Soft Actor Critic.
+
+	Args:
+		policy: The Policy to calculate the loss for.
+		model (ModelV2): The Model to calculate the loss for.
+		dist_class (Type[ActionDistribution]: The action distr. class.
+		train_batch: The training data.
+
+	Returns:
+		Union[TensorType, List[TensorType]]: A single loss tensor or a list
+			of loss tensors.
+	"""
 	# Should be True only for debugging purposes (e.g. test cases)!
 	deterministic = policy.config["_deterministic_loss"]
 
@@ -36,17 +48,21 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 	# Discrete actions case.
 	if model.discrete:
 		# Get all action probs directly from pi and form their logp.
-		log_pis_t = tf.nn.log_softmax(model.get_policy_output(model_out_t), -1)
+		action_dist_inputs_t, _ = model.get_action_model_outputs(model_out_t)
+		log_pis_t = tf.nn.log_softmax(action_dist_inputs_t, -1)
 		policy_t = tf.math.exp(log_pis_t)
-		log_pis_tp1 = tf.nn.log_softmax(model.get_policy_output(model_out_tp1), -1)
+
+		action_dist_inputs_tp1, _ = model.get_action_model_outputs(model_out_tp1)
+		log_pis_tp1 = tf.nn.log_softmax(action_dist_inputs_tp1, -1)
 		policy_tp1 = tf.math.exp(log_pis_tp1)
+
 		# Q-values.
-		q_t = model.get_q_values(model_out_t)
+		q_t, _ = model.get_q_values(model_out_t)
 		# Target Q-values.
-		q_tp1 = policy.target_model.get_q_values(target_model_out_tp1)
+		q_tp1, _ = policy.target_model.get_q_values(target_model_out_tp1)
 		if policy.config["twin_q"]:
-			twin_q_t = model.get_twin_q_values(model_out_t)
-			twin_q_tp1 = policy.target_model.get_twin_q_values(target_model_out_tp1)
+			twin_q_t, _ = model.get_twin_q_values(model_out_t)
+			twin_q_tp1, _ = policy.target_model.get_twin_q_values(target_model_out_tp1)
 			q_tp1 = tf.reduce_min((q_tp1, twin_q_tp1), axis=0)
 		q_tp1 -= model.alpha * log_pis_tp1
 
@@ -66,18 +82,17 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 	else:
 		# Sample simgle actions from distribution.
 		action_dist_class = _get_dist_class(policy, policy.config, policy.action_space)
-		action_dist_t = action_dist_class(
-			model.get_policy_output(model_out_t), policy.model
-		)
+		action_dist_inputs_t, _ = model.get_action_model_outputs(model_out_t)
+		action_dist_t = action_dist_class(action_dist_inputs_t, policy.model)
 		policy_t = (
 			action_dist_t.sample()
 			if not deterministic
 			else action_dist_t.deterministic_sample()
 		)
 		log_pis_t = tf.expand_dims(action_dist_t.logp(policy_t), -1)
-		action_dist_tp1 = action_dist_class(
-			model.get_policy_output(model_out_tp1), policy.model
-		)
+
+		action_dist_inputs_tp1, _ = model.get_action_model_outputs(model_out_tp1)
+		action_dist_tp1 = action_dist_class(action_dist_inputs_tp1, policy.model)
 		policy_tp1 = (
 			action_dist_tp1.sample()
 			if not deterministic
@@ -86,26 +101,26 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 		log_pis_tp1 = tf.expand_dims(action_dist_tp1.logp(policy_tp1), -1)
 
 		# Q-values for the actually selected actions.
-		q_t = model.get_q_values(
+		q_t, _ = model.get_q_values(
 			model_out_t, tf.cast(train_batch[SampleBatch.ACTIONS], tf.float32)
 		)
 		if policy.config["twin_q"]:
-			twin_q_t = model.get_twin_q_values(
+			twin_q_t, _ = model.get_twin_q_values(
 				model_out_t, tf.cast(train_batch[SampleBatch.ACTIONS], tf.float32)
 			)
 
 		# Q-values for current policy in given current state.
-		q_t_det_policy = model.get_q_values(model_out_t, policy_t)
+		q_t_det_policy, _ = model.get_q_values(model_out_t, policy_t)
 		if policy.config["twin_q"]:
-			twin_q_t_det_policy = model.get_twin_q_values(model_out_t, policy_t)
+			twin_q_t_det_policy, _ = model.get_twin_q_values(model_out_t, policy_t)
 			q_t_det_policy = tf.reduce_min(
 				(q_t_det_policy, twin_q_t_det_policy), axis=0
 			)
 
 		# target q network evaluation
-		q_tp1 = policy.target_model.get_q_values(target_model_out_tp1, policy_tp1)
+		q_tp1, _ = policy.target_model.get_q_values(target_model_out_tp1, policy_tp1)
 		if policy.config["twin_q"]:
-			twin_q_tp1 = policy.target_model.get_twin_q_values(
+			twin_q_tp1, _ = policy.target_model.get_twin_q_values(
 				target_model_out_tp1, policy_tp1
 			)
 			# Take min over both twin-NNs.
@@ -162,18 +177,16 @@ def xasac_actor_critic_loss(policy, model, dist_class, train_batch):
 					# NOTE: No stop_grad around policy output here
 					# (compare with q_t_det_policy for continuous case).
 					policy_t,
-					model.alpha * log_pis_t - tf.stop_gradient(q_t),
+					tf.stop_gradient(model.alpha) * log_pis_t - tf.stop_gradient(q_t),
 				),
 				axis=-1,
 			)
 		)
 	else:
-		alpha_loss = -tf.reduce_mean(prio_weights * model.log_alpha * tf.stop_gradient(log_pis_t + model.target_entropy))
-		# Note: Do not detach q_t_det_policy here b/c is depends partly
-		# on the policy vars (policy sample pushed through Q-net).
-		# However, we must make sure `actor_loss` is not used to update
-		# the Q-net(s)' variables.
-		actor_loss = tf.reduce_mean(prio_weights * (model.alpha * log_pis_t - q_t_det_policy))
+		alpha_loss = -tf.reduce_mean(
+			prio_weights * model.log_alpha * tf.stop_gradient(log_pis_t + model.target_entropy)
+		)
+		actor_loss = tf.reduce_mean(prio_weights * (tf.stop_gradient(model.alpha) * log_pis_t - q_t_det_policy))
 
 	# Save for stats function.
 	policy.policy_t = policy_t

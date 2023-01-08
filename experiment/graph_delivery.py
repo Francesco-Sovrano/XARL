@@ -13,7 +13,7 @@ from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 import numpy as np
 import copy
 
-from deer.agents.xasac import XASACTrainer, XASAC_DEFAULT_CONFIG
+from deer.agents.xasac import XASAC, XASACConfig
 from environments import *
 
 number_of_agents = 9
@@ -32,9 +32,10 @@ VISIBILITY_RADIUS = 8
 EXPERIENCE_BUFFER_SIZE = 2**14
 
 default_options = {
+	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
 	# "num_workers": 4, # Number of rollout worker actors to create for parallel sampling. Setting this to 0 will force rollouts to be done in the trainer actor.
 	# "num_envs_per_worker": 1, # Number of environments to evaluate vector-wise per worker. This enables model inference batching, which can improve performance for inference bottlenecked workloads.
-	# "framework": "torch",
+	"framework": "torch",
 	# "vf_loss_coeff": 1.0, # Coefficient of the value function loss. IMPORTANT: you must tune this if you set vf_share_layers=True inside your model's config.
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDelivery requires a longer horizon.
@@ -53,15 +54,13 @@ default_options = {
 	# "rollout_fragment_length": 2**10, # Divide episodes into fragments of this many steps each during rollouts. Default is 1.
 	"train_batch_size": 2**8, # Number of 'n_step' transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for SAC, 500 for APPO.
 	###########################
-	"learning_starts": max(EXPERIENCE_BUFFER_SIZE,HORIZON*number_of_agents), # How many steps of the model to sample before learning starts.
+	"num_steps_sampled_before_learning_starts": max(EXPERIENCE_BUFFER_SIZE,HORIZON*number_of_agents), # How many steps of the model to sample before learning starts.
 	# 'buffer_size': EXPERIENCE_BUFFER_SIZE, # Size of the experience buffer. Default 50000
 }
 xa_default_options = {
-	"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
-	# "prioritized_replay_alpha": 0.6,
-	# "prioritized_replay_beta": 0.4, # The smaller this is, the stronger is over-sampling
-	# "prioritized_replay_eps": 1e-6,
 	"buffer_options": {
+		"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
+		"centralised_buffer": CENTRALISED_TRAINING, # for MARL
 		'priority_aggregation_fn': 'np.mean', # A reduction that takes as input a list of numbers and returns a number representing a batch priority.
 		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (whose number depends on the clustering scheme) of the experience buffer. Every batch has size 'sample_batch_size' (default is 1).
 		'prioritization_alpha': 0.6, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
@@ -73,26 +72,27 @@ xa_default_options = {
 		'cluster_level_weighting': True, # Whether to use cluster-level information to compute importance weights rather than the whole buffer.
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
-	"clustering_scheme": None,
-	"clustering_scheme_options": {
-		"n_clusters": {
-			"who": 4,
-			# "why": 8,
-			# "what": 8,
+	"clustering_options": {
+		"clustering_scheme": None,
+		"clustering_scheme_options": {
+			"n_clusters": {
+				"who": 4,
+				# "why": 8,
+				# "what": 8,
+			},
+			"default_n_clusters": 8,
+			"frequency_independent_clustering": False, # Setting this to True can be memory expensive, especially for WHO explanations
+			"agent_action_sliding_window": 2**3,
+			"episode_window_size": 2**6, 
+			"batch_window_size": 2**8, 
+			"training_step_window_size": 2**2,
 		},
-		"default_n_clusters": 8,
-		"frequency_independent_clustering": False, # Setting this to True can be memory expensive, especially for WHO explanations
-		"agent_action_sliding_window": 2**3,
-		"episode_window_size": 2**6, 
-		"batch_window_size": 2**8, 
-		"training_step_window_size": 2**2,
-	},
-	"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
-	"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
-	"cluster_overview_size": 1, # cluster_overview_size <= train_batch_size. If None, then cluster_overview_size is automatically set to train_batch_size. -- When building a single train batch, do not sample a new cluster before x batches are sampled from it. The closer cluster_overview_size is to train_batch_size, the faster is the batch sampling procedure.
-	"collect_cluster_metrics": False, # Whether to collect metrics about the experience clusters. It consumes more resources.
-	"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
-	"centralised_buffer": CENTRALISED_TRAINING, # for MARL
+		"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
+		"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
+		"cluster_overview_size": 1, # cluster_overview_size <= train_batch_size. If None, then cluster_overview_size is automatically set to train_batch_size. -- When building a single train batch, do not sample a new cluster before x batches are sampled from it. The closer cluster_overview_size is to train_batch_size, the faster is the batch sampling procedure.
+		"collect_cluster_metrics": False, # Whether to collect metrics about the experience clusters. It consumes more resources.
+		"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
+	}
 }
 
 def copy_dict_and_update(d,u):
@@ -115,14 +115,14 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 	assert target_junctions_number
 	return { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
 		# "no_done_at_end": False, # IMPORTANT: if set to True it allows lifelong learning with decent bootstrapping
-		# "model": {
-		# 	# "custom_model": "adaptive_multihead_network",
-		# 	"custom_model": "comm_adaptive_multihead_network",
-		# 	"custom_model_config": {
-		# 		"comm_range": VISIBILITY_RADIUS,
-		# 		"add_nonstationarity_correction": False, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
-		# 	},
-		# },
+		"model": {
+			# "custom_model": "adaptive_multihead_network",
+			"custom_model": "comm_adaptive_multihead_network",
+			"custom_model_config": {
+				"comm_range": VISIBILITY_RADIUS,
+				"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
+			},
+		},
 		"env_config": {
 			"horizon": HORIZON, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 			'num_agents': num_agents,
@@ -153,7 +153,7 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 		}
 	}
 
-clustering_xi = 2
+clustering_xi = 4
 discrete_actions = None
 algorithm_options = {
 	"tau": 1e-4, # v1
@@ -189,7 +189,7 @@ fp_experiment_options = copy_dict_and_update_with_key(experiment_options, "model
 		"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
 	},
 })
-xaer_experiment_options = copy_dict_and_update(experiment_options,{
+xaer_experiment_options = copy_dict_and_update_with_key(experiment_options, "clustering_options", {
 	'clustering_scheme': [
 		'Why',
 		# 'Who',
@@ -211,14 +211,13 @@ deer_experiment_options = copy_dict_and_update_with_key(xaer_experiment_options,
 	'stationarity_window_size': 5, # Whether to use a random number rather than the batch priority during prioritised dropping. If equal to float('inf') then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far. If lower than float('inf') and greater than 0, then stationarity_window_size is used to guarantee that every stationarity_window_size training-steps the buffer is emptied from old state transitions.
 })
 
-CONFIG = XASAC_DEFAULT_CONFIG.copy()
-CONFIG.update(deer_experiment_options)
+CONFIG = deer_experiment_options
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 
 # Register models
 from ray.rllib.models import ModelCatalog
 from deer.models import get_model_catalog_dict
-for k,v in get_model_catalog_dict('sac', CONFIG["framework"]).items():
+for k,v in get_model_catalog_dict('sac', CONFIG.get("framework",'tf')).items():
 	ModelCatalog.register_custom_model(k, v)
 
 # Setup MARL training strategy: centralised or decentralised
@@ -227,16 +226,15 @@ obs_space = env.observation_space
 act_space = env.action_space
 if not CENTRALISED_TRAINING:
 	policy_graphs = {
-		f'agent-{i}': (None, obs_space, act_space, CONFIG) 
+		f'agent-{i}'
 		for i in range(number_of_agents)
 	}
 	policy_mapping_fn = lambda agent_id: f'agent-{agent_id}'
 else:
 	# policy_graphs = {DEFAULT_POLICY_ID: (None, obs_space, act_space, CONFIG)}
-	policy_graphs = {}
+	policy_graphs = {DEFAULT_POLICY_ID}
 	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
 
-CONFIG["centralised_buffer"] = CENTRALISED_TRAINING
 CONFIG["multiagent"].update({
 	"policies": policy_graphs,
 	"policy_mapping_fn": policy_mapping_fn,
@@ -273,5 +271,5 @@ ray.init(
 	num_cpus=os.cpu_count(),
 )
 
-train(XASACTrainer, CONFIG, default_environment, test_every_n_step=test_every_n_step, stop_training_after_n_step=stop_training_after_n_step, 
+train(XASAC, XASACConfig, CONFIG, default_environment, test_every_n_step=test_every_n_step, stop_training_after_n_step=stop_training_after_n_step, 
 	save_gif=save_gifs, n_episodes=episodes_per_test, with_log=False)

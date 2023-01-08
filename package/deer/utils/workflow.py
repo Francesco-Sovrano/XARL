@@ -14,7 +14,7 @@ from ray.tune.logger import Logger, UnifiedLogger
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
 import tempfile
-# import json
+import json
 
 def find_last_checkpoint_in_directory(directory):
 	checkpoint_list = [
@@ -45,12 +45,12 @@ def get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, e
 	checkpoint_n, checkpoint = find_last_checkpoint_in_directory(logdir)
 	return checkpoint_n, checkpoint, logger_creator_fn
 
-def restore_agent_from_checkpoint(alg_class, config, environment_class, checkpoint):
-	assert checkpoint, "A previously trained checkpoint must be provided"
-	agent = alg_class(config, env=environment_class)
-	print(f'Restoring checkpoint: {checkpoint}')
-	agent.restore(checkpoint)
-	return agent
+# def restore_agent_from_checkpoint(alg_class, config, environment_class, checkpoint):
+# 	assert checkpoint, "A previously trained checkpoint must be provided"
+# 	agent = alg_class(config, env=environment_class)
+# 	print(f'Restoring checkpoint: {checkpoint}')
+# 	agent.restore(checkpoint)
+# 	return agent
 
 def test(agent, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
 	"""Tests and renders a previously trained model"""
@@ -211,18 +211,25 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 			f'median steps: {np.median(step_list)} <{np.quantile(step_list, 0.25)}, {np.quantile(step_list, 0.75)}>\n',
 		])
 
-def train(trainer_class, config, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
+def train(trainer_class, config_class, config_dict, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
 	_, checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment)
 	# Add required Multi-Agent XAER options
-	if config.get("clustering_scheme", None):
-		if 'UWho' in config["clustering_scheme"]:
-			config["env_config"]['build_action_list'] = True
+	if config_dict.get("clustering_scheme", None):
+		if 'UWho' in config_dict["clustering_scheme"]:
+			config_dict["env_config"]['build_action_list'] = True
 			print('Added "build_action_list" to "env_config"')
-		if 'UWhich_CoopStrategy' in config["clustering_scheme"]:
-			config["env_config"]['build_joint_action_list'] = True
+		if 'UWhich_CoopStrategy' in config_dict["clustering_scheme"]:
+			config_dict["env_config"]['build_joint_action_list'] = True
 			print('Added "build_joint_action_list" to "env_config"')
+
+	config = config_class.from_dict(config_dict)
+	config.environment(environment_class)
+	config.logger_creator = logger_creator_fn
+
+	print(f'Running this config: {config.to_dict()}')
+	
 	# Configure RLlib to train a policy using the given environment and trainer
-	agent = trainer_class(config, env=environment_class, logger_creator=logger_creator_fn)
+	agent = trainer_class(config)
 	if checkpoint:
 		print(f'Loading checkpoint: {checkpoint}')
 		agent.restore(checkpoint)
@@ -231,7 +238,7 @@ def train(trainer_class, config, environment_class, experiment=None, test_every_
 	if not policy:
 		policy_list = [
 			agent.get_policy(policy_id)
-			for policy_id in config["multiagent"]["policies"].keys()
+			for policy_id in config_dict["multiagent"]["policies"].keys()
 		]
 	else:
 		policy_list = [policy]
@@ -259,7 +266,7 @@ def train(trainer_class, config, environment_class, experiment=None, test_every_
 		print(f'Checkpoint saved in {checkpoint}')
 		print(f'Testing..')
 		try:
-			test(agent, config, environment_class, checkpoint, save_gif=save_gif, delete_screens_after_making_gif=delete_screens_after_making_gif, compress_gif=compress_gif, n_episodes=n_episodes, with_log=with_log)
+			test(agent, config.to_dict(), environment_class, checkpoint, save_gif=save_gif, delete_screens_after_making_gif=delete_screens_after_making_gif, compress_gif=compress_gif, n_episodes=n_episodes, with_log=with_log)
 		except Exception as e:
 			print(e)
 		
@@ -267,8 +274,9 @@ def train(trainer_class, config, environment_class, experiment=None, test_every_
 		n += 1
 		last_time = time.time()
 		result = agent.train()
-		train_steps = result["info"]["num_steps_trained"]
-		sample_steps = result["info"]["num_steps_sampled"]
+		# print(result)
+		train_steps = result["info"]["num_env_steps_trained"]
+		sample_steps = result["info"]["num_env_steps_sampled"]
 		episode = {
 			'n': n, 
 			'episode_reward_min': result['episode_reward_min'], 

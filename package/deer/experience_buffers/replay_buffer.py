@@ -18,7 +18,7 @@ from deer.utils import ReadWriteLock
 
 from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch, DEFAULT_POLICY_ID
 from ray.util.iter import ParallelIteratorWorker
-from ray.rllib.utils.timer import TimerStat
+from ray.util.timer import _Timer as TimerStat
 
 logger = logging.getLogger(__name__)
 
@@ -106,26 +106,22 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 	may be created to increase parallelism."""
 
 	def __init__(self, 
-		prioritized_replay=True,
-		buffer_options=None, 
-		learning_starts=1000, 
+		buffer_options, 
+		learning_starts=1000,
 		seed=None,
 		cluster_selection_policy='random_uniform',
 		ratio_of_samples_from_unclustered_buffer=0,
-		centralised_buffer=True,
-		replay_integral_multi_agent_batches=False,
-		batch_dropout_rate=0,
 	):
-		logger.warning(f'Building LocalReplayBuffer with centralised_buffer = {centralised_buffer}')
-		self.prioritized_replay = prioritized_replay
-		self.centralised_buffer = centralised_buffer
-		self.replay_integral_multi_agent_batches = replay_integral_multi_agent_batches
-		self.buffer_options = {} if not buffer_options else buffer_options
+		self.buffer_options = buffer_options
+		self.prioritized_replay = self.buffer_options.get('prioritized_replay',True)
+		self.centralised_buffer = self.buffer_options.get('centralised_buffer', True)
+		logger.warning(f'Building LocalReplayBuffer with centralised_buffer = {self.centralised_buffer}')
+		self.replay_integral_multi_agent_batches = self.buffer_options.get('replay_integral_multi_agent_batches', False)
 		dummy_buffer = PseudoPrioritizedBuffer(**self.buffer_options)
 		self.buffer_size = dummy_buffer.global_size
 		self.is_weighting_expected_values = dummy_buffer.is_weighting_expected_values()
 		self.replay_starts = learning_starts
-		self.batch_dropout_rate = batch_dropout_rate
+		self.batch_dropout_rate = self.buffer_options.get('batch_dropout_rate', 0)
 		self._buffer_lock = ReadWriteLock()
 		self._cluster_selection_policy = cluster_selection_policy
 		

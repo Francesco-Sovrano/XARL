@@ -8,7 +8,7 @@ from deer.utils.segment_tree import SumSegmentTree, MinSegmentTree, MaxSegmentTr
 import copy
 import uuid
 from deer.utils.running_statistics import RunningStats
-from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
+from ray.rllib.algorithms.dqn.dqn_tf_policy import PRIO_WEIGHTS
 from ray.rllib.policy.sample_batch import SampleBatch
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class PseudoPrioritizedBuffer(Buffer):
 		priority_lower_limit=None,
 		max_age_window=None,
 		seed=None,
+		**args
 	): # O(1)
 		assert not prioritization_importance_beta or prioritization_importance_beta > 0., f"prioritization_importance_beta must be > 0, but it is {prioritization_importance_beta}"
 		assert not prioritization_importance_eta or prioritization_importance_eta > 0, f"prioritization_importance_eta must be > 0, but it is {prioritization_importance_eta}"

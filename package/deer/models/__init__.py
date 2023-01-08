@@ -7,7 +7,7 @@ from deer.models.tf.head_generator.comm_adaptive_model_wrapper import get_input_
 from deer.models.tf.dqn import TFAdaptiveMultiHeadDQN
 from deer.models.tf.ddpg import TFAdaptiveMultiHeadDDPG
 from deer.models.tf.sac import TFAdaptiveMultiHeadNet as TFAdaptiveMultiHeadNetSAC
-from deer.models.tf.appo import TFAdaptiveMultiHeadNet as TFAdaptiveMultiHeadNetAPPO
+# from deer.models.tf.appo import TFAdaptiveMultiHeadNet as TFAdaptiveMultiHeadNetAPPO
 model_catalog_dict['tf'] = {
     'dqn': {
         "adaptive_multihead_network": TFAdaptiveMultiHeadDQN.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict),
@@ -24,11 +24,11 @@ model_catalog_dict['tf'] = {
         "primal_adaptive_multihead_network": TFAdaptiveMultiHeadNetSAC.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal),
         "comm_adaptive_multihead_network": TFAdaptiveMultiHeadNetSAC.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm),
     },
-    'ppo': {
-        "adaptive_multihead_network": TFAdaptiveMultiHeadNetAPPO.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict),
-        "primal_adaptive_multihead_network": TFAdaptiveMultiHeadNetAPPO.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal),
-        "comm_adaptive_multihead_network": TFAdaptiveMultiHeadNetAPPO.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm),
-    },
+    # 'ppo': {
+    #     "adaptive_multihead_network": TFAdaptiveMultiHeadNetAPPO.init(get_input_layers_and_keras_layers, get_input_list_from_input_dict),
+    #     "primal_adaptive_multihead_network": TFAdaptiveMultiHeadNetAPPO.init(get_input_layers_and_keras_layers_primal, get_input_list_from_input_dict_primal),
+    #     "comm_adaptive_multihead_network": TFAdaptiveMultiHeadNetAPPO.init(get_input_layers_and_keras_layers_comm, get_input_list_from_input_dict_comm),
+    # },
 }
 model_catalog_dict['tf']['td3'] = model_catalog_dict['tf']['ddpg']
 

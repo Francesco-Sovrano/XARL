@@ -1,10 +1,10 @@
 echo 'Create a virtual environment'
-virtualenv .env -p python3
+python3.7 -m venv .env
 
 echo 'Activate the virtual environment'
 source .env/bin/activate
 # echo 'Update the virtual environment'
-pip install -U pip setuptools wheel psutil
+pip install -U pip setuptools wheel psutil Cython
 
 echo 'Installing env CarController..'
 pip install -r environments/bot_controller/requirements.txt
@@ -42,9 +42,9 @@ cd ../../..
 
 echo 'Installing DEER..'
 pip install -e ./package # cmake is needed
-pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.11.0+cpu.html
+pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.1+cpu.html
 
-echo 'Fixing environments rendering'
-pip install pyglet==1.5.11 # fix for rendering environments
-echo 'Fixing protobuf'
-pip install protobuf==3.20.* # https://github.com/protocolbuffers/protobuf/issues/10051
+# echo 'Fixing environments rendering'
+# pip install pyglet==1.5.11 # fix for rendering environments
+# echo 'Fixing protobuf'
+# pip install protobuf==3.20.* # https://github.com/protocolbuffers/protobuf/issues/10051

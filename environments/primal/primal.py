@@ -29,7 +29,7 @@ class Primal(MultiAgentEnv):
 		}
 
 	def __init__(self, config):
-		super().__init__()
+		# super().__init__()
 		self.observation_size = config.get('observation_size',3)
 		self.observer = Primal2Observer(
 			observation_size=self.observation_size, 

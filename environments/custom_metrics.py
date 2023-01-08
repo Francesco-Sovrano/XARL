@@ -5,7 +5,7 @@ custom metric.
 
 from typing import Dict
 
-from ray.rllib.agents.callbacks import DefaultCallbacks
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.env import BaseEnv
 from ray.rllib.evaluation import MultiAgentEpisode, RolloutWorker
 from ray.rllib.policy import Policy
@@ -20,6 +20,6 @@ class CustomEnvironmentCallbacks(DefaultCallbacks):
 			for k,v in last_info["stats_dict"].items():
 				episode.custom_metrics[k] = v
 
-	def on_train_result(self, *, trainer, result: dict, **kwargs):
+	def on_train_result(self, *, algorithm, result, **kwargs):
 		# you can mutate the result dict to add new fields to return
 		result["callback_ok"] = True

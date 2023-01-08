@@ -1,61 +1,45 @@
-from ray.rllib.agents.ddpg.ddpg_tf_policy import *
+from ray.rllib.algorithms.ddpg.ddpg_tf_policy import *
 from deer.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
-from ray.rllib.models.tf.tf_action_dist import Deterministic, Dirichlet
 
-def tf_get_distribution_inputs_and_class(policy, model, input_dict, *, explore = True, is_training = False, **kwargs):
-	input_dict = input_dict.copy(shallow=True)
-	input_dict.set_training(is_training)
-	assert input_dict.is_training==is_training
-	model_out, _ = model(input_dict, [], None)
-	dist_inputs = model.get_policy_output(model_out)
+def loss(self, model, dist_class, train_batch):
+	twin_q = self.config["twin_q"]
+	gamma = self.config["gamma"]
+	n_step = self.config["n_step"]
+	use_huber = self.config["use_huber"]
+	huber_threshold = self.config["huber_threshold"]
+	l2_reg = self.config["l2_reg"]
 
-	if isinstance(policy.action_space, Simplex):
-		distr_class = Dirichlet
-	else:
-		distr_class = Deterministic
-	return dist_inputs, distr_class, []  # []=state out
-
-def xaddpg_actor_critic_loss(policy, model, _, train_batch):
-	twin_q = policy.config["twin_q"]
-	gamma = policy.config["gamma"]
-	n_step = policy.config["n_step"]
-	use_huber = policy.config["use_huber"]
-	huber_threshold = policy.config["huber_threshold"]
-	l2_reg = policy.config["l2_reg"]
-
-	input_dict = SampleBatch({
-		"obs": train_batch[SampleBatch.CUR_OBS], 
-		'policy_signature': train_batch.get('policy_signature',None)
-		}, _is_training=True)
-	input_dict_next = SampleBatch({
-		"obs": train_batch[SampleBatch.NEXT_OBS], 
-		'policy_signature': train_batch.get('policy_signature',None)
-		}, _is_training=True)
+	input_dict = SampleBatch(
+		obs=train_batch[SampleBatch.CUR_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True
+	)
+	input_dict_next = SampleBatch(
+		obs=train_batch[SampleBatch.NEXT_OBS], policy_signature=train_batch.get('policy_signature',None), _is_training=True
+	)
 
 	model_out_t, _ = model(input_dict, [], None)
 	model_out_tp1, _ = model(input_dict_next, [], None)
-	target_model_out_tp1, _ = policy.target_model(input_dict_next, [], None)
+	target_model_out_tp1, _ = self.target_model(input_dict_next, [], None)
 
-	policy.target_q_func_vars = policy.target_model.variables()
+	self._target_q_func_vars = self.target_model.variables()
 
 	# Policy network evaluation.
 	policy_t = model.get_policy_output(model_out_t)
-	policy_tp1 = policy.target_model.get_policy_output(target_model_out_tp1)
+	policy_tp1 = self.target_model.get_policy_output(target_model_out_tp1)
 
 	# Action outputs.
-	if policy.config["smooth_target_policy"]:
-		target_noise_clip = policy.config["target_noise_clip"]
+	if self.config["smooth_target_policy"]:
+		target_noise_clip = self.config["target_noise_clip"]
 		clipped_normal_sample = tf.clip_by_value(
 			tf.random.normal(
-				tf.shape(policy_tp1), stddev=policy.config["target_noise"]
+				tf.shape(policy_tp1), stddev=self.config["target_noise"]
 			),
 			-target_noise_clip,
 			target_noise_clip,
 		)
 		policy_tp1_smoothed = tf.clip_by_value(
 			policy_tp1 + clipped_normal_sample,
-			policy.action_space.low * tf.ones_like(policy_tp1),
-			policy.action_space.high * tf.ones_like(policy_tp1),
+			self.action_space.low * tf.ones_like(policy_tp1),
+			self.action_space.high * tf.ones_like(policy_tp1),
 		)
 	else:
 		# No smoothing, just use deterministic actions.
@@ -75,10 +59,12 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 		)
 
 	# Target q-net(s) evaluation.
-	q_tp1 = policy.target_model.get_q_values(target_model_out_tp1, policy_tp1_smoothed)
+	q_tp1 = self.target_model.get_q_values(
+		target_model_out_tp1, policy_tp1_smoothed
+	)
 
 	if twin_q:
-		twin_q_tp1 = policy.target_model.get_twin_q_values(
+		twin_q_tp1 = self.target_model.get_twin_q_values(
 			target_model_out_tp1, policy_tp1_smoothed
 		)
 
@@ -95,7 +81,7 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 	# Compute RHS of bellman equation.
 	q_t_selected_target = tf.stop_gradient(
 		tf.cast(train_batch[SampleBatch.REWARDS], tf.float32)
-		+ gamma ** n_step * q_tp1_best_masked
+		+ gamma**n_step * q_tp1_best_masked
 	)
 
 	# Compute the error (potentially clipped).
@@ -123,15 +109,15 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 
 	# Add l2-regularization if required.
 	if l2_reg is not None:
-		for var in policy.model.policy_variables():
+		for var in self.model.policy_variables():
 			if "bias" not in var.name:
 				actor_loss += l2_reg * tf.nn.l2_loss(var)
-		for var in policy.model.q_variables():
+		for var in self.model.q_variables():
 			if "bias" not in var.name:
 				critic_loss += l2_reg * tf.nn.l2_loss(var)
 
 	# Model self-supervised losses.
-	if policy.config["use_state_preprocessor"]:
+	if self.config["use_state_preprocessor"]:
 		# Expand input_dict in case custom_loss' need them.
 		input_dict[SampleBatch.ACTIONS] = train_batch[SampleBatch.ACTIONS]
 		input_dict[SampleBatch.REWARDS] = train_batch[SampleBatch.REWARDS]
@@ -155,22 +141,20 @@ def xaddpg_actor_critic_loss(policy, model, _, train_batch):
 		)
 
 	# Store values for stats function.
-	policy.actor_loss = actor_loss
-	policy.critic_loss = critic_loss
-	policy.td_error = td_error
-	policy.q_t = q_t
+	self.actor_loss = actor_loss
+	self.critic_loss = critic_loss
+	self.td_error = td_error
+	self.q_t = q_t
 
 	# Return one loss value (even though we treat them separately in our
 	# 2 optimizers: actor and critic).
-	return policy.critic_loss + policy.actor_loss
+	return self.critic_loss + self.actor_loss
 
-class TFComputeTDErrorMixin:
+class NewComputeTDErrorMixin:
 	def __init__(self):
 		@make_tf_callable(self.get_session(), dynamic_shape=True)
 		def compute_td_error(obs_t, act_t, rew_t, obs_tp1, done_mask, importance_weights, policy_signature=None):
-			# Do forward pass on loss to update td errors attribute
-			# (one TD-error value per item in batch to update PR weights).
-			input_dict = {
+			d = {
 				SampleBatch.CUR_OBS: tf.convert_to_tensor(obs_t),
 				SampleBatch.ACTIONS: tf.convert_to_tensor(act_t),
 				SampleBatch.REWARDS: tf.convert_to_tensor(rew_t),
@@ -179,26 +163,38 @@ class TFComputeTDErrorMixin:
 				PRIO_WEIGHTS: tf.convert_to_tensor(importance_weights),
 			}
 			if policy_signature is not None:
-				input_dict["policy_signature"] = policy_signature
-			xaddpg_actor_critic_loss(
-				self,
-				self.model,
-				None,
-				input_dict,
-			)
+				d["policy_signature"] = policy_signature
+			input_dict = SampleBatch(d)
+			# Do forward pass on loss to update td errors attribute
+			# (one TD-error value per item in batch to update PR weights).
+			self.loss(self.model, None, input_dict)
 			# `self.td_error` is set in loss_fn.
 			return self.td_error
 
 		self.compute_td_error = compute_td_error
 
-def tf_setup_mid_mixins(policy, obs_space, action_space, config):
-	TFComputeTDErrorMixin.__init__(policy)
+class XADDPGTF1Policy(DDPGTF1Policy):
+	def __init__(self, observation_space, action_space, config, *, existing_inputs = None, existing_model = None):
+		super().__init__(observation_space, action_space, config, existing_inputs = existing_inputs, existing_model = existing_model)
+		NewComputeTDErrorMixin.__init__(self)
+		self.maybe_initialize_optimizer_and_loss()
+		TargetNetworkMixin.__init__(self)
 
-XADDPGTFPolicy = DDPGTFPolicy.with_updates(
-	name="XADDPGTFPolicy",
-	postprocess_fn=xa_postprocess_nstep_and_prio,
-	action_distribution_fn=tf_get_distribution_inputs_and_class,
-	loss_fn=xaddpg_actor_critic_loss,
-	before_loss_init=tf_setup_mid_mixins,
-	mixins=[TargetNetworkMixin, ActorCriticOptimizerMixin, TFComputeTDErrorMixin],
-)
+	def postprocess_trajectory(self, sample_batch, other_agent_batches = None, episode = None):
+		return xa_postprocess_nstep_and_prio(self, sample_batch, other_agent_batches, episode)
+
+	def loss(self, model, dist_class, train_batch):
+		return loss(self, model, dist_class, train_batch)
+
+class XADDPGTF2Policy(DDPGTF2Policy):
+	def __init__(self, observation_space, action_space, config, *, existing_inputs = None, existing_model = None):
+		super().__init__(observation_space, action_space, config, existing_inputs = existing_inputs, existing_model = existing_model)
+		NewComputeTDErrorMixin.__init__(self)
+		self.maybe_initialize_optimizer_and_loss()
+		TargetNetworkMixin.__init__(self)
+
+	def postprocess_trajectory(self, sample_batch, other_agent_batches = None, episode = None):
+		return xa_postprocess_nstep_and_prio(self, sample_batch, other_agent_batches, episode)
+
+	def loss(self, model, dist_class, train_batch):
+		return loss(self, model, dist_class, train_batch)

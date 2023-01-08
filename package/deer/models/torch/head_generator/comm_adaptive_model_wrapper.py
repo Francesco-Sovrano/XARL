@@ -156,7 +156,7 @@ class CommAdaptiveModel(AdaptiveModel):
 			graphs.x = torch.cat([graphs.x, all_agents_types], dim=1)
 		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
 		graphs = RelativePosition()(graphs) # Saves the relative positions of linked nodes in its edge attributes
-		graphs = RelativeOrientation(norm=True)(graphs) # Saves the relative orientations in its edge attributes
+		graphs = RelativeOrientation(norm=False)(graphs) # Saves the relative orientations in its edge attributes
 
 		## process graphs
 		gnn_output = self.gnn(graphs.x, graphs.edge_index, edge_attr=graphs.edge_attr)

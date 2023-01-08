@@ -12,22 +12,18 @@ from deer.experience_buffers.replay_buffer import SimpleReplayBuffer, LocalRepla
 from deer.experience_buffers.clustering_scheme import *
 
 def get_clustered_replay_buffer(config):
-	assert config["batch_mode"] == "complete_episodes" or not config["cluster_with_episode_type"], f"This algorithm requires 'complete_episodes' as batch_mode when 'cluster_with_episode_type' is True"
-	clustering_scheme_type = config.get("clustering_scheme", None)
+	assert config.batch_mode == "complete_episodes" or not config.clustering_options["cluster_with_episode_type"], f"This algorithm requires 'complete_episodes' as batch_mode when 'cluster_with_episode_type' is True"
+	clustering_scheme_type = config.clustering_options.get("clustering_scheme", None)
 	# no need for unclustered_buffer if clustering_scheme_type is none
-	ratio_of_samples_from_unclustered_buffer = config["ratio_of_samples_from_unclustered_buffer"] if clustering_scheme_type else 0
+	ratio_of_samples_from_unclustered_buffer = config.clustering_options["ratio_of_samples_from_unclustered_buffer"] if clustering_scheme_type else 0
 	local_replay_buffer = LocalReplayBuffer(
-		prioritized_replay=config["prioritized_replay"],
-		buffer_options=config["buffer_options"], 
-		learning_starts=config["learning_starts"], 
-		seed=config["seed"],
-		cluster_selection_policy=config["cluster_selection_policy"],
+		config.buffer_options, 
+		learning_starts=config.num_steps_sampled_before_learning_starts,
+		seed=config.seed,
+		cluster_selection_policy=config.clustering_options["cluster_selection_policy"],
 		ratio_of_samples_from_unclustered_buffer=ratio_of_samples_from_unclustered_buffer,
-		centralised_buffer=config["centralised_buffer"],
-		replay_integral_multi_agent_batches=config["replay_integral_multi_agent_batches"],
-		batch_dropout_rate=config["batch_dropout_rate"],
 	)
-	clustering_scheme = ClusterManager(clustering_scheme_type, config["clustering_scheme_options"])
+	clustering_scheme = ClusterManager(clustering_scheme_type, config.clustering_options["clustering_scheme_options"])
 	return local_replay_buffer, clustering_scheme
 
 def assign_types(multi_batch, clustering_scheme, batch_fragment_length, with_episode_type=True, training_step=None):

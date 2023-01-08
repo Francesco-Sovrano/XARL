@@ -1,7 +1,7 @@
 """
 PyTorch policy class used for SAC.
 """
-from ray.rllib.agents.dqn.dqn_tf_policy import *
+from ray.rllib.algorithms.dqn.dqn_tf_policy import *
 from ray.rllib.utils.tf_utils import make_tf_callable
 from deer.agents.xadqn.xadqn_torch_policy import xa_postprocess_nstep_and_prio
 
@@ -102,9 +102,7 @@ class TFComputeTDErrorMixin:
 
 	def __init__(self):
 		@make_tf_callable(self.get_session(), dynamic_shape=True)
-		def compute_td_error(
-			obs_t, act_t, rew_t, obs_tp1, done_mask, importance_weights
-		):
+		def compute_td_error(obs_t, act_t, rew_t, obs_tp1, done_mask, importance_weights, policy_signature=None):
 			# Do forward pass on loss to update td error attribute
 			input_dict = {
 				SampleBatch.CUR_OBS: tf.convert_to_tensor(obs_t),

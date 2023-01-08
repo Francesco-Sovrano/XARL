@@ -1,7 +1,7 @@
 """
 PyTorch policy class used for SAC.
 """
-from ray.rllib.agents.dqn.dqn_torch_policy import *
+from ray.rllib.algorithms.dqn.dqn_torch_policy import *
 import numpy as np
 
 from deer.experience_buffers.replay_ops import add_policy_signature

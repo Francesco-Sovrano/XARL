@@ -1,4 +1,4 @@
-from ray.rllib.agents.dqn.dqn_torch_model import DQNTorchModel
+from ray.rllib.algorithms.dqn.dqn_torch_model import DQNTorchModel
 from ray.rllib.utils.framework import try_import_torch
 import os
 import numpy as np

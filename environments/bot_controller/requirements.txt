@@ -1,9 +1,9 @@
-gym==0.18.0
+gym
 
-scikit-spatial==5.2.0
-scipy==1.6.0
-numpy==1.19.5
-matplotlib==3.3.2
-triangle==20200424
-opencv-python-headless==4.1.2.30
+scikit-spatial
+scipy
+numpy
+matplotlib
+triangle
+opencv-python-headless
 ray

@@ -6,49 +6,45 @@ Detailed documentation:
 https://docs.ray.io/en/master/rllib-algorithms.html#deep-deterministic-policy-gradients-ddpg-td3
 """  # noqa: E501
 
-from deer.agents.xadqn import XADQNTrainer, XADQN_EXTRA_OPTIONS
-from ray.rllib.evaluation.collectors.simple_list_collector import SimpleListCollector
-from ray.rllib.agents.sac.sac import SACTrainer, DEFAULT_CONFIG as SAC_DEFAULT_CONFIG
-from ray.rllib.policy.sample_batch import SampleBatch
-from ray.rllib.agents.dqn.dqn_tf_policy import PRIO_WEIGHTS
+from deer.agents.xadqn import init_xa_config, PolicySignatureListCollector, XADQN
+from ray.rllib.utils.annotations import override
+from ray.rllib.algorithms.sac.sac import SACConfig
 from deer.agents.xasac.xasac_tf_policy import XASACTFPolicy
 from deer.agents.xasac.xasac_torch_policy import XASACTorchPolicy
-from deer.experience_buffers.replay_ops import add_policy_signature
-import copy
 
-XASAC_EXTRA_OPTIONS = copy.deepcopy(XADQN_EXTRA_OPTIONS)
-XASAC_EXTRA_OPTIONS["buffer_options"]['clustering_xi'] = 4
-# XASAC_EXTRA_OPTIONS["clip_epsilon"] = 0.2
-XASAC_DEFAULT_CONFIG = SACTrainer.merge_trainer_configs(
-	SAC_DEFAULT_CONFIG, # For more details, see here: https://docs.ray.io/en/master/rllib-algorithms.html#deep-q-networks-dqn-rainbow-parametric-dqn
-	XASAC_EXTRA_OPTIONS,
-	_allow_unknown_configs=True
-)
+class XASACConfig(SACConfig):
 
-########################
-# XASAC's Policy
-########################
+	def __init__(self, algo_class=None):
+		"""Initializes a DQNConfig instance."""
+		super().__init__(algo_class=algo_class or XASAC)
 
-class XASACTrainer(SACTrainer):
-	def get_default_config(cls):
-		return XASAC_DEFAULT_CONFIG
+		init_xa_config(self)
+		self.n_step = 1
+		self.buffer_options['clustering_xi'] = 4
 
-	def get_default_policy_class(self, config):
-		return XASACTorchPolicy if config["framework"] == "torch" else XASACTFPolicy
-
-	def validate_config(self, config):
+	@override(SACConfig)
+	def validate(self):
 		# Call super's validation method.
-		super().validate_config(config)
+		super().validate()
 
-		if config["model"]["custom_model_config"].get("add_nonstationarity_correction", False):
-			class PolicySignatureListCollector(SimpleListCollector):
-				def get_inference_input_dict(self, policy_id):
-					batch = super().get_inference_input_dict(policy_id)
-					policy = self.policy_map[policy_id]
-					return add_policy_signature(batch,policy)
-			config["sample_collector"] = PolicySignatureListCollector
-		
-	@staticmethod
-	def execution_plan(workers, config, **kwargs):
-		return XADQNTrainer.execution_plan(workers, config, **kwargs)
-		
+		if self.model["custom_model_config"].get("add_nonstationarity_correction", False):
+			self.sample_collector = PolicySignatureListCollector
+
+########################
+# XASAC Policy
+########################
+
+class XASAC(XADQN):
+	def __init__(self, *args, **kwargs):
+		self._allow_unknown_subkeys += ["policy_model_config", "q_model_config"]
+		super().__init__(*args, **kwargs)
+
+	@classmethod
+	@override(XADQN)
+	def get_default_config(cls):
+		return XASACConfig()
+
+	@classmethod
+	@override(XADQN)
+	def get_default_policy_class(self, config):
+		return XASACTorchPolicy if config['framework'] == "torch" else XASACTFPolicy

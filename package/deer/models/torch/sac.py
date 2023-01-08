@@ -2,7 +2,7 @@ import os
 import gym
 import numpy as np
 
-from ray.rllib.agents.sac.sac_torch_model import SACTorchModel
+from ray.rllib.algorithms.sac.sac_torch_model import SACTorchModel
 from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.policy.view_requirement import ViewRequirement
 
@@ -82,6 +82,17 @@ class TorchAdaptiveMultiHeadNet:
 				else:
 					model_out = self.preprocessing_model_policy(model_out)
 				return super().get_policy_output(model_out)
+
+			def get_action_model_outputs(self, model_out, state_in=None, seq_lens=None):
+				if self.add_nonstationarity_correction:
+					# print(model_out["policy_signature"].shape, self.preprocessing_model_policy(model_out["obs"]).shape)
+					model_out = torch.concat((
+						self.preprocessing_model_policy(model_out["obs"]),
+						model_out["policy_signature"]
+					), dim=-1)
+				else:
+					model_out = self.preprocessing_model_policy(model_out)
+				return super().get_action_model_outputs(model_out, state_in=state_in, seq_lens=seq_lens)
 
 			def get_q_values(self, model_out, actions = None):
 				if self.add_nonstationarity_correction:

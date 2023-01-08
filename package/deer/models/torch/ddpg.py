@@ -2,7 +2,7 @@ import gym
 import os
 import numpy as np
 
-from ray.rllib.agents.ddpg.ddpg_torch_model import DDPGTorchModel
+from ray.rllib.algorithms.ddpg.ddpg_torch_model import DDPGTorchModel
 from ray.rllib.models.torch.misc import SlimFC
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.utils import get_activation_fn

@@ -1,4 +1,4 @@
-from ray.rllib.agents.sac.sac_tf_model import SACTFModel
+from ray.rllib.algorithms.sac.sac_tf_model import SACTFModel
 
 import numpy as np
 import gym
@@ -18,24 +18,24 @@ class TFAdaptiveMultiHeadNet:
 			`model_out`, `actions` -> get_q_values() -> Q(s, a)
 			`model_out`, `actions` -> get_twin_q_values() -> Q_twin(s, a)
 			"""
+			policy_signature_size = 2
 
-			# def __init__(self, obs_space, action_space, num_outputs, model_config, name, policy_model_config = None, q_model_config = None, twin_q = False, initial_alpha = 1.0, target_entropy = None):
-			# 	inputs, last_layer = get_input_layers_and_keras_layers(obs_space)
-			# 	self.preprocessing_model = tf.keras.Model(inputs, last_layer)
-			# 	# self.register_variables(self.preprocessing_model.variables)
-			# 	self.preprocessed_obs_space = gym.spaces.Box(low=float('-inf'), high=float('inf'), shape=last_layer.shape[1:], dtype=np.float32)
-			# 	super().__init__(
-			# 		obs_space=obs_space,
-			# 		action_space=action_space,
-			# 		num_outputs=num_outputs,
-			# 		model_config=model_config,
-			# 		name=name,
-			# 		policy_model_config=policy_model_config,
-			# 		q_model_config=q_model_config,
-			# 		twin_q=twin_q,
-			# 		initial_alpha=initial_alpha,
-			# 		target_entropy=target_entropy,
-			# 	)
+			def __init__(self,obs_space,action_space,num_outputs,model_config,name,policy_model_config = None,q_model_config = None,twin_q = False,initial_alpha = 1.0,target_entropy = None):
+				self.add_nonstationarity_correction = model_config['custom_model_config'].get("add_nonstationarity_correction", False)
+				if self.add_nonstationarity_correction:
+					print("Adding nonstationarity corrections")
+				super().__init__(
+					obs_space,
+					action_space,
+					num_outputs,
+					model_config,
+					name,
+					policy_model_config = policy_model_config,
+					q_model_config = q_model_config,
+					twin_q = twin_q,
+					initial_alpha = initial_alpha,
+					target_entropy = target_entropy
+				)
 
 			def build_policy_model(self, obs_space, num_outputs, policy_model_config, name):
 				inputs, last_layer = get_input_layers_and_keras_layers(obs_space)
@@ -52,6 +52,17 @@ class TFAdaptiveMultiHeadNet:
 			def get_policy_output(self, model_out):
 				model_out = self.policy_preprocessing_model(get_input_list_from_input_dict({"obs": model_out}))
 				return super().get_policy_output(model_out)
+
+			def get_action_model_outputs(self, model_out, state_in=None, seq_lens=None):
+				if self.add_nonstationarity_correction:
+					# print(model_out["policy_signature"].shape, self.policy_preprocessing_model(model_out["obs"]).shape)
+					model_out = torch.concat((
+						self.policy_preprocessing_model(model_out["obs"]),
+						model_out["policy_signature"]
+					), dim=-1)
+				else:
+					model_out = self.policy_preprocessing_model(model_out)
+				return super().get_action_model_outputs(model_out, state_in=state_in, seq_lens=seq_lens)
 
 			def get_q_values(self, model_out, actions = None):
 				model_out = self.value_preprocessing_model(model_out)
