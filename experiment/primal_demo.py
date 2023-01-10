@@ -41,6 +41,7 @@ env_config = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baseli
 	"env_config": { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
 		'seed': 42,
 		'num_agents': number_of_agents,
+		"horizon": HORIZON,
 		'observation_size': 11,
 		'num_future_steps': 3,
 		'env_size': 20, 
@@ -55,7 +56,6 @@ env_config = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baseli
 
 default_options = {
 	"no_done_at_end": True, # IMPORTANT: if set to True it allows lifelong learning with decent bootstrapping
-	"horizon": HORIZON,
 	# "num_workers": 4, # Number of rollout worker actors to create for parallel sampling. Setting this to 0 will force rollouts to be done in the trainer actor.
 	# "num_envs_per_worker": 1, # Number of environments to evaluate vector-wise per worker. This enables model inference batching, which can improve performance for inference bottlenecked workloads.
 	# "vf_loss_coeff": 1.0, # Coefficient of the value function loss. IMPORTANT: you must tune this if you set vf_share_layers=True inside your model's config.
@@ -77,7 +77,7 @@ default_options = {
 	"train_batch_size": 2**8, # Number of 'n_step' transitions per train-batch. Default is: 100 for TD3, 256 for SAC and DDPG, 32 for SAC, 500 for APPO.
 	###########################
 	"num_steps_sampled_before_learning_starts": max(EXPERIENCE_BUFFER_SIZE,HORIZON*number_of_agents), # How many steps of the model to sample before learning starts.
-	# 'buffer_size': EXPERIENCE_BUFFER_SIZE, # Size of the experience buffer. Default 50000
+	"min_train_timesteps_per_iteration": 1,
 }
 xa_default_options = {
 	##############################

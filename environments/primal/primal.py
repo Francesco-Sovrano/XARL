@@ -30,6 +30,7 @@ class Primal(MultiAgentEnv):
 
 	def __init__(self, config):
 		# super().__init__()
+		self.env_config = config
 		self.observation_size = config.get('observation_size',3)
 		self.observer = Primal2Observer(
 			observation_size=self.observation_size, 
@@ -60,6 +61,7 @@ class Primal(MultiAgentEnv):
 		obs = self._env._observe()
 		# print(obs[1][0].shape, obs[1][1].shape)
 		self.last_obs = obs
+		self._step_count = 1
 		return self.preprocess_observation_dict(obs)
 
 	def get_why_explanation(self, new_pos, old_mstar_pos, old_astar_pos=None, is_valid_action=True):
@@ -84,6 +86,7 @@ class Primal(MultiAgentEnv):
 
 	# Executes an action by an agent
 	def step(self, action_dict):
+		self._step_count += 1
 		# print(list(action_dict.keys()), list(self.last_obs.keys()))
 		living_agents = list(action_dict.keys())
 		valid_action_dict = {
@@ -123,7 +126,7 @@ class Primal(MultiAgentEnv):
 			k: self.get_reward(self._env.isStandingOnGoal[k], valid_action_dict[k])
 			for k in living_agents
 		}
-		# throughput = sum((1 if self._env.isStandingOnGoal[k] else 0 for k in self._agent_ids))
+		throughput = sum((1 if self._env.isStandingOnGoal[k] else 0 for k in living_agents))
 		info = {
 			k: {
 				'explanation': {
@@ -134,15 +137,15 @@ class Primal(MultiAgentEnv):
 						is_valid_action=valid_action_dict[k],
 					)
 				},
-				# 'stats_dict': {
-				# 	"throughput": throughput
-				# }
+				'stats_dict': {
+					"throughput": throughput
+				}
 			}
 			for k in living_agents
 		}
 		
 		# print(info)
-		done["__all__"] = all(done.values())
+		done["__all__"] = all(done.values()) or self._step_count == self.env_config.get('horizon',float('inf'))
 		# rew["__all__"] = np.sum([r for r in step_r.reward.values()])
 		self.last_obs = _obs
 		return obs, rew, done, info

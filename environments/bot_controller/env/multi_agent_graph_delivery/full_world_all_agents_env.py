@@ -787,7 +787,7 @@ class FullWorldAllAgents_GraphDelivery(MultiAgentEnv):
 			self.agent_list[uid].start_step(action)
 		for uid in action_dict.keys():
 			state_dict[uid], reward_dict[uid], terminal_dict[uid], info_dict[uid] = self.agent_list[uid].end_step()
-		terminal_dict['__all__'] = is_terminal = all(terminal_dict.values()) or self.road_network.min_deliveries == self.env_config['max_deliveries_per_target'] #or self._step_count == self.env_config.get('horizon',float('inf'))
+		terminal_dict['__all__'] = is_terminal = all(terminal_dict.values()) or self.road_network.min_deliveries == self.env_config['max_deliveries_per_target'] or self._step_count == self.env_config.get('horizon',float('inf'))
 		###################################
 		## Build stats dict
 		if is_terminal:

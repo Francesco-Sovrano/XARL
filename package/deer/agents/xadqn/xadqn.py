@@ -43,6 +43,7 @@ class PolicySignatureListCollector(SimpleListCollector):
 
 def init_xa_config(self):
 	self.num_steps_sampled_before_learning_starts = 2**14
+	self.min_train_timesteps_per_iteration = 1
 	self.buffer_options = {
 		'prioritized_replay': True,
 		#### MARL

@@ -113,8 +113,8 @@ class LocalReplayBuffer(ParallelIteratorWorker):
 		ratio_of_samples_from_unclustered_buffer=0,
 	):
 		self.buffer_options = buffer_options
-		self.prioritized_replay = self.buffer_options.get('prioritized_replay',True)
-		self.centralised_buffer = self.buffer_options.get('centralised_buffer', True)
+		self.prioritized_replay = self.buffer_options['prioritized_replay']
+		self.centralised_buffer = self.buffer_options['centralised_buffer']
 		logger.warning(f'Building LocalReplayBuffer with centralised_buffer = {self.centralised_buffer}')
 		self.replay_integral_multi_agent_batches = self.buffer_options.get('replay_integral_multi_agent_batches', False)
 		dummy_buffer = PseudoPrioritizedBuffer(**self.buffer_options)

@@ -80,7 +80,6 @@ else:
 	# policy_graphs = {}
 	policy_mapping_fn = lambda agent_id: DEFAULT_POLICY_ID
 
-OPTIONS["centralised_buffer"] = CENTRALISED_TRAINING
 OPTIONS["multiagent"].update({
 	"policies": policy_graphs,
 	"policy_mapping_fn": policy_mapping_fn,
