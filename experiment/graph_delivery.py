@@ -33,6 +33,7 @@ EXPERIENCE_BUFFER_SIZE = 2**14
 
 default_options = {
 	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
+	"horizon": HORIZON, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 	# "num_workers": 4, # Number of rollout worker actors to create for parallel sampling. Setting this to 0 will force rollouts to be done in the trainer actor.
 	# "num_envs_per_worker": 1, # Number of environments to evaluate vector-wise per worker. This enables model inference batching, which can improve performance for inference bottlenecked workloads.
 	"framework": "torch",
@@ -124,7 +125,6 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 			},
 		},
 		"env_config": {
-			"horizon": HORIZON, # Number of steps after which the episode is forced to terminate. Defaults to `env.spec.max_episode_steps` (if present) for Gym envs.
 			'num_agents': num_agents,
 			'n_discrete_actions': discrete_actions,
 			'reward_fn': reward_fn, # one of the following: 'frequent', 'more_frequent', 'sparse', 'unitary_frequent', 'unitary_more_frequent', 'unitary_frequent'

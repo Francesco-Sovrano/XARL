@@ -223,13 +223,13 @@ def train(trainer_class, config_class, config_dict, environment_class, experimen
 			print('Added "build_joint_action_list" to "env_config"')
 
 	config = config_class.from_dict(config_dict)
-	config.environment(environment_class)
-	config.logger_creator = logger_creator_fn
+	# config.environment(environment_class)
+	# config.logger_creator = logger_creator_fn
 
 	print(f'Running this config: {config.to_dict()}')
 	
 	# Configure RLlib to train a policy using the given environment and trainer
-	agent = trainer_class(config)
+	agent = trainer_class(config, env=environment_class, logger_creator=logger_creator_fn)
 	if checkpoint:
 		print(f'Loading checkpoint: {checkpoint}')
 		agent.restore(checkpoint)

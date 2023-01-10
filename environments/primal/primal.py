@@ -97,10 +97,16 @@ class Primal(MultiAgentEnv):
 			for i in living_agents
 		}
 		path_list = self._env.expert_until_first_goal(agent_ids=living_agents, time_limit=self.time_limit)
-		mstar_pos_dict = {
-			k: path_list[k][0] if path_list and len(path_list) == len(self._agent_ids) else None
-			for k in living_agents
-		}
+		if path_list and len(path_list) == len(living_agents):
+			mstar_pos_dict = {
+				k: path_list[k][0]
+				for k in living_agents
+			}
+		else:
+			mstar_pos_dict = {
+				k: None
+				for k in living_agents
+			}
 
 		_obs,rew = self._env.step_all(action_dict)
 		obs = self.preprocess_observation_dict(_obs)

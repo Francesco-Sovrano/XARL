@@ -28,33 +28,36 @@ test_every_n_step = int(np.ceil(stop_training_after_n_step/save_n_checkpoints))
 HORIZON = 2**8
 CENTRALISED_TRAINING = True
 EXPERIENCE_BUFFER_SIZE = 2**14
+number_of_agents = 8
 
 env_config = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
-	'seed': 42,
-	'num_agents': number_of_agents,
-	'observation_size': 11,
-	'num_future_steps': 3,
-	'env_size': 20, 
-	'wall_components': 20,
-	'obstacle_density': 0.3,
-	'IsDiagonal': False,
-	'frozen_steps': 0,
-	'isOneShot': False,
-	"time_limit": 5, # max. number of seconds to wait for getting an answer from M*
-}
-
-default_options = {
-	"no_done_at_end": True, # IMPORTANT: this allows lifelong learning with decent bootstrapping
-	# "num_workers": 4, # Number of rollout worker actors to create for parallel sampling. Setting this to 0 will force rollouts to be done in the trainer actor.
-	# "num_envs_per_worker": 1, # Number of environments to evaluate vector-wise per worker. This enables model inference batching, which can improve performance for inference bottlenecked workloads.
 	"framework": "torch",
 	"model": {
 		"custom_model": "adaptive_multihead_network",
-		# "custom_model": "comm_adaptive_multihead_network",
 		"custom_model_config": {
-			"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
+			"add_nonstationarity_correction": False, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
 		},
 	},
+	"env_config": { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
+		'seed': 42,
+		'num_agents': number_of_agents,
+		'observation_size': 11,
+		'num_future_steps': 3,
+		'env_size': 20, 
+		'wall_components': 20,
+		'obstacle_density': 0.3,
+		'IsDiagonal': False,
+		'frozen_steps': 0,
+		'isOneShot': False,
+		"time_limit": 5, # max. number of seconds to wait for getting an answer from M*
+	}
+}
+
+default_options = {
+	"no_done_at_end": True, # IMPORTANT: if set to True it allows lifelong learning with decent bootstrapping
+	"horizon": HORIZON,
+	# "num_workers": 4, # Number of rollout worker actors to create for parallel sampling. Setting this to 0 will force rollouts to be done in the trainer actor.
+	# "num_envs_per_worker": 1, # Number of environments to evaluate vector-wise per worker. This enables model inference batching, which can improve performance for inference bottlenecked workloads.
 	# "vf_loss_coeff": 1.0, # Coefficient of the value function loss. IMPORTANT: you must tune this if you set vf_share_layers=True inside your model's config.
 	# "preprocessor_pref": "rllib", # this prevents reward clipping on Atari and other weird issues when running from checkpoints
 	"gamma": 0.999, # We use an higher gamma to extend the MDP's horizon; optimal agency on GraphDelivery requires a longer horizon.
@@ -77,18 +80,23 @@ default_options = {
 	# 'buffer_size': EXPERIENCE_BUFFER_SIZE, # Size of the experience buffer. Default 50000
 }
 xa_default_options = {
+	##############################
 	"buffer_options": {
 		"prioritized_replay": True, # Whether to replay batches with the highest priority/importance/relevance for the agent.
 		"centralised_buffer": CENTRALISED_TRAINING, # for MARL
+		'global_size': EXPERIENCE_BUFFER_SIZE, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).
+		'priority_id': 'td_errors',
+		'priority_lower_limit': 0,
 		'priority_aggregation_fn': 'np.mean', # A reduction that takes as input a list of numbers and returns a number representing a batch priority.
-		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (whose number depends on the clustering scheme) of the experience buffer. Every batch has size 'sample_batch_size' (default is 1).
 		'prioritization_alpha': 0.6, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'prioritization_importance_beta': 0.4, # To what degree to use importance weights (0 - no corrections, 1 - full correction).
 		'prioritization_importance_eta': 1e-2, # Used only if priority_lower_limit is None. A value > 0 that enables eta-weighting, thus allowing for importance weighting with priorities lower than 0 if beta is > 0. Eta is used to avoid importance weights equal to 0 when the sampled batch is the one with the highest priority. The closer eta is to 0, the closer to 0 would be the importance weight of the highest-priority batch.
 		'prioritization_epsilon': 1e-6, # prioritization_epsilon to add to a priority so that it is never equal to 0.
+		#################
+		'cluster_size': None, # Default None, implying being equal to global_size. Maximum number of batches stored in a cluster (whose number depends on the clustering scheme) of the experience buffer. Every batch has size 'sample_batch_size' (default is 1).
 		'cluster_prioritisation_strategy': 'sum', # Whether to select which cluster to replay in a prioritised fashion -- Options: None; 'sum', 'avg', 'weighted_avg'.
-		'cluster_prioritization_alpha': 1, # How much prioritization is used (0 - no prioritization, 1 - full prioritization).
 		'cluster_level_weighting': True, # Whether to use cluster-level information to compute importance weights rather than the whole buffer.
+		#################
 		'max_age_window': None, # Consider only batches with a relative age within this age window, the younger is a batch the higher will be its importance. Set to None for no age weighting. # Idea from: Fedus, William, et al. "Revisiting fundamentals of experience replay." International Conference on Machine Learning. PMLR, 2020.
 	},
 	"clustering_options": {
@@ -109,9 +117,9 @@ xa_default_options = {
 		"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
 		"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
 		"cluster_overview_size": 1, # cluster_overview_size <= train_batch_size. If None, then cluster_overview_size is automatically set to train_batch_size. -- When building a single train batch, do not sample a new cluster before x batches are sampled from it. The closer cluster_overview_size is to train_batch_size, the faster is the batch sampling procedure.
-		"collect_cluster_metrics": False, # Whether to collect metrics about the experience clusters. It consumes more resources.
+		"collect_cluster_metrics": True, # Whether to collect metrics about the experience clusters. It consumes more resources.
 		"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
-	}
+	},
 }
 
 def copy_dict_and_update(d,u):
@@ -149,8 +157,8 @@ experiment_options = copy_dict_and_update_with_key(experiment_options, "buffer_o
 	'stationarity_window_size': None, # If lower than float('inf') and greater than 0, then the stationarity_window_size W is used to guarantee that every W training-steps the buffer is emptied from old state transitions.
 	'stationarity_smoothing_factor': 1, # A number >= 1, where 1 means no smoothing. The larger this number, the smoother the transition from a stationarity stage to the next one. This should help avoiding experience buffers saturated by one single episode during a stage transition. The optimal value should be equal to ceil(HORIZON*number_of_agents/EXPERIENCE_BUFFER_SIZE)*stationarity_window_size.
 })
-experiment_options = copy_dict_and_update_with_key(experiment_options, "env_config", env_config)
-xaer_experiment_options = copy_dict_and_update(experiment_options,{
+experiment_options = copy_dict_and_update(experiment_options, env_config)
+xaer_experiment_options = copy_dict_and_update_with_key(experiment_options,"clustering_options",{
 	'clustering_scheme': [
 		'Why',
 		# 'Who',
@@ -174,8 +182,9 @@ deer_experiment_options = copy_dict_and_update_with_key(xaer_experiment_options,
 	'stationarity_window_size': 5, # Whether to use a random number rather than the batch priority during prioritised dropping. If equal to float('inf') then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far. If lower than float('inf') and greater than 0, then stationarity_window_size is used to guarantee that every stationarity_window_size training-steps the buffer is emptied from old state transitions.
 })
 
-CONFIG = deer_experiment_options
+CONFIG = experiment_options
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
+CONFIG["keep_per_episode_custom_metrics"] = True
 
 # Register models
 from ray.rllib.models import ModelCatalog

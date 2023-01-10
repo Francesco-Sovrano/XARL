@@ -273,7 +273,7 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 	print("Plot figure saved in ", figure_file)
 	figure = None
 
-def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_size=20, show_deviation=False, base_list=None, base_shared_name='baseline', average_non_baselines=None, statistics_list=None, buckets_average='median', step_type='num_steps_sampled'):
+def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_size=20, show_deviation=False, base_list=None, base_shared_name='baseline', average_non_baselines=None, statistics_list=None, buckets_average='median', step_type='num_env_steps_sampled'):
 	assert len(url_list)==len(name_list), f"url_list (len {len(url_list)}) and name_list (len {len(name_list)}) must have same lenght"
 	logs = []
 	for url,name in zip(url_list,name_list):
@@ -293,13 +293,13 @@ def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_
 		})
 	line_plot(logs, figure_file, max_plot_size, show_deviation, base_list, base_shared_name, average_non_baselines, buckets_average)
 
-def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
+def parse_line(line, i=0, statistics_list=None, step_type='num_env_steps_sampled'):
 	key_list = line.columns.tolist()
 	get_keys = lambda k: list(map(lambda x: x[len(k):].strip('/'), filter(lambda x: x.startswith(k), key_list)))
 	get_element = lambda df, key: df[key].tolist()[0] if key in df else None
 	arrayfy = lambda x: np.array(x[1:-1].split(', ') if ', ' in x[1:-1] else x[1:-1].split(' '), dtype=np.float32) if x[1:-1] else []
 
-	step = get_element(line,f"info/{step_type}") # "num_steps_sampled", "num_steps_trained", "num_agent_steps_sampled"
+	step = get_element(line,f"info/{step_type}") # "num_env_steps_sampled", "num_env_steps_trained", "num_agent_steps_sampled", "num_agent_steps_trained"
 	# obj = {
 	# 	"median cum. reward": np.median(line["hist_stats"]["episode_reward"]),
 	# 	"mean visited roads": line['custom_metrics'].get('visited_junctions_mean',line['custom_metrics'].get('visited_cells_mean',0))
@@ -344,7 +344,7 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_steps_sampled'):
 		obj = dict(filter(lambda x: x[0] in statistics_list, obj.items()))
 	return (step, obj)
 	
-def parse(url, max_i=None, statistics_list=None, step_type='num_steps_sampled'):
+def parse(url, max_i=None, statistics_list=None, step_type='num_env_steps_sampled'):
 	with pd.read_csv(url, chunksize=1) as chunk_iter:
 		for i,df in enumerate(chunk_iter):
 			if max_i and i > max_i:
