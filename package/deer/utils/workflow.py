@@ -212,6 +212,7 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 		])
 
 def train(trainer_class, config_class, config_dict, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
+	# os.environ["OMP_NUM_THREADS"] = 1
 	_, checkpoint, logger_creator_fn = get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment)
 	# Add required Multi-Agent XAER options
 	if config_dict.get("clustering_scheme", None):

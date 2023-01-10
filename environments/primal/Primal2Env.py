@@ -4,7 +4,7 @@ from gym import spaces
 from .Env_Builder import *
 from .od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
 from .od_mstar3 import od_mstar
-from .GroupLock import Lock
+# from .GroupLock import Lock
 
 '''
     Observation: 
@@ -172,45 +172,45 @@ class Primal2Env(MAPFEnv):
             return 1
 
 
-class DummyEnv(Primal2Env):
-    def __init__(self, observer, map_generator, num_agents=None, IsDiagonal=False):
-        super(DummyEnv, self).__init__(observer=observer, map_generator=map_generator,
-                                       num_agents=num_agents,
-                                       IsDiagonal=IsDiagonal)
+# class DummyEnv(Primal2Env):
+#     def __init__(self, observer, map_generator, num_agents=None, IsDiagonal=False):
+#         super(DummyEnv, self).__init__(observer=observer, map_generator=map_generator,
+#                                        num_agents=num_agents,
+#                                        IsDiagonal=IsDiagonal)
 
-    def _render(self, mode='human', close=False, screen_width=800, screen_height=800):
-        pass
+#     def _render(self, mode='human', close=False, screen_width=800, screen_height=800):
+#         pass
 
 
-if __name__ == '__main__':
-    from matplotlib import pyplot
-    from .Primal2Observer import Primal2Observer
-    from .Map_Generator import maze_generator
-    from .Map_Generator import manual_generator
+# if __name__ == '__main__':
+#     from matplotlib import pyplot
+#     from .Primal2Observer import Primal2Observer
+#     from .Map_Generator import maze_generator
+#     from .Map_Generator import manual_generator
 
-    state0 = [[-1, -1, -1, -1, -1, -1, -1],
-              [-1, 1, -1, 0, 0, 0, -1],
-              [-1, 0, -1, -1, -1, 0, -1],
-              [-1, 0, 0, 0, -1, 0, -1],
-              [-1, 0, -1, 0, 0, 0, -1],
-              [-1, 2, -1, 0, 0, 0, -1],
-              [-1, -1, -1, -1, -1, -1, -1]]
-    n_agents = 3
-    env = Primal2Env(num_agents=n_agents,
-                      observer=Primal2Observer(observation_size=5),
-                      map_generator=maze_generator(env_size=(8, 10),
-                                                   wall_components=(3, 8), obstacle_density=(0.3, 0.7)),
-                      IsDiagonal=False)
-    print(env.world.state)
-    print(env.world.goals_map)
-    c = 0
-    a = c
-    b = c
-    for j in range(0, 50):
-          movement = {1: a, 2: b, 3: c, 4: c, 5: c, 6: c, 7: c, 8: c}
-          env.step_all(movement)
-          obs = env._observe()
+#     state0 = [[-1, -1, -1, -1, -1, -1, -1],
+#               [-1, 1, -1, 0, 0, 0, -1],
+#               [-1, 0, -1, -1, -1, 0, -1],
+#               [-1, 0, 0, 0, -1, 0, -1],
+#               [-1, 0, -1, 0, 0, 0, -1],
+#               [-1, 2, -1, 0, 0, 0, -1],
+#               [-1, -1, -1, -1, -1, -1, -1]]
+#     n_agents = 3
+#     env = Primal2Env(num_agents=n_agents,
+#                       observer=Primal2Observer(observation_size=5),
+#                       map_generator=maze_generator(env_size=(8, 10),
+#                                                    wall_components=(3, 8), obstacle_density=(0.3, 0.7)),
+#                       IsDiagonal=False)
+#     print(env.world.state)
+#     print(env.world.goals_map)
+#     c = 0
+#     a = c
+#     b = c
+#     for j in range(0, 50):
+#           movement = {1: a, 2: b, 3: c, 4: c, 5: c, 6: c, 7: c, 8: c}
+#           env.step_all(movement)
+#           obs = env._observe()
 
-          print(env.world.state)
-          a = int(input())
-          b = int(input())
+#           print(env.world.state)
+#           a = int(input())
+#           b = int(input())

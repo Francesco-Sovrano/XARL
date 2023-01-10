@@ -7,7 +7,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv, make_multi_agent
 from .Env_Builder import *
 from .od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
 from .od_mstar3 import od_mstar
-from .GroupLock import Lock
+# from .GroupLock import Lock
 from .Primal2Observer import Primal2Observer
 from .Primal2Env import Primal2Env
 from .Map_Generator import *
@@ -64,15 +64,17 @@ class Primal(MultiAgentEnv):
 		self._step_count = 1
 		return self.preprocess_observation_dict(obs)
 
-	def get_why_explanation(self, new_pos, old_mstar_pos, old_astar_pos=None, is_valid_action=True):
+	def get_why_explanation(self, new_pos, old_astar_pos, is_valid_action=True):
 		explanation_list = []
 		if not is_valid_action:
 			explanation_list.append('invalid_action')
-		# print(new_pos, old_astar_pos)
-		if old_astar_pos and new_pos == old_astar_pos:
+		# print(new_pos, old_astar_pos, new_pos == old_astar_pos)
+		if new_pos == old_astar_pos:
 			explanation_list.append('acting_as_A*')
-		if new_pos == old_mstar_pos:
-			explanation_list.append('acting_as_M*')
+		if old_astar_pos is None:
+			explanation_list.append('wrong_path')
+		# if new_pos == old_mstar_pos:
+		# 	explanation_list.append('acting_as_M*')
 		if not explanation_list:
 			explanation_list = ['acting_differently']
 		return explanation_list
@@ -94,22 +96,22 @@ class Primal(MultiAgentEnv):
 			for k in living_agents
 		}
 		# print(action_dict[1])
+		astar_path_iter = (self._env.expert_until_first_goal(agent_ids=[i]) for i in living_agents)
 		astar_pos_dict = {
-			# i: self._env.expert_until_first_goal(agent_ids=[i], time_limit=self.time_limit)[0][0]
-			i: None
-			for i in living_agents
+			i: path[0] if path is not None else None
+			for i,path in zip(living_agents,astar_path_iter)
 		}
-		path_list = self._env.expert_until_first_goal(agent_ids=living_agents, time_limit=self.time_limit)
-		if path_list and len(path_list) == len(living_agents):
-			mstar_pos_dict = {
-				k: path_list[k][0]
-				for k in living_agents
-			}
-		else:
-			mstar_pos_dict = {
-				k: None
-				for k in living_agents
-			}
+		# path_list = self._env.expert_until_first_goal(agent_ids=living_agents, time_limit=self.time_limit)
+		# if path_list and len(path_list) == len(living_agents):
+		# 	mstar_pos_dict = {
+		# 		k: path_list[k][0]
+		# 		for k in living_agents
+		# 	}
+		# else:
+		# 	mstar_pos_dict = {
+		# 		k: None
+		# 		for k in living_agents
+		# 	}
 
 		_obs,rew = self._env.step_all(action_dict)
 		obs = self.preprocess_observation_dict(_obs)
@@ -132,8 +134,8 @@ class Primal(MultiAgentEnv):
 				'explanation': {
 					'why': self.get_why_explanation(
 						positions[k], 
-						mstar_pos_dict[k], 
-						old_astar_pos=astar_pos_dict[k], 
+						# mstar_pos_dict[k], 
+						astar_pos_dict[k], 
 						is_valid_action=valid_action_dict[k],
 					)
 				},

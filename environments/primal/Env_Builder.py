@@ -12,7 +12,7 @@ import imageio
 from gym import spaces
 
 from .od_mstar3.col_set_addition import OutOfTimeError, NoSolutionError
-from .GroupLock import Lock
+# from .GroupLock import Lock
 ############################################
 try:
     from .od_mstar3 import cpp_mstar
@@ -960,53 +960,24 @@ class MAPFEnv(gym.Env):
         if not agent_ids:
             agent_ids = list(range(1, self.world.num_agents + 1))
 
+        if len(agent_ids) == 1:
+            planner = aStar(array=self.world.state)  # where 0 is free space, -1 is obstacle
+            try:
+                path, cost = planner.find_path(start=start_positions_dir[agent_ids[0]], end=goals_dir[agent_ids[0]])
+                return path
+            except:
+                return None
         for i in agent_ids:
             start_positions.append(start_positions_dir[i])
             goals.append(goals_dir[i])
-        mstar_path = None
-        start_time = time.time()
+        # start_time = time.time()
         try:
             if USE_Cython_MSTAR:
-                mstar_path = cpp_mstar.find_path(world, start_positions, goals, inflation, time_limit)
+                return cpp_mstar.find_path(world, start_positions, goals, inflation, time_limit)
             else:
-                mstar_path = od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=time_limit)
+                return od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=time_limit)
         except:
-            pass
-        # except OutOfTimeError:
-        #     # M* timed out
-        #     # print("timeout")
-        #     # print('World', world)
-        #     # print('Start Pos', start_positions)
-        #     # print('Goals', goals)
-        #     pass
-        # except ValueError:
-        #     pass
-        # except NoSolutionError:
-        #     # print("nosol????")
-        #     # print('World', world)
-        #     # print('Start Pos', start_positions)
-        #     # print('Goals', goals)
-        #     pass
-        # except:
-        #     try:
-        #         mstar_path = od_mstar.find_path(world, start_positions, goals, inflation=inflation, time_limit=5 * time_limit)
-        #     except OutOfTimeError:
-        #         # M* timed out
-        #         # print("timeout")
-        #         # print('World', world)
-        #         # print('Start Pos', start_positions)
-        #         # print('Goals', goals)
-        #         pass
-        #     except NoSolutionError:
-        #         # print("nosol????")
-        #         # print('World', world)
-        #         # print('Start Pos', start_positions)
-        #         # print('Goals', goals)
-        #         pass
-        #     except:
-        #         print("Unknown bug?!")
-
-        return mstar_path
+            return None
 
     def _add_rendering_entry(self, entry, permanent=False):
         if permanent:
