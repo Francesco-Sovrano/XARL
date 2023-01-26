@@ -22,7 +22,7 @@ class TorchAdaptiveMultiHeadNet:
 			`model_out`, `actions` -> get_q_values() -> Q(s, a)
 			`model_out`, `actions` -> get_twin_q_values() -> Q_twin(s, a)
 			"""
-			policy_signature_size = 2
+			policy_signature_size = 3
 
 			def __init__(self,obs_space,action_space,num_outputs,model_config,name,policy_model_config = None,q_model_config = None,twin_q = False,initial_alpha = 1.0,target_entropy = None):
 				self.add_nonstationarity_correction = model_config['custom_model_config'].get("add_nonstationarity_correction", False)

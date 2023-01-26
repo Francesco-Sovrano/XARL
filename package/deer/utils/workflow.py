@@ -15,13 +15,14 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
 import tempfile
 import json
+from tqdm import tqdm
 
 def find_last_checkpoint_in_directory(directory):
 	checkpoint_list = [
-		(int(subdir[0].split('_')[-1]), subdir[0])
+		(int(d.split('_')[-1]), os.path.join(subdir[0],d))
 		for subdir in os.walk(directory)
-		if 'checkpoint' in subdir[0]
-		and '/' not in subdir[0].split('_')[-1]
+		for d in subdir[1]
+		if 'checkpoint' in d
 	]
 	if not checkpoint_list:
 		return 0, None
@@ -33,12 +34,12 @@ def find_last_checkpoint_in_directory(directory):
 				return checkpoint_n, file_path
 	return 0, None
 
-def get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment_id):
+def get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, experiment_id, results_dir=DEFAULT_RESULTS_DIR):
 	if experiment_id is None:
 		return 0, None, None
 	# timestr = datetime.today().strftime("%Y-%m-%d_%H-%M-%S")
 	logdir_prefix = "{}_{}_{}".format(trainer_class.__name__, environment_class, experiment_id)
-	logdir = os.path.join(DEFAULT_RESULTS_DIR,logdir_prefix) #tempfile.mkdtemp(prefix=logdir_prefix, dir=DEFAULT_RESULTS_DIR)
+	logdir = os.path.join(results_dir,logdir_prefix) #tempfile.mkdtemp(prefix=logdir_prefix, dir=DEFAULT_RESULTS_DIR)
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
 	logger_creator_fn = lambda config: UnifiedLogger(config, logdir, loggers=None)
@@ -52,11 +53,10 @@ def get_checkpoint_n_logger_by_experiment_id(trainer_class, environment_class, e
 # 	agent.restore(checkpoint)
 # 	return agent
 
-def test(agent, config, environment_class, checkpoint, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
+def test(agent, config, environment_class, checkpoint_directory, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
 	"""Tests and renders a previously trained model"""
 	# agent = restore_agent_from_checkpoint(tester_class, config, environment_class, checkpoint)
 
-	checkpoint_directory = os.path.dirname(checkpoint)
 	env = agent.env_creator(config["env_config"])
 	# Atari wrapper
 	if is_atari(env) and not config.get("custom_preprocessor") and config.get("preprocessor_pref","deepmind") == "deepmind":
@@ -115,9 +115,9 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 		return filename
 
 	multiagent = isinstance(env, MultiAgentEnv)
-	sum_reward_list = []
+	stats_dict_list = []
 	step_list = []
-	for episode_id in range(n_episodes):
+	for episode_id in tqdm(range(n_episodes),total=n_episodes):
 		if with_log or save_gif:
 			episode_directory = os.path.join(checkpoint_directory, f'episode_{episode_id}')
 			os.mkdir(episode_directory)
@@ -126,7 +126,7 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 			os.mkdir(screens_directory)
 		if with_log:
 			log_list = []
-		sum_reward = 0
+		stats_dict = {'reward':0}
 		step = 0
 		
 		if multiagent:
@@ -141,14 +141,16 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 				step += 1
 				# action = env.action_space.sample()
 				action_dict = {
-					k: agent.compute_action(v, policy_id=policy_mapping_fn(k), full_fetch=True, explore=False)[0]
+					k: agent.get_policy(policy_mapping_fn(k)).compute_single_action(v, explore=False)[0]
 					for k,v in state_dict.items()
 					if not done_dict.get(k, True)
 				}
 				# print('action_dict', action_dict)
 				state_dict, reward_dict, done_dict, info_dict = env.step(action_dict)
 				# state_dict = dict(zip(state_dict.keys(),map(np.squeeze,state_dict.values())))
-				sum_reward += sum(reward_dict.values())
+				stats_dict['reward'] += sum(reward_dict.values())
+				if done_dict['__all__']:
+					stats_dict.update(list(info_dict.values())[-1]["stats_dict"])
 				if save_gif:
 					file_list.append(print_screen(screens_directory, step))
 				if with_log:
@@ -172,7 +174,9 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 				action = agent.compute_action(state, full_fetch=True, explore=False)
 				state, reward, done, info = env.step(action[0])
 				state = np.squeeze(state)
-				sum_reward += reward
+				stats_dict['reward'] += reward
+				if done:
+					stats_dict.update(info["stats_dict"])
 				if save_gif:
 					file_list.append(print_screen(screens_directory, step))
 				if with_log:
@@ -185,7 +189,7 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 						f'state: {state}',
 						'\n\n',
 					]))
-		sum_reward_list.append(sum_reward)
+		stats_dict_list.append(stats_dict)
 		step_list.append(step)
 		if with_log:
 			with open(os.path.join(episode_directory, f'episode_{step}_{sum_reward}.log'), 'w') as f:
@@ -205,11 +209,21 @@ def test(agent, config, environment_class, checkpoint, save_gif=True, delete_scr
 				os.remove(gif_file_path)
 	with open(os.path.join(checkpoint_directory, 'stats.txt'), 'w') as f:
 		f.writelines([
-			f'mean reward: {np.mean(sum_reward_list)} ± {np.std(sum_reward_list)}\n',
-			f'median reward: {np.median(sum_reward_list)} <{np.quantile(sum_reward_list, 0.25)}, {np.quantile(sum_reward_list, 0.75)}>\n',
 			f'mean steps: {np.mean(step_list)} ± {np.std(step_list)}\n',
 			f'median steps: {np.median(step_list)} <{np.quantile(step_list, 0.25)}, {np.quantile(step_list, 0.75)}>\n',
 		])
+		stats_summary = {}
+		for stats_dict in stats_dict_list:
+			for k,v in stats_dict.items():
+				if k not in stats_summary: 
+					stats_summary[k] = []
+				stats_summary[k].append(v)
+		for k,v_list in stats_summary.items():
+			f.writelines([
+				f'mean {k}: {np.mean(v_list)} ± {np.std(v_list)}\n',
+				f'median {k}: {np.median(v_list)} <{np.quantile(v_list, 0.25)}, {np.quantile(v_list, 0.75)}>\n',
+			])
+
 
 def train(trainer_class, config_class, config_dict, environment_class, experiment=None, test_every_n_step=None, stop_training_after_n_step=None, log=True, save_gif=True, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=3, with_log=False):
 	# os.environ["OMP_NUM_THREADS"] = 1

@@ -152,11 +152,11 @@ class AdaptiveModel(nn.Module):
 		return [
 			nn.Sequential(
 				nn.Conv2d(in_channels=input_shape[-1] , out_channels=32, kernel_size=8, strides=4, padding='same'),
-				nn.LeakyReLU(),
+				nn.ReLU(),
 				nn.Conv2d(in_channels=32 , out_channels=64, kernel_size=4, strides=2, padding='same'),
-				nn.LeakyReLU(),
+				nn.ReLU(),
 				nn.Conv2d(in_channels=64 , out_channels=64, kernel_size=4, strides=1, padding='same'),
-				nn.LeakyReLU(),
+				nn.ReLU(),
 				nn.Flatten(),
 			)
 			for i,input_shape in enumerate(_input_list)
@@ -170,7 +170,7 @@ class AdaptiveModel(nn.Module):
 			nn.Sequential(
 				nn.Flatten(),
 				nn.Linear(in_features=np.prod(input_shape, dtype='int'), out_features=_units),
-				nn.LeakyReLU(),
+				nn.ReLU(),
 			)
 			for i,input_shape in enumerate(_input_list)
 		]

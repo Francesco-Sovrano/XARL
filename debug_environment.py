@@ -28,7 +28,6 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 		'fairness_type_fn': fairness_type_fn, # one of the following: None, 'simple', 'engineered'
 		'fairness_reward_fn': fairness_reward_fn, # one of the following: None, 'simple', 'engineered', 'unitary_engineered'
 		'visibility_radius': VISIBILITY_RADIUS,
-		'terminate_when_stuck_in_junction': False,
 		'spawn_on_sources_only': spawn_on_sources_only,
 		'max_refills_per_source': float('inf'),
 		'max_deliveries_per_target': max_deliveries_per_target,#(num_agents//target_junctions_number)+2,

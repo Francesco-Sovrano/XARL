@@ -93,7 +93,8 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 			key:{
 				"min":float("+inf"), 
 				"max":float("-inf"), 
-				"quantiles":[]
+				"quantiles":[],
+				"deviations": [],
 			}
 			for key in stat
 		}
@@ -123,20 +124,22 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 				if len(value_list) <= 0:
 					continue
 				stats_dict = y[key]
+				stats_dict["quantiles"].append({
+					'lower_quartile': float(np.quantile(value_list,0.25)), # lower quartile
+					'median': float(np.quantile(value_list,0.5)), # median
+					'upper_quartile': float(np.quantile(value_list,0.75)), # upper quartile
+				})
+				v_mean = float(np.mean(value_list))
+				v_std = float(np.std(value_list))
+				stats_dict["deviations"].append({
+					'mean-std': v_mean-v_std,
+					'mean': v_mean,
+					'mean+std': v_mean+v_std,
+				})
 				if buckets_average == 'median':
-					stats_dict["quantiles"].append({
-						'lower_quartile': float(np.quantile(value_list,0.25)), # lower quartile
-						'median': float(np.quantile(value_list,0.5)), # median
-						'upper_quartile': float(np.quantile(value_list,0.75)), # upper quartile
-					})
+					stats_dict["stats_to_plot"] = stats_dict["quantiles"]
 				else:
-					v_mean = float(np.mean(value_list))
-					v_std = float(np.std(value_list))
-					stats_dict["quantiles"].append({
-						'mean-std': v_mean-v_std,
-						'mean': v_mean,
-						'mean+std': v_mean+v_std,
-					})
+					stats_dict["stats_to_plot"] = stats_dict["deviations"]
 				# print(key, min(value_list))
 				stats_dict["min"] = float(min(stats_dict["min"], min(value_list)))
 				stats_dict["max"] = float(max(stats_dict["max"], max(value_list)))
@@ -174,11 +177,11 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 				y_key = y[key]
 				x_key = x[key]
 				unpack_quantiles = lambda a: map(lambda b: b.values(), a)
-				y_key_lower_quartile, y_key_median, y_key_upper_quartile = map(np.array, zip(*unpack_quantiles(y_key["quantiles"])))
+				y_key_lower_quartile, y_key_median, y_key_upper_quartile = map(np.array, zip(*unpack_quantiles(y_key["stats_to_plot"])))
 				if base_list:
 					base_line = base_list[log_id]
 					base_y_key = lines_dict[base_line]['y'][key]
-					base_y_key_lower_quartile, base_y_key_median, base_y_key_upper_quartile = map(np.array, zip(*unpack_quantiles(base_y_key["quantiles"])))
+					base_y_key_lower_quartile, base_y_key_median, base_y_key_upper_quartile = map(np.array, zip(*unpack_quantiles(base_y_key["stats_to_plot"])))
 					normalise = lambda x,y: 100*(x-y)/(y-base_y_key['min']+1)
 					y_key_median = normalise(y_key_median, base_y_key_median)
 					y_key_lower_quartile = normalise(y_key_lower_quartile, base_y_key_lower_quartile)
@@ -273,27 +276,25 @@ def line_plot(logs, figure_file, max_plot_size=20, show_deviation=False, base_li
 	print("Plot figure saved in ", figure_file)
 	figure = None
 
-def line_plot_files(url_list, name_list, figure_file, max_length=None, max_plot_size=20, show_deviation=False, base_list=None, base_shared_name='baseline', average_non_baselines=None, statistics_list=None, buckets_average='median', step_type='num_env_steps_sampled'):
+def line_plot_files(url_list, name_list, figure_file, max_step=None, max_plot_size=20, show_deviation=False, base_list=None, base_shared_name='baseline', average_non_baselines=None, statistics_list=None, buckets_average='median', step_type='num_env_steps_sampled'):
 	assert len(url_list)==len(name_list), f"url_list (len {len(url_list)}) and name_list (len {len(name_list)}) must have same lenght"
 	logs = []
 	for url,name in zip(url_list,name_list):
 		df = pd.read_csv(url)
 		line_example = df.head()
 		length = len(df)
-		if max_length:
-			length = max_length
 		df = None
 		print(f"{name} has length {length}")
 
 		logs.append({
 			'name': name, 
-			'data_iter': parse(url, max_i=length, statistics_list=statistics_list, step_type=step_type),
+			'data_iter': parse(url, max_step=max_step, statistics_list=statistics_list, step_type=step_type),
 			'length':length, 
 			'line_example': parse_line(line_example, statistics_list=statistics_list, step_type=step_type)
 		})
 	line_plot(logs, figure_file, max_plot_size, show_deviation, base_list, base_shared_name, average_non_baselines, buckets_average)
 
-def parse_line(line, i=0, statistics_list=None, step_type='num_env_steps_sampled'):
+def parse_line(line, statistics_list=None, step_type='num_env_steps_sampled'):
 	key_list = line.columns.tolist()
 	get_keys = lambda k: list(map(lambda x: x[len(k):].strip('/'), filter(lambda x: x.startswith(k), key_list)))
 	get_element = lambda df, key: df[key].tolist()[0] if key in df else None
@@ -307,7 +308,7 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_env_steps_sampled
 	# print(get_element(line,"hist_stats/episode_reward"))
 	
 	obj = {
-		"episode_reward_median": np.median(arrayfy(get_element(line,"hist_stats/episode_reward"))),
+		"episode_reward_median": np.median(arrayfy(get_element(line,"hist_stats/episode_reward").replace('$',' '))),
 	}
 	for k in ["episode_reward_mean","episode_reward_max","episode_reward_min","episode_len_mean","episodes_total"]:
 		obj[k] = get_element(line,k)
@@ -317,7 +318,7 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_env_steps_sampled
 		for agent_id in agent_names:
 			for k in ["policy_reward_mean","policy_reward_max","policy_reward_min"]:
 				obj[f'{agent_id}_{k}'] = get_element(line,f"{k}/{agent_id}")
-			obj[f"{agent_id}_policy_reward_median"] = np.median(np.median(arrayfy(get_element(line,f"hist_stats/policy_{agent_id}_reward")), axis=-1))
+			obj[f"{agent_id}_policy_reward_median"] = np.median(np.median(arrayfy(get_element(line,f"hist_stats/policy_{agent_id}_reward").replace('$',' ')), axis=-1))
 	else:
 		agent_names = ["default_policy"]
 
@@ -344,12 +345,13 @@ def parse_line(line, i=0, statistics_list=None, step_type='num_env_steps_sampled
 		obj = dict(filter(lambda x: x[0] in statistics_list, obj.items()))
 	return (step, obj)
 	
-def parse(url, max_i=None, statistics_list=None, step_type='num_env_steps_sampled'):
+def parse(url, max_step=None, statistics_list=None, step_type='num_env_steps_sampled'):
 	with pd.read_csv(url, chunksize=1) as chunk_iter:
 		for i,df in enumerate(chunk_iter):
-			if max_i and i > max_i:
+			step, obj = parse_line(df.loc[[i]], statistics_list=statistics_list, step_type=step_type)
+			if max_step and int(step) > max_step:
 				return
-			yield parse_line(df.loc[[i]], i=i, statistics_list=statistics_list, step_type=step_type)
+			yield (step, obj)
 		
 	
 def heatmap(heatmap, figure_file):

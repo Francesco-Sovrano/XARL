@@ -63,20 +63,26 @@ def assign_types(multi_batch, clustering_scheme, batch_fragment_length, with_epi
 	]
 
 def add_policy_signature(batch, policy):
-	# train_step = np.array((policy.global_timestep,), dtype=np.float32)
+	# train_step = np.array((policy.num_grad_updates,), dtype=np.float32)
+	# if train_step > 0: print(train_step)
 	policy_exploration_state = policy.get_exploration_state()
-	policy_exploration_state_items = policy_exploration_state.items()
 	if len(policy_exploration_state) > 1:
+		policy_exploration_state_items = policy_exploration_state.items()
 		policy_exploration_state_items = filter(lambda x: x[0].startswith('cur'), policy_exploration_state_items)
-	policy_entropy_var = next(map(lambda x: x[-1], policy_exploration_state_items), None)
-	if policy_entropy_var is None:
+		# policy_exploration_state_items=list(policy_exploration_state_items)
+		# print(policy_exploration_state_items)
+		policy_entropy_var = next(map(lambda x: x[-1], policy_exploration_state_items), None)
+	else:
 		policy_entropy_var = 0
-	policy_entropy_var = np.array((policy_entropy_var,), dtype=np.float32)
+	
+	# policy_entropy_var = np.array((policy_entropy_var,), dtype=np.float32)
 	model_entropy_var = policy.model.get_entropy_var()
 	if model_entropy_var is None:
-		model_entropy_var = np.array((0,), dtype=np.float32)
+		model_entropy_var = 0 #np.array((0,), dtype=np.float32)
 	# print("policy_signature:", model_entropy_var,policy_entropy_var)
-	batch["policy_signature"] = np.concatenate((model_entropy_var,policy_entropy_var), axis=-1)
+	# assert train_step != 0 or policy_entropy_var != 0 or model_entropy_var != 0, "Invalid policy signature!"
+	# batch["policy_signature"] = np.array((policy.num_grad_updates/1000,policy_entropy_var,model_entropy_var), dtype=np.float32)
+	batch["policy_signature"] = np.array((0 if policy_entropy_var!=0 or model_entropy_var!=0 else policy.num_grad_updates/100,policy_entropy_var,model_entropy_var), dtype=np.float32)
 	batch["policy_signature"] = np.tile(batch["policy_signature"],(batch.count,1))
 	return batch
 

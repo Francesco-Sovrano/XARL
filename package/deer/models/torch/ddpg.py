@@ -20,7 +20,7 @@ class TorchAdaptiveMultiHeadDDPG:
 	def init(preprocessing_model):
 		class TorchAdaptiveMultiHeadDDPGInner(DDPGTorchModel):
 
-			policy_signature_size = 2
+			policy_signature_size = 3
 
 			def __init__(self, obs_space, action_space, num_outputs, model_config, name, actor_hiddens=None, actor_hidden_activation="relu", critic_hiddens=None, critic_hidden_activation="relu", twin_q=False, add_layer_norm=False):
 				num_outputs = preprocessing_model(obs_space, model_config['custom_model_config']).get_num_outputs()

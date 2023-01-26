@@ -196,8 +196,8 @@ def point_to_line_dist(point, line):
 		# if not, then return the minimum distance to the segment endpoints
 		return endpoint_dist
 
-def poit_to_line_projection(point, line):
-	line = Line.from_points(point_a=line[0], point_b=line[1])
+def point_to_line_projection(point, line_points):
+	line = Line.from_points(point_a=line_points[0], point_b=line_points[1])
 	return line.project_point(point)
 
 def midpoint(p1, p2):

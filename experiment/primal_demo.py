@@ -28,14 +28,13 @@ test_every_n_step = int(np.ceil(stop_training_after_n_step/save_n_checkpoints))
 HORIZON = 2**8
 CENTRALISED_TRAINING = True
 EXPERIENCE_BUFFER_SIZE = 2**14
-number_of_agents = 8
 
 env_config = { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
 	"framework": "torch",
 	"model": {
 		"custom_model": "adaptive_multihead_network",
 		"custom_model_config": {
-			"add_nonstationarity_correction": False, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
+			"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
 		},
 	},
 	"env_config": { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
@@ -136,12 +135,21 @@ def copy_dict_and_update_with_key(d,k,u):
 
 clustering_xi = 1
 algorithm_options = {
-	# "grad_clip": None, # no need of gradient clipping with huber loss
+	"grad_clip": 0.5, # no need of gradient clipping with huber loss
 	"dueling": True,
 	"double_q": True,
-	# "num_atoms": 21,
-	# "v_max": 2**5,
-	# "v_min": -1,
+	"noisy": True,
+	"num_atoms": 21,
+	"v_max": number_of_agents,
+	"v_min": 0,
+	# "extra_python_environs_for_driver": {"OMP_NUM_THREADS": "1"},
+	# "create_env_on_local_worker": True,
+	"exploration_config": {
+		"type": "EpsilonGreedy",
+		"initial_epsilon": 1.5,
+		"final_epsilon": 0.02,
+		"epsilon_timesteps": HORIZON*1000,
+	}
 }
 
 experiment_options = copy_dict_and_update(default_options, algorithm_options)

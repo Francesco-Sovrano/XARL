@@ -8,7 +8,7 @@ import shutil
 import ray
 from ray.tune.registry import get_trainable_cls, _global_registry, ENV_CREATOR
 import time
-from deer.utils.workflow import train
+from deer.utils.workflow import test, get_checkpoint_n_logger_by_experiment_id
 from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 import numpy as np
 import copy
@@ -16,21 +16,40 @@ import copy
 from deer.agents.xasac import XASAC, XASACConfig
 from environments import *
 
-number_of_agents = 9
-default_environment = 'MAGraphDelivery-FullWorldSomeAgents'
-reward_fn = 'unitary_sparse'
+def copy_dict_and_update(d,u):
+	new_dict = copy.deepcopy(d)
+	new_dict.update(u)
+	return new_dict
 
-stop_training_after_n_step = int(1e8)
-save_n_checkpoints = 10
+def copy_dict_and_update_with_key(d,k,u):
+	new_dict = copy.deepcopy(d)
+	if k not in new_dict:
+		new_dict[k] = {}
+	new_dict[k].update(u)
+	return new_dict
+
+############################################################################################
+############################################################################################
+
+stop_training_after_n_step = int(2e8)
+save_n_checkpoints = 8
 save_gifs = False
 episodes_per_test = 30
 test_every_n_step = int(np.ceil(stop_training_after_n_step/save_n_checkpoints))
 
+_server = 'jake'
+_server_idx = 4
+_checkpoint_id = 'checkpoint_032956'
+_number_of_agents = 9
+_default_environment = 'MAGraphDelivery-FullWorldSomeAgents-ComplexHeterogeneity'
+
+ray_results_dir = os.path.join('/Users/toor/Documents/Software/GitHub/XARL/tmp/ray_results',_server,'tmp/ray_results')
+EXPERIMENT_ID = 'deer-experiment-p6'
 HORIZON = 2**8
 CENTRALISED_TRAINING = True
 EXPERIENCE_BUFFER_SIZE = 2**14
-VISIBILITY_RADIUS = 8
-NODES_NUMBER = MAP_DIMENSION = VISIBILITY_RADIUS*4
+
+config_list = []
 
 default_options = {
 	"no_done_at_end": False, # IMPORTANT: if set to True it allows lifelong learning with decent bootstrapping
@@ -94,29 +113,48 @@ xa_default_options = {
 			"training_step_window_size": 2**2,
 		},
 		"cluster_selection_policy": "min", # Which policy to follow when clustering_scheme is not "none" and multiple explanatory labels are associated to a batch. One of the following: 'random_uniform_after_filling', 'random_uniform', 'random_max', 'max', 'min', 'none'
-		"cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
+		# "cluster_with_episode_type": False, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
 		"cluster_overview_size": 1, # cluster_overview_size <= train_batch_size. If None, then cluster_overview_size is automatically set to train_batch_size. -- When building a single train batch, do not sample a new cluster before x batches are sampled from it. The closer cluster_overview_size is to train_batch_size, the faster is the batch sampling procedure.
 		"collect_cluster_metrics": True, # Whether to collect metrics about the experience clusters. It consumes more resources.
 		"ratio_of_samples_from_unclustered_buffer": 0, # 0 for no, 1 for full. Whether to sample in a randomised fashion from both a non-prioritised buffer of most recent elements and the XA prioritised buffer.
 	},
 }
+default_experiment_options = default_options
+default_experiment_options = copy_dict_and_update(default_experiment_options, xa_default_options)
 
-def copy_dict_and_update(d,u):
-	new_dict = copy.deepcopy(d)
-	new_dict.update(u)
-	return new_dict
+############################################################################################
+############################################################################################
 
-def copy_dict_and_update_with_key(d,k,u):
-	new_dict = copy.deepcopy(d)
-	if k not in new_dict:
-		new_dict[k] = {}
-	new_dict[k].update(u)
-	return new_dict
+VISIBILITY_RADIUS = 8
+NODES_NUMBER = MAP_DIMENSION = VISIBILITY_RADIUS*4
 
-def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairness_type_fn, fairness_reward_fn, discrete_actions=None, spawn_on_sources_only=True):
+default_algorithm = 'SAC'
+discrete_actions = None
+
+default_environment_list = list(filter(lambda x: x==_default_environment,[
+	'MAGraphDelivery-FullWorldSomeAgents', 
+	'MAGraphDelivery-FullWorldSomeAgents-Heterogeneity', 
+	'MAGraphDelivery-FullWorldSomeAgents-ComplexHeterogeneity',
+]))
+number_of_agents_list = list(filter(lambda x: x==_number_of_agents,[
+	9,
+	15
+]))
+spawn_on_sources_only_list = [True]
+clustering_xi_list = [4]
+cluster_prioritization_alpha_list = [1]
+tau_list = [1e-4]
+cluster_with_episode_type_list = [False]
+reward_fn_list = [
+	# 'unitary_more_sparse',
+	'unitary_sparse',
+	# 'unitary_frequent'
+]
+
+def get_GraphDelivery_options(num_agents, reward_fn, fairness_type_fn, fairness_reward_fn, discrete_actions=None, spawn_on_sources_only=True):
 	target_junctions_number = num_agents//3
 	max_deliveries_per_target = 2
-	source_junctions_number = 2 # add a second source node so that planning an optimal assignment is not possible with the information agents have at disposal at step 0
+	source_junctions_number = 3 # add a second source node so that planning an optimal assignment is not possible with the information agents have at disposal at step 0
 	assert max_deliveries_per_target
 	assert target_junctions_number
 	return { # https://gitlab.aicrowd.com/flatland/neurips2020-flatland-baselines/-/blob/master/envs/flatland/generator_configs/32x32_v0.yaml
@@ -158,65 +196,97 @@ def get_default_environment_MAGraphDelivery_options(num_agents, reward_fn, fairn
 		}
 	}
 
-clustering_xi = 4
-discrete_actions = None
-algorithm_options = {
-	"tau": 1e-4, # v1
-	# "n_step": 1,
-	# "normalize_actions": True,
-}
-spawn_on_sources_only = True
 
-default_experiment_options = copy_dict_and_update(default_options, algorithm_options)
-default_experiment_options = copy_dict_and_update(default_experiment_options, xa_default_options)
+for default_environment in default_environment_list:
+	for number_of_agents in number_of_agents_list:
+		for spawn_on_sources_only in spawn_on_sources_only_list:
+			for clustering_xi in clustering_xi_list:
+				for cluster_prioritization_alpha in cluster_prioritization_alpha_list:
+					for tau in tau_list:
+						for cluster_with_episode_type in cluster_with_episode_type_list:
+							for reward_fn in reward_fn_list:
+								experiment_options = default_experiment_options
+								experiment_options = copy_dict_and_update(experiment_options, {
+									'tau': tau,
+									"num_env_steps_sampled_before_learning_starts": max(EXPERIENCE_BUFFER_SIZE,HORIZON*number_of_agents), # How many steps of the model to sample before learning starts.
+									# "optimization": {
+									# 	"actor_learning_rate": 3e-4,
+									# 	"critic_learning_rate": 3e-4,
+									# 	"entropy_learning_rate": 3e-4,
+									# },
+									# "timesteps_per_iteration": 1000,
+									# "target_network_update_freq": 1, # Default is 0. Update the target network every `target_network_update_freq` steps.
+									# "tau": 3e-5, # v1
+									# "n_step": 1,
+									# "normalize_actions": False,
+								})
+								experiment_options = copy_dict_and_update_with_key(experiment_options, "buffer_options", {
+									#### XAER
+									'clustering_xi': clustering_xi,
+									'cluster_prioritization_alpha': cluster_prioritization_alpha, # A number in [0,1]
+									#### DEER
+									'prioritized_drop_probability': 0, # Probability of dropping the batch having the lowest priority in the buffer instead of the one having the lowest timestamp. In SAC default is 0.
+									'global_distribution_matching': False, # Whether to use a random number rather than the batch priority during prioritised dropping. If True then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far. 
+									'stationarity_window_size': None,
+								})
+								experiment_options = copy_dict_and_update_with_key(experiment_options, "clustering_options", {
+									"cluster_with_episode_type": cluster_with_episode_type, # Useful with sparse-reward environments. Whether to cluster experience using information at episode-level.
+								})
+								experiment_options = copy_dict_and_update(experiment_options, get_GraphDelivery_options(
+									number_of_agents, 
+									reward_fn, 
+									None, 
+									None, 
+									discrete_actions,
+									spawn_on_sources_only,
+								))
+								fp_experiment_options = copy_dict_and_update_with_key(experiment_options, "model", {
+									"custom_model_config": {
+										"comm_range": VISIBILITY_RADIUS,
+										"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
+									},
+								})
+								xaer_experiment_options = copy_dict_and_update_with_key(experiment_options,'clustering_options',{
+									'clustering_scheme': [
+										'Why',
+										# 'Who',
+										'How_Well',
+										# 'How_Fair',
+										# 'Where',
+										# 'What',
+										# 'How_Many'
+										# 'UWho',
+										# 'UWhich_CoopStrategy',
+									],
+								})
+								xaer_gdm_experiment_options = copy_dict_and_update_with_key(xaer_experiment_options, "buffer_options", {
+									'prioritized_drop_probability': 1,
+									'global_distribution_matching': True,
+									'stationarity_window_size': float('inf'),
+								})
+								deer_experiment_options = copy_dict_and_update_with_key(xaer_gdm_experiment_options, "buffer_options", {
+									'stationarity_window_size': 5, # If lower than float('inf') and greater than 0, then the stationarity_window_size W is used to guarantee that every W training-steps the buffer is emptied from old state transitions.
+									'stationarity_smoothing_factor': 1, # A number >= 1, where 1 means no smoothing. The larger this number, the smoother the transition from a stationarity stage to the next one. This should help avoiding experience buffers saturated by one single episode during a stage transition. The optimal value should be equal to ceil(HORIZON*number_of_agents/EXPERIENCE_BUFFER_SIZE)*stationarity_window_size.
+								})
+								deer_10_experiment_options = copy_dict_and_update_with_key(deer_experiment_options, "buffer_options", {
+									'stationarity_window_size': 10, # If lower than float('inf') and greater than 0, then the stationarity_window_size W is used to guarantee that every W training-steps the buffer is emptied from old state transitions.
+								})
+								deer_fp_experiment_options = copy_dict_and_update_with_key(deer_experiment_options, "model", {
+									"custom_model_config": {
+										"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
+									},
+								})
+								config_list += [
+									('XA'+default_algorithm, default_environment, EXPERIMENT_ID, experiment_options, CENTRALISED_TRAINING, number_of_agents),
+									# ('XA'+default_algorithm, default_environment, EXPERIMENT_ID, fp_experiment_options, CENTRALISED_TRAINING, number_of_agents),
+									('XA'+default_algorithm, default_environment, EXPERIMENT_ID, xaer_experiment_options, CENTRALISED_TRAINING, number_of_agents),
+									# ('XA'+default_algorithm, default_environment, EXPERIMENT_ID, xaer_gdm_experiment_options, CENTRALISED_TRAINING, number_of_agents),
+									('XA'+default_algorithm, default_environment, EXPERIMENT_ID, deer_experiment_options, CENTRALISED_TRAINING, number_of_agents),
+									('XA'+default_algorithm, default_environment, EXPERIMENT_ID, deer_10_experiment_options, CENTRALISED_TRAINING, number_of_agents),
+									# ('XA'+default_algorithm, default_environment, EXPERIMENT_ID, deer_fp_experiment_options, CENTRALISED_TRAINING, number_of_agents),
+								]
 
-experiment_options = copy_dict_and_update_with_key(default_experiment_options, "buffer_options", {
-	'clustering_xi': clustering_xi,
-	'priority_id': 'td_errors',
-	'priority_lower_limit': 0,
-	'global_size': EXPERIENCE_BUFFER_SIZE, # Maximum number of batches stored in the experience buffer. Every batch has size 'rollout_fragment_length' (default is 50).
-	'prioritized_drop_probability': 1, # Probability of dropping the batch having the lowest priority in the buffer instead of the one having the lowest timestamp. In SAC default is 0.
-	'global_distribution_matching': False, # Whether to use a random number rather than the batch priority during prioritised dropping. If True then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far. 
-	'stationarity_window_size': None, # If lower than float('inf') and greater than 0, then the stationarity_window_size W is used to guarantee that every W training-steps the buffer is emptied from old state transitions.
-	'stationarity_smoothing_factor': 1, # A number >= 1, where 1 means no smoothing. The larger this number, the smoother the transition from a stationarity stage to the next one. This should help avoiding experience buffers saturated by one single episode during a stage transition. The optimal value should be equal to ceil(HORIZON*number_of_agents/EXPERIENCE_BUFFER_SIZE)*stationarity_window_size.
-})
-experiment_options = copy_dict_and_update(experiment_options, get_default_environment_MAGraphDelivery_options(
-	number_of_agents, 
-	reward_fn, 
-	None, 
-	None, 
-	discrete_actions,
-	spawn_on_sources_only,
-))
-fp_experiment_options = copy_dict_and_update_with_key(experiment_options, "model", {
-	"custom_model_config": {
-		"comm_range": VISIBILITY_RADIUS,
-		"add_nonstationarity_correction": True, # Experience replay in MARL may suffer from non-stationarity. To avoid this issue a solution is to condition each agent’s value function on a fingerprint that disambiguates the age of the data sampled from the replay memory. To stabilise experience replay, it should be sufficient if each agent’s observations disambiguate where along this trajectory the current training sample originated from. # cit. [2017]Stabilising Experience Replay for Deep Multi-Agent Reinforcement Learning
-	},
-})
-xaer_experiment_options = copy_dict_and_update_with_key(experiment_options, "clustering_options", {
-	'clustering_scheme': [
-		'Why',
-		# 'Who',
-		# 'How_Well',
-		# 'How_Fair',
-		# 'Where',
-		# 'What',
-		# 'How_Many'
-		# 'UWho',
-		# 'UWhich_CoopStrategy',
-	],
-})
-xaer_gdm_experiment_options = copy_dict_and_update_with_key(xaer_experiment_options, "buffer_options", {
-	'global_distribution_matching': True,
-	'stationarity_window_size': float('inf'),
-})
-deer_experiment_options = copy_dict_and_update_with_key(xaer_experiment_options, "buffer_options", {
-	'global_distribution_matching': True,
-	'stationarity_window_size': 5, # Whether to use a random number rather than the batch priority during prioritised dropping. If equal to float('inf') then: At time t the probability of any experience being the max experience is 1/t regardless of when the sample was added, guaranteeing that (when prioritized_drop_probability==1) at any given time the sampled experiences will approximately match the distribution of all samples seen so far. If lower than float('inf') and greater than 0, then stationarity_window_size is used to guarantee that every stationarity_window_size training-steps the buffer is emptied from old state transitions.
-})
-
-CONFIG = deer_experiment_options
+agent_class, environment_class, experiment_id, CONFIG, _, number_of_agents = config_list[_server_idx-1]
 CONFIG["callbacks"] = CustomEnvironmentCallbacks
 
 # Register models
@@ -276,5 +346,8 @@ ray.init(
 	num_cpus=os.cpu_count(),
 )
 
-train(XASAC, XASACConfig, CONFIG, default_environment, test_every_n_step=test_every_n_step, stop_training_after_n_step=stop_training_after_n_step, 
-	save_gif=save_gifs, n_episodes=episodes_per_test, with_log=False)
+checkpoint_directory = os.path.join(ray_results_dir, f'{agent_class}_{environment_class}_{experiment_id}', _checkpoint_id)
+print('Testing:', checkpoint_directory)
+agent = eval(agent_class)(CONFIG, env=environment_class)
+agent.restore(checkpoint_directory)
+test(agent, CONFIG, environment_class, checkpoint_directory, save_gif=save_gifs, delete_screens_after_making_gif=True, compress_gif=True, n_episodes=episodes_per_test, with_log=False)

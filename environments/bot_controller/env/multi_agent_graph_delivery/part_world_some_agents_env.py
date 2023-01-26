@@ -3,40 +3,28 @@ from .full_world_all_agents_env import *
 
 
 class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
-	fc_junctions_size = 64
-	fc_this_agent_size = 8
 
 	def __init__(self, n_of_other_agents, culture, env_config):
-		self.init_fn(n_of_other_agents, culture, env_config)
+		super().__init__(n_of_other_agents, culture, env_config)
 		self.max_n_junctions_in_view = int(np.ceil((self.env_config['visibility_radius']/self.env_config['min_junction_distance'])**2))
 		# logger.warning(f'max_n_junctions_in_view: {self.max_n_junctions_in_view}')
 		# min(self.env_config.get('max_n_junctions_in_view',float('inf')), self.env_config['junctions_number'])
 		
-		# state_dict = {
-		# 	f"fc_junctions-{self.fc_junctions_size}": gym.spaces.Box( # Junction properties and roads'
-		# 		low= float('-inf'),
-		# 		high= float('inf'),
-		# 		shape= (
-		# 			self.max_n_junctions_in_view,
-		# 			self.junction_feature_size + self.road_feature_size*self.env_config['max_roads_per_junction'], # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food + (road.end + road.af_features)*max_roads_per_junction
-		# 		),
-		# 		dtype=np.float32
-		# 	),
-		# 	f"fc_this_agent-{self.fc_this_agent_size}": gym.spaces.Box( # Agent features
-		# 		low= 0,
-		# 		high= 1,
-		# 		shape= (
-		# 			self.agent_state_size,
-		# 		),
-		# 		dtype=np.float32
-		# 	),
-		# }
 		state_dict = {
-			f"fc-{self.fc_junctions_size+self.fc_this_agent_size}": gym.spaces.Box( # Junction properties and roads'
+			"fc_junctions-64": gym.spaces.Box( # Junction properties and roads'
 				low= float('-inf'),
 				high= float('inf'),
 				shape= (
-					self.agent_state_size + self.max_n_junctions_in_view * (self.junction_feature_size + self.road_feature_size*self.env_config['max_roads_per_junction']),
+					self.max_n_junctions_in_view,
+					self.junction_feature_size + self.road_feature_size*self.env_config['max_roads_per_junction'], # junction.pos + junction.is_target + junction.is_source + junction.normalized_target_food + junction.normalized_source_food + (road.end + road.af_features)*max_roads_per_junction
+				),
+				dtype=np.float32
+			),
+			"fc_this_agent-8": gym.spaces.Box( # Agent features
+				low= 0,
+				high= 1,
+				shape= (
+					self.agent_state_size,
 				),
 				dtype=np.float32
 			),
@@ -66,15 +54,9 @@ class PartWorldSomeAgents_Agent(FullWorldAllAgents_Agent):
 		junctions_view_list = self.get_junction_view_list(sorted_junctions, car_point, car_orientation, self.max_n_junctions_in_view)
 		junctions_view = np.array(junctions_view_list, dtype=np.float32)
 		junctions_view = np.concatenate((junctions_view,roads_view), axis=-1)
-		# return {
-		# 	f"fc_junctions-{self.fc_junctions_size}": junctions_view,
-		# 	f"fc_this_agent-{self.fc_this_agent_size}": np.array(self.get_agent_feature_list(), dtype=np.float32),
-		# }
 		return {
-			f"fc-{self.fc_junctions_size+self.fc_this_agent_size}": np.concatenate([
-				junctions_view.flatten(),
-				np.array(self.get_agent_feature_list(), dtype=np.float32).flatten()
-			]),
+			"fc_junctions-64": junctions_view,
+			"fc_this_agent-8": np.array(self.get_agent_feature_list(), dtype=np.float32),
 		}
 
 	def can_see(self, p):
@@ -101,13 +83,13 @@ class PartWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 			'all_agents_relative_features_list': gym.spaces.Tuple(
 				[base_space]*self.num_agents
 			),
-			'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.uint8),
+			# 'this_agent_id_mask': gym.spaces.Box(low=0, high=1, shape=(self.num_agents,), dtype=np.uint8),
+			'this_agent_id': gym.spaces.Box(low=0, high=len(self.agent_list)-1, shape=(1,), dtype=np.uint8),
 		})
+		self.invisible_position_vec = np.array((float('inf'),float('inf')), dtype=np.float32)
 		self.empty_agent_features = self.get_empty_state_recursively(base_space)
 		self.agent_id_mask_dict = {}
 		self.seed(config.get('seed',21))
-
-		self._unknown_position = [self.env_config['max_dimension']+2*self.env_config['visibility_radius']]*2
 
 	@staticmethod
 	def get_empty_state_recursively(_obs_space):
@@ -135,14 +117,14 @@ class PartWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 		# this_can_see_that = lambda this_agent_id,that_agent_id: self.agent_list[this_agent_id].can_see(self.agent_list[that_agent_id].car_point)
 		# return {
 		# 	this_agent_id: {
-		# 		'all_agents_absolute_position_vector': np.array([
-		# 			self.agent_list[that_agent_id].car_point if that_agent_id and this_can_see_that(this_agent_id,that_agent_id) in state_dict else self._unknown_position
+		# 		'all_agents_absolute_position_vector': [
+		# 			self.agent_list[that_agent_id].car_point if that_agent_id in state_dict and this_can_see_that(this_agent_id,that_agent_id) else self.invisible_position_vec
 		# 			for that_agent_id in range(self.num_agents)
-		# 		], dtype=np.float32),
-		# 		'all_agents_absolute_orientation_vector': np.array([
-		# 			self.agent_list[that_agent_id].car_orientation if that_agent_id and this_can_see_that(this_agent_id,that_agent_id) in state_dict else 0.
+		# 		],
+		# 		'all_agents_absolute_orientation_vector': [
+		# 			[self.agent_list[that_agent_id].car_orientation if that_agent_id in state_dict and this_can_see_that(this_agent_id,that_agent_id) else 0.]
 		# 			for that_agent_id in range(self.num_agents)
-		# 		], dtype=np.float32)[:, np.newaxis],
+		# 		],
 		# 		'all_agents_relative_features_list': [
 		# 			state_dict.get(that_agent_id,self.empty_agent_features) if this_can_see_that(this_agent_id,that_agent_id) else self.empty_agent_features
 		# 			for that_agent_id in range(self.num_agents)
@@ -153,7 +135,7 @@ class PartWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 		# }
 
 		all_agents_absolute_position_vector = np.array([
-			self.agent_list[that_agent_id].car_point if that_agent_id in state_dict else self._unknown_position
+			self.agent_list[that_agent_id].car_point if that_agent_id in state_dict else self.invisible_position_vec
 			for that_agent_id in range(self.num_agents)
 		], dtype=np.float32)
 		all_agents_absolute_orientation_vector = np.array([
@@ -169,7 +151,8 @@ class PartWorldSomeAgents_GraphDelivery(FullWorldAllAgents_GraphDelivery):
 				'all_agents_absolute_position_vector': all_agents_absolute_position_vector,
 				'all_agents_absolute_orientation_vector': all_agents_absolute_orientation_vector,
 				'all_agents_relative_features_list': all_agents_relative_features_list,
-				'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
+				# 'this_agent_id_mask': self.get_this_agent_id_mask(this_agent_id),
+				'this_agent_id': np.array([this_agent_id], dtype=np.uint8)
 			}
 			for this_agent_id in state_dict.keys()
 		}

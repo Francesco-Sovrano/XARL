@@ -93,12 +93,12 @@ class CommAdaptiveModel(AdaptiveModel):
 		self.max_num_neighbors = config.get('max_num_neighbors', self.n_agents_and_leaders-1)
 		self.message_size = config.get('message_size', agent_features_size)
 		self.comm_range = torch.Tensor([config.get('comm_range', 10.)])
-		self.gnn = torch_geometric.nn.GATv2Conv( # https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html?highlight=GENConv#torch_geometric.nn.conv.GATv2Conv
+		self.gnn = torch_geometric.nn.GATv2Conv( # https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html?highlight=GATv2Conv#torch_geometric.nn.conv.GENConv
 			in_channels=agent_features_size,
 			out_channels=self.message_size,
 			edge_dim=2+1, # position + orientation
-			add_self_loops=True,
-			fill_value=0, # The way to generate edge features of self-loops (in case :obj:`edge_dim != None`).
+			# add_self_loops=True,
+			# fill_value=0, # The way to generate edge features of self-loops (in case :obj:`edge_dim != None`).
 			# heads=1,
 		)
 		# self.post_proc = torch.nn.LayerNorm(agent_features_size + self.message_size)
@@ -121,10 +121,12 @@ class CommAdaptiveModel(AdaptiveModel):
 	def forward(self, x):
 		super_forward = super().forward
 		
-		this_agent_id_mask = x['this_agent_id_mask'][:,:,None] # add extra dimension
+		# this_agent_id_mask = x['this_agent_id_mask'][:,:,None] # add extra dimension
+		this_agent_id = x['this_agent_id'][:,:,None].to(torch.long) # add extra dimension
 		all_agents_features = torch.stack(list(map(super_forward, x['all_agents_relative_features_list'])), dim=1)
-		main_output = torch.sum(all_agents_features*this_agent_id_mask, dim=1)
-
+		# main_output = torch.sum(all_agents_features*this_agent_id_mask, dim=1)
+		main_output = torch.squeeze(torch.take_along_dim(all_agents_features,this_agent_id,dim=1),dim=1)
+		
 		all_agents_positions = x['all_agents_absolute_position_vector']
 		if self.n_leaders:
 			all_agents_positions = torch.cat(
@@ -148,7 +150,7 @@ class CommAdaptiveModel(AdaptiveModel):
 		).to(device)
 		graphs.pos = all_agents_positions.reshape(-1, all_agents_positions.shape[-1])
 		graphs.deg = all_agents_orientations.reshape(-1, all_agents_orientations.shape[-1])
-		graphs.x = all_agents_features.reshape(-1, all_agents_features.shape[-1])
+		graphs.x = all_agents_features.reshape(-1, all_agents_features.shape[-1])#.detach() # do not propagate gradient to senders
 		if self.n_leaders:
 			all_agents_types = torch.zeros(batch_size, self.n_agents_and_leaders, 1, device=device)
 			all_agents_types[:, :self.n_leaders] = 1.0
@@ -156,7 +158,7 @@ class CommAdaptiveModel(AdaptiveModel):
 			graphs.x = torch.cat([graphs.x, all_agents_types], dim=1)
 		graphs = torch_geometric.transforms.RadiusGraph(r=self.comm_range, loop=False, max_num_neighbors=self.max_num_neighbors)(graphs) # Creates edges based on node positions pos to all points within a given distance (functional name: radius_graph).
 		graphs = RelativePosition()(graphs) # Saves the relative positions of linked nodes in its edge attributes
-		graphs = RelativeOrientation(norm=False)(graphs) # Saves the relative orientations in its edge attributes
+		graphs = RelativeOrientation(norm=True)(graphs) # Saves the relative orientations in its edge attributes
 
 		## process graphs
 		gnn_output = self.gnn(graphs.x, graphs.edge_index, edge_attr=graphs.edge_attr)
@@ -164,7 +166,8 @@ class CommAdaptiveModel(AdaptiveModel):
 		gnn_output = gnn_output.view(-1, self.n_agents_and_leaders, self.message_size) # reshape GNN outputs
 		if self.n_leaders:
 			gnn_output = gnn_output[:, self.n_leaders:]
-		message_from_others = torch.sum(gnn_output*this_agent_id_mask, dim=1)
+		# message_from_others = torch.sum(gnn_output*this_agent_id_mask, dim=1)
+		message_from_others = torch.squeeze(torch.take_along_dim(gnn_output,this_agent_id,dim=1),dim=1)
 
 		## build output
 		# output = message_from_others

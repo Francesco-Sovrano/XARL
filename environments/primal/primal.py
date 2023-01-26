@@ -114,12 +114,14 @@ class Primal(MultiAgentEnv):
 		# 	}
 
 		_obs,rew = self._env.step_all(action_dict)
-		obs = self.preprocess_observation_dict(_obs)
+		obs = self.preprocess_observation_dict(
+			_obs 
+			if len(living_agents) == len(self._agent_ids) else 
+			{k:_obs[k] for k in living_agents}
+		)
 
-		# print('qwqw', step_r.obs[0].shape)
 		done = {
-			# k: False
-			k: (not valid_action_dict[k]) or self._env.isStandingOnGoal[k]
+			k: self._env.isStandingOnGoal[k]
 			for k in living_agents
 		}
 
@@ -128,7 +130,7 @@ class Primal(MultiAgentEnv):
 			k: self.get_reward(self._env.isStandingOnGoal[k], valid_action_dict[k])
 			for k in living_agents
 		}
-		throughput = sum((1 if self._env.isStandingOnGoal[k] else 0 for k in living_agents))
+		throughput = sum((1 if self._env.isStandingOnGoal[k] else 0 for k in self._agent_ids))#/len(self._agent_ids)
 		info = {
 			k: {
 				'explanation': {
@@ -140,7 +142,8 @@ class Primal(MultiAgentEnv):
 					)
 				},
 				'stats_dict': {
-					"throughput": throughput
+					"throughput": throughput,
+					"living_agents": len(living_agents)
 				}
 			}
 			for k in living_agents
